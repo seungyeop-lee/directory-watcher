@@ -1,9 +1,7 @@
 package runner
 
 import (
-	"directory-watcher/helper"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
 	"log"
 	"os"
 	"os/exec"
@@ -11,6 +9,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"directory-watcher/helper"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 type runner struct {
@@ -40,11 +42,11 @@ func (r runner) Do() {
 		select {
 		case ev := <-watcher.Events:
 			if ev.Op&fsnotify.Create == fsnotify.Create {
-				if helper.IsExist(ev.Name) && helper.IsDir(ev.Name) {
+				if helper.IsExist(ev.Name) && helper.IsDir(ev.Name) && !r.commandSet.ExcludeDir.Equal(Path(ev.Name)) {
 					watcher.Add(ev.Name)
 				}
 			}
-			if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Remove == fsnotify.Remove{
+			if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Remove == fsnotify.Remove {
 				event <- NewEventByFsnotify(ev)
 			}
 		case err := <-watcher.Errors:
@@ -71,7 +73,6 @@ func (r runner) run(ev chan Event) {
 	}
 }
 
-// Start the supplied command and return stdout and stderr pipes for logging.
 func (r runner) startCommand() {
 	args := strings.Split(r.commandSet.Cmd.String(), " ")
 	cmd := exec.Command(args[0], args[1:]...)
@@ -96,13 +97,20 @@ func (r runner) startCommand() {
 	return
 }
 
-
 func (r runner) addDir(watcher *fsnotify.Watcher) {
 	err := filepath.Walk(r.commandSet.Path.String(), func(path string, info os.FileInfo, err error) error {
-		if err == nil && info.IsDir() {
-			return watcher.Add(path)
+		if err != nil {
+			return err
 		}
-		return err
+		if !info.IsDir() {
+			return nil
+		}
+		if r.commandSet.ExcludeDir.Equal(Path(path)) {
+			return nil
+		}
+
+		log.Println("add path:", path)
+		return watcher.Add(path)
 	})
 
 	if err != nil {

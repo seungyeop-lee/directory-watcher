@@ -12,6 +12,9 @@ func main() {
 		{
 			Cmd:  "echo abcd",
 			Path: "../dir",
+			ExcludeDir: runner.Paths{
+				"../dir/tmp",
+			},
 		},
 	}).Do()
 	<-done
