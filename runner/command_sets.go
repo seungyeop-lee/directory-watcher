@@ -1,11 +1,41 @@
 package runner
 
-import "path/filepath"
+import (
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
 
 type Cmd string
 
 func (c Cmd) String() string {
 	return string(c)
+}
+
+func (c Cmd) Run(runDir Path) {
+	args := strings.Split(c.String(), " ")
+	cmd := exec.Command(args[0], args[1:]...)
+
+	cmd.Dir = runDir.String()
+
+	cmd.Stdout = os.Stdout
+
+	log.Println("start command")
+	if err := cmd.Start(); err != nil {
+		log.Printf("can't start command: %s", err)
+		return
+	}
+	log.Println("wait command")
+	err := cmd.Wait()
+	log.Println("finish command")
+
+	if err != nil {
+		log.Println("command fails to run or doesn't complete successfully")
+	}
+
+	return
 }
 
 type Path string

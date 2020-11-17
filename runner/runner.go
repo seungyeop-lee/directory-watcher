@@ -1,12 +1,9 @@
 package runner
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -26,6 +23,8 @@ func NewRunner(commandSet CommandSet) *runner {
 }
 
 func (r runner) Do() {
+	r.initRun()
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatalln(err)
@@ -61,42 +60,6 @@ func (r runner) Do() {
 	}
 }
 
-func (r runner) run(ev chan Event) {
-	var threshold <-chan time.Time
-	for {
-		select {
-		case <-ev:
-			threshold = helper.CreateThreshold()
-		case <-threshold:
-			r.startCommand()
-		}
-	}
-}
-
-func (r runner) startCommand() {
-	args := strings.Split(r.commandSet.Cmd.String(), " ")
-	cmd := exec.Command(args[0], args[1:]...)
-
-	cmd.Dir = r.commandSet.Path.String()
-
-	cmd.Stdout = os.Stdout
-
-	log.Println("start command")
-	if err := cmd.Start(); err != nil {
-		err = fmt.Errorf("can't start command: %s", err)
-		return
-	}
-	log.Println("wait command")
-	err := cmd.Wait()
-	log.Println("finish command")
-
-	if err != nil {
-		log.Println("command fails to run or doesn't complete successfully")
-	}
-
-	return
-}
-
 func (r runner) addDir(watcher *fsnotify.Watcher) {
 	err := filepath.Walk(r.commandSet.Path.String(), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -116,4 +79,26 @@ func (r runner) addDir(watcher *fsnotify.Watcher) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (r runner) initRun() {
+	if r.commandSet.InitCmd != "" {
+		r.commandSet.InitCmd.Run(r.commandSet.Path)
+	}
+}
+
+func (r runner) run(ev chan Event) {
+	var threshold <-chan time.Time
+	for {
+		select {
+		case <-ev:
+			threshold = helper.CreateThreshold()
+		case <-threshold:
+			r.startCommand()
+		}
+	}
+}
+
+func (r runner) startCommand() {
+	r.commandSet.Cmd.Run(r.commandSet.Path)
 }
