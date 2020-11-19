@@ -22,14 +22,13 @@ func (c Cmd) Run(runDir Path) {
 
 	cmd.Stdout = os.Stdout
 
-	log.Println("start command")
+	log.Println("start:", cmd)
 	if err := cmd.Start(); err != nil {
 		log.Printf("can't start command: %s", err)
 		return
 	}
-	log.Println("wait command")
 	err := cmd.Wait()
-	log.Println("finish command")
+	log.Println("finish:", cmd)
 
 	if err != nil {
 		log.Println("command fails to run or doesn't complete successfully")
@@ -63,6 +62,7 @@ func (p Paths) Equal(input Path) bool {
 
 type CommandSet struct {
 	InitCmd    Cmd
+	EndCmd     Cmd
 	Cmd        Cmd
 	Path       Path
 	ExcludeDir Paths

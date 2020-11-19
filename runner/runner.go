@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,11 +15,16 @@ import (
 
 type runner struct {
 	commandSet CommandSet
+
+	exitCh         chan bool
+	endCmdFinished chan bool
 }
 
 func NewRunner(commandSet CommandSet) *runner {
 	return &runner{
-		commandSet: commandSet,
+		commandSet:     commandSet,
+		exitCh:         make(chan bool),
+		endCmdFinished: make(chan bool),
 	}
 }
 
@@ -42,10 +48,12 @@ func (r runner) Do() {
 		case ev := <-watcher.Events:
 			if ev.Op&fsnotify.Create == fsnotify.Create {
 				if helper.IsExist(ev.Name) && helper.IsDir(ev.Name) && !r.commandSet.ExcludeDir.Equal(Path(ev.Name)) {
+					log.Printf("%s has created", ev.Name)
 					watcher.Add(ev.Name)
 				}
 			}
 			if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Remove == fsnotify.Remove {
+				log.Printf("%s has changed", ev.Name)
 				event <- NewEventByFsnotify(ev)
 			}
 		case err := <-watcher.Errors:
@@ -83,7 +91,9 @@ func (r runner) addDir(watcher *fsnotify.Watcher) {
 
 func (r runner) initRun() {
 	if r.commandSet.InitCmd != "" {
+		log.Println("InitCmd start")
 		r.commandSet.InitCmd.Run(r.commandSet.Path)
+		log.Println("InitCmd start")
 	}
 }
 
@@ -95,10 +105,28 @@ func (r runner) run(ev chan Event) {
 			threshold = helper.CreateThreshold()
 		case <-threshold:
 			r.startCommand()
+		case <-r.exitCh:
+			r.stopRun()
+			r.endCmdFinished <- true
 		}
 	}
 }
 
 func (r runner) startCommand() {
 	r.commandSet.Cmd.Run(r.commandSet.Path)
+}
+
+func (r runner) stopRun() {
+	if r.commandSet.EndCmd != "" {
+		log.Println("EndCmd start")
+		r.commandSet.EndCmd.Run(r.commandSet.Path)
+		log.Println("EndCmd stop")
+	}
+}
+
+func (r runner) Stop(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	r.exitCh <- true
+	<-r.endCmdFinished
 }
