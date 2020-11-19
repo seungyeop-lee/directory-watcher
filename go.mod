@@ -1,4 +1,4 @@
-module directory-watcher
+module github.com/seungyeop-lee/directory-watcher
 
 go 1.15
 

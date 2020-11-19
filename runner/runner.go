@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"directory-watcher/helper"
+	"github.com/seungyeop-lee/directory-watcher/helper"
 
 	"github.com/fsnotify/fsnotify"
 )

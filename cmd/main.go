@@ -1,12 +1,13 @@
 package main
 
 import (
-	"directory-watcher/runner"
 	"fmt"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/seungyeop-lee/directory-watcher/runner"
 )
 
 func main() {
