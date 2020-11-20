@@ -15,6 +15,11 @@ func (c Cmd) String() string {
 }
 
 func (c Cmd) Run(runDir Path) {
+	if c == "" {
+		log.Println("cmd is empty")
+		return
+	}
+
 	args := strings.Split(c.String(), " ")
 	cmd := exec.Command(args[0], args[1:]...)
 
@@ -31,7 +36,7 @@ func (c Cmd) Run(runDir Path) {
 	log.Println("finish:", cmd)
 
 	if err != nil {
-		log.Println("command fails to run or doesn't complete successfully")
+		log.Println("command fails to run or doesn't complete successfully:", err)
 	}
 
 	return

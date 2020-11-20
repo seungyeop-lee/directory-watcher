@@ -90,11 +90,9 @@ func (r runner) addDir(watcher *fsnotify.Watcher) {
 }
 
 func (r runner) initRun() {
-	if r.commandSet.InitCmd != "" {
-		log.Println("InitCmd start")
-		r.commandSet.InitCmd.Run(r.commandSet.Path)
-		log.Println("InitCmd finished")
-	}
+	log.Println("InitCmd start")
+	r.commandSet.InitCmd.Run(r.commandSet.Path)
+	log.Println("InitCmd finished")
 }
 
 func (r runner) run(ev chan Event) {
@@ -117,11 +115,9 @@ func (r runner) startCommand() {
 }
 
 func (r runner) stopRun() {
-	if r.commandSet.EndCmd != "" {
-		log.Println("EndCmd start")
-		r.commandSet.EndCmd.Run(r.commandSet.Path)
-		log.Println("EndCmd finished")
-	}
+	log.Println("EndCmd start")
+	r.commandSet.EndCmd.Run(r.commandSet.Path)
+	log.Println("EndCmd finished")
 }
 
 func (r runner) Stop(wg *sync.WaitGroup) {
