@@ -25,7 +25,9 @@ func (c Cmd) Run(runDir Path) {
 
 	cmd.Dir = runDir.String()
 
+	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	log.Println("start:", cmd)
 	if err := cmd.Start(); err != nil {
