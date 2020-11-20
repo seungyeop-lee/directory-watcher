@@ -1,50 +1,60 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/seungyeop-lee/directory-watcher/runner"
+	"gopkg.in/yaml.v2"
+)
+
+var (
+	cfgPath     string
+	commandSets runner.CommandSets
 )
 
 func main() {
 	fmt.Println("directory-watcher run")
 
+	defer func() {
+		if e := recover(); e != nil {
+			log.Fatalf("PANIC: %+v", e)
+		}
+	}()
+
+	flag.StringVar(&cfgPath, "c", "", "config path")
+	flag.Parse()
+	if cfgPath == "" {
+		flag.Usage()
+		return
+	}
+
+	b, fileErr := ioutil.ReadFile(cfgPath)
+	if fileErr != nil {
+		panic(fileErr)
+	}
+
+	yamlErr := yaml.Unmarshal(b, &commandSets)
+	if yamlErr != nil {
+		panic(yamlErr)
+	}
+
+	r := runner.NewRunners(commandSets)
+
+	go r.Do()
+
 	done := make(chan bool)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	r := runner.NewRunners(runner.CommandSets{
-		{
-			InitCmd: "echo start dir1",
-			EndCmd:  "echo stop dir1",
-			Cmd:     "echo mod dir1",
-			Path:    "../dir1",
-			ExcludeDir: runner.Paths{
-				"../dir1/tmp",
-			},
-		},
-		{
-			InitCmd: "echo start dir2",
-			EndCmd:  "echo stop dir2",
-			Cmd:     "echo mod dir2",
-			Path:    "../dir2",
-			ExcludeDir: runner.Paths{
-				"../dir2/tmp",
-			},
-		},
-	})
-
-	r.Do()
-
 	go func() {
 		<-sigs
-		wg := sync.WaitGroup{}
-		r.Stop(&wg)
-		wg.Wait()
+		r.Stop()
 		done <- true
 	}()
 

@@ -93,7 +93,7 @@ func (r runner) initRun() {
 	if r.commandSet.InitCmd != "" {
 		log.Println("InitCmd start")
 		r.commandSet.InitCmd.Run(r.commandSet.Path)
-		log.Println("InitCmd start")
+		log.Println("InitCmd finished")
 	}
 }
 
@@ -120,7 +120,7 @@ func (r runner) stopRun() {
 	if r.commandSet.EndCmd != "" {
 		log.Println("EndCmd start")
 		r.commandSet.EndCmd.Run(r.commandSet.Path)
-		log.Println("EndCmd stop")
+		log.Println("EndCmd finished")
 	}
 }
 

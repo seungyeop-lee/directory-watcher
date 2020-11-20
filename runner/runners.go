@@ -2,25 +2,37 @@ package runner
 
 import "sync"
 
-type runners []*runner
+type runners struct {
+	initCmd Cmd
+	endCmd  Cmd
+	runners []*runner
+}
 
 func NewRunners(sets CommandSets) runners {
 	result := runners{}
-	for _, set := range sets {
-		result = append(result, NewRunner(set))
+	result.initCmd = sets.InitCmd
+	result.endCmd = sets.EndCmd
+	for _, set := range sets.Sets {
+		result.runners = append(result.runners, NewRunner(set))
 	}
 	return result
 }
 
 func (rs runners) Do() {
-	for _, r := range rs {
+	rs.initCmd.Run("")
+
+	for _, r := range rs.runners {
 		go r.Do()
 	}
 }
 
-func (rs runners) Stop(wg *sync.WaitGroup) {
-	for _, r := range rs {
-		wg.Add(1)
-		go r.Stop(wg)
+func (rs runners) Stop() {
+	setsWg := sync.WaitGroup{}
+	for _, r := range rs.runners {
+		setsWg.Add(1)
+		go r.Stop(&setsWg)
 	}
+	setsWg.Wait()
+
+	rs.endCmd.Run("")
 }
