@@ -1,7 +1,8 @@
 package runner
 
 import (
-	"log"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,10 +15,9 @@ func (c Cmd) String() string {
 	return string(c)
 }
 
-func (c Cmd) Run(runDir Path) {
+func (c Cmd) Run(runDir Path) error {
 	if c == "" {
-		log.Println("cmd is empty")
-		return
+		return errors.New("cmd is empty")
 	}
 
 	args := strings.Split(c.String(), " ")
@@ -29,19 +29,16 @@ func (c Cmd) Run(runDir Path) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	log.Println("start:", cmd)
 	if err := cmd.Start(); err != nil {
-		log.Printf("can't start command: %s", err)
-		return
+		return fmt.Errorf("can't start command: %s", err)
 	}
 	err := cmd.Wait()
-	log.Println("finish:", cmd)
 
 	if err != nil {
-		log.Println("command fails to run or doesn't complete successfully:", err)
+		return fmt.Errorf("command fails to run or doesn't complete successfully: %v", err)
 	}
 
-	return
+	return nil
 }
 
 type Path string

@@ -1,7 +1,6 @@
 package helper
 
 import (
-	"log"
 	"os"
 )
 
@@ -11,24 +10,17 @@ func IsNotExist(path string) bool {
 
 func IsExist(path string) bool {
 	_, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		} else {
-			log.Fatalln(err)
-		}
-	}
-	return true
+	return err == nil
 }
 
 func IsDir(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalln(err)
+		return false
 	}
 	info, err := f.Stat()
 	if err != nil {
-		log.Fatalln(err)
+		return false
 	}
 	return info.IsDir()
 }

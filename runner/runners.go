@@ -1,6 +1,8 @@
 package runner
 
-import "sync"
+import (
+	"sync"
+)
 
 type runners struct {
 	initCmd Cmd
@@ -8,12 +10,12 @@ type runners struct {
 	runners []*runner
 }
 
-func NewRunners(sets CommandSets) runners {
+func NewRunners(sets CommandSets, logger logger) runners {
 	result := runners{}
 	result.initCmd = sets.InitCmd
 	result.endCmd = sets.EndCmd
 	for _, set := range sets.Sets {
-		result.runners = append(result.runners, NewRunner(set))
+		result.runners = append(result.runners, NewRunner(set, logger))
 	}
 	return result
 }

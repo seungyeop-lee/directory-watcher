@@ -9,12 +9,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/seungyeop-lee/directory-watcher/helper"
 	"github.com/seungyeop-lee/directory-watcher/runner"
 	"gopkg.in/yaml.v2"
 )
 
 var (
 	cfgPath     string
+	isVerbose   bool
 	commandSets runner.CommandSets
 )
 
@@ -28,6 +30,7 @@ func main() {
 	}()
 
 	flag.StringVar(&cfgPath, "c", "", "config path")
+	flag.BoolVar(&isVerbose, "v", false, "verbose")
 	flag.Parse()
 	if cfgPath == "" {
 		flag.Usage()
@@ -44,7 +47,7 @@ func main() {
 		panic(yamlErr)
 	}
 
-	r := runner.NewRunners(commandSets)
+	r := runner.NewRunners(commandSets, helper.NewBasicLogger(isVerbose))
 
 	go r.Do()
 

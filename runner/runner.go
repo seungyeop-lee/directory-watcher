@@ -1,7 +1,7 @@
 package runner
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,14 +15,16 @@ import (
 
 type runner struct {
 	commandSet CommandSet
+	logger     logger
 
 	exitCh         chan bool
 	endCmdFinished chan bool
 }
 
-func NewRunner(commandSet CommandSet) *runner {
+func NewRunner(commandSet CommandSet, logger logger) *runner {
 	return &runner{
 		commandSet:     commandSet,
+		logger:         logger,
 		exitCh:         make(chan bool),
 		endCmdFinished: make(chan bool),
 	}
@@ -33,7 +35,8 @@ func (r runner) Do() {
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatalln(err)
+		r.logger.Error(err.Error())
+		return
 	}
 	defer watcher.Close()
 
@@ -48,12 +51,12 @@ func (r runner) Do() {
 		case ev := <-watcher.Events:
 			if ev.Op&fsnotify.Create == fsnotify.Create {
 				if helper.IsExist(ev.Name) && helper.IsDir(ev.Name) && !r.commandSet.ExcludeDir.Equal(Path(ev.Name)) {
-					log.Printf("%s has created", ev.Name)
+					r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
 					watcher.Add(ev.Name)
 				}
 			}
 			if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Remove == fsnotify.Remove {
-				log.Printf("%s has changed", ev.Name)
+				r.logger.Info(fmt.Sprintf("%s has changed", ev.Name))
 				event <- NewEventByFsnotify(ev)
 			}
 		case err := <-watcher.Errors:
@@ -61,9 +64,9 @@ func (r runner) Do() {
 				if v.Err == syscall.EINTR {
 					continue
 				}
-				log.Fatal("watcher.Error: SyscallError:", v)
+				r.logger.Error(fmt.Sprint("watcher.Error: SyscallError:", v))
 			}
-			log.Fatal("watcher.Error:", err)
+			r.logger.Error(fmt.Sprint("watcher.Error:", err))
 		}
 	}
 }
@@ -80,7 +83,7 @@ func (r runner) addDir(watcher *fsnotify.Watcher) {
 			return nil
 		}
 
-		log.Println("add path:", path)
+		r.logger.Info(fmt.Sprint("add path:", path))
 		return watcher.Add(path)
 	})
 
@@ -90,9 +93,11 @@ func (r runner) addDir(watcher *fsnotify.Watcher) {
 }
 
 func (r runner) initRun() {
-	log.Println("InitCmd start")
-	r.commandSet.InitCmd.Run(r.commandSet.Path)
-	log.Println("InitCmd finished")
+	r.logger.Info(fmt.Sprint("initCmd start:", r.commandSet.InitCmd))
+	if err := r.commandSet.InitCmd.Run(r.commandSet.Path); err != nil {
+		r.logger.Error(err.Error())
+	}
+	r.logger.Info(fmt.Sprint("initCmd finished:", r.commandSet.InitCmd))
 }
 
 func (r runner) run(ev chan Event) {
@@ -111,13 +116,19 @@ func (r runner) run(ev chan Event) {
 }
 
 func (r runner) startCommand() {
-	r.commandSet.Cmd.Run(r.commandSet.Path)
+	r.logger.Info(fmt.Sprint("cmd start:", r.commandSet.Cmd))
+	if err := r.commandSet.Cmd.Run(r.commandSet.Path); err != nil {
+		r.logger.Error(err.Error())
+	}
+	r.logger.Info(fmt.Sprint("cmd finished:", r.commandSet.Cmd))
 }
 
 func (r runner) stopRun() {
-	log.Println("EndCmd start")
-	r.commandSet.EndCmd.Run(r.commandSet.Path)
-	log.Println("EndCmd finished")
+	r.logger.Info(fmt.Sprint("endCmd start:", r.commandSet.EndCmd))
+	if err := r.commandSet.EndCmd.Run(r.commandSet.Path); err != nil {
+		r.logger.Error(err.Error())
+	}
+	r.logger.Info(fmt.Sprint("endCmd finished:", r.commandSet.EndCmd))
 }
 
 func (r runner) Stop(wg *sync.WaitGroup) {
