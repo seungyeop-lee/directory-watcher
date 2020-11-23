@@ -1,5 +1,7 @@
 initCmd: echo 'root initCmd'
 endCmd: echo 'root endCmd'
+beforeCmd: echo 'root beforeCmd'
+afterCmd: echo 'root afterCmd'
 sets:
   - initCmd: echo 'sets1 initCmd'
     endCmd: echo 'sets1 endCmd'

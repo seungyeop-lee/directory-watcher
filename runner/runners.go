@@ -15,6 +15,8 @@ func NewRunners(sets CommandSets, logger logger) runners {
 	result.initCmd = sets.InitCmd
 	result.endCmd = sets.EndCmd
 	for _, set := range sets.Sets {
+		set.GlobalBeforeCmd = sets.BeforeCmd
+		set.GlobalAfterCmd = sets.AfterCmd
 		result.runners = append(result.runners, NewRunner(set, logger))
 	}
 	return result

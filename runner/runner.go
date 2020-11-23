@@ -107,12 +107,22 @@ func (r runner) run(ev chan Event) {
 		case <-ev:
 			threshold = helper.CreateThreshold()
 		case <-threshold:
+			r.startBeforeCmd()
 			r.startCommand()
+			r.startAfterCmd()
 		case <-r.exitCh:
 			r.stopRun()
 			r.endCmdFinished <- true
 		}
 	}
+}
+
+func (r runner) startBeforeCmd() {
+	r.logger.Info(fmt.Sprint("global before cmd start:", r.commandSet.Cmd))
+	if err := r.commandSet.GlobalBeforeCmd.Run(r.commandSet.Path); err != nil {
+		r.logger.Error(err.Error())
+	}
+	r.logger.Info(fmt.Sprint("global before cmd finished:", r.commandSet.Cmd))
 }
 
 func (r runner) startCommand() {
@@ -121,6 +131,14 @@ func (r runner) startCommand() {
 		r.logger.Error(err.Error())
 	}
 	r.logger.Info(fmt.Sprint("cmd finished:", r.commandSet.Cmd))
+}
+
+func (r runner) startAfterCmd() {
+	r.logger.Info(fmt.Sprint("global after cmd start:", r.commandSet.Cmd))
+	if err := r.commandSet.GlobalAfterCmd.Run(r.commandSet.Path); err != nil {
+		r.logger.Error(err.Error())
+	}
+	r.logger.Info(fmt.Sprint("global after cmd finished:", r.commandSet.Cmd))
 }
 
 func (r runner) stopRun() {

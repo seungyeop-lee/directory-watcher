@@ -65,15 +65,19 @@ func (p Paths) Equal(input Path) bool {
 }
 
 type CommandSets struct {
-	InitCmd Cmd          `yaml:"initCmd"`
-	EndCmd  Cmd          `yaml:"endCmd"`
-	Sets    []CommandSet `yaml:"sets"`
+	InitCmd   Cmd          `yaml:"initCmd"`
+	EndCmd    Cmd          `yaml:"endCmd"`
+	BeforeCmd Cmd          `yaml:"beforeCmd"`
+	AfterCmd  Cmd          `yaml:"afterCmd"`
+	Sets      []CommandSet `yaml:"sets"`
 }
 
 type CommandSet struct {
-	InitCmd    Cmd   `yaml:"initCmd"`
-	EndCmd     Cmd   `yaml:"endCmd"`
-	Cmd        Cmd   `yaml:"cmd"`
-	Path       Path  `yaml:"path"`
-	ExcludeDir Paths `yaml:"excludeDir"`
+	InitCmd         Cmd   `yaml:"initCmd"`
+	EndCmd          Cmd   `yaml:"endCmd"`
+	GlobalBeforeCmd Cmd   `yaml:"beforeCmd"`
+	GlobalAfterCmd  Cmd   `yaml:"afterCmd"`
+	Cmd             Cmd   `yaml:"cmd"`
+	Path            Path  `yaml:"path"`
+	ExcludeDir      Paths `yaml:"excludeDir"`
 }
