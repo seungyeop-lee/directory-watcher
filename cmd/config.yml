@@ -9,6 +9,7 @@ sets:
     path: '../dir1'
     excludeDir:
       - '../dir1/tmp'
+    waitMillisecond: 3000 # default 100
   - initCmd: echo 'sets2 initCmd'
     endCmd: echo 'sets2 endCmd'
     cmd: echo 'sets2 cmd'

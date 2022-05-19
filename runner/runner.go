@@ -105,7 +105,7 @@ func (r runner) run(ev chan Event) {
 	for {
 		select {
 		case <-ev:
-			threshold = helper.CreateThreshold()
+			threshold = helper.CreateThreshold(r.commandSet.WaitMillisecond.Duration())
 		case <-threshold:
 			r.startBeforeCmd()
 			r.startCommand()

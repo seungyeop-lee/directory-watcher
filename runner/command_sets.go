@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Cmd string
@@ -64,6 +65,12 @@ func (p Paths) Equal(input Path) bool {
 	return false
 }
 
+type Millisecond uint
+
+func (m Millisecond) Duration() time.Duration {
+	return time.Duration(m) * time.Millisecond
+}
+
 type CommandSets struct {
 	InitCmd   Cmd          `yaml:"initCmd"`
 	EndCmd    Cmd          `yaml:"endCmd"`
@@ -73,11 +80,12 @@ type CommandSets struct {
 }
 
 type CommandSet struct {
-	InitCmd         Cmd   `yaml:"initCmd"`
-	EndCmd          Cmd   `yaml:"endCmd"`
-	GlobalBeforeCmd Cmd   `yaml:"beforeCmd"`
-	GlobalAfterCmd  Cmd   `yaml:"afterCmd"`
-	Cmd             Cmd   `yaml:"cmd"`
-	Path            Path  `yaml:"path"`
-	ExcludeDir      Paths `yaml:"excludeDir"`
+	InitCmd         Cmd         `yaml:"initCmd"`
+	EndCmd          Cmd         `yaml:"endCmd"`
+	GlobalBeforeCmd Cmd         `yaml:"beforeCmd"`
+	GlobalAfterCmd  Cmd         `yaml:"afterCmd"`
+	Cmd             Cmd         `yaml:"cmd"`
+	Path            Path        `yaml:"path"`
+	ExcludeDir      Paths       `yaml:"excludeDir"`
+	WaitMillisecond Millisecond `yaml:"waitMillisecond"`
 }
