@@ -11,7 +11,7 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/helper"
 	"github.com/seungyeop-lee/directory-watcher/runner"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 var (
