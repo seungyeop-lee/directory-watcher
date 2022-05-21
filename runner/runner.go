@@ -82,6 +82,9 @@ func (r runner) addDir(watcher *fsnotify.Watcher) {
 		if r.commandSet.ExcludeDir.Equal(Path(path)) {
 			return nil
 		}
+		if r.commandSet.ExcludeDir.IsSubFolder(Path(path)) {
+			return nil
+		}
 
 		r.logger.Info(fmt.Sprint("add path:", path))
 		return watcher.Add(path)
