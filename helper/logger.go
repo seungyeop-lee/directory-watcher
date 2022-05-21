@@ -17,5 +17,8 @@ func (l basicLogger) Info(message string) {
 }
 
 func (l basicLogger) Error(message string) {
+	if message == "" {
+		return
+	}
 	log.Println(message)
 }

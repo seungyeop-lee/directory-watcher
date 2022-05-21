@@ -1,13 +1,14 @@
 package runner
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/seungyeop-lee/directory-watcher/helper"
 )
 
 type Cmd string
@@ -18,7 +19,7 @@ func (c Cmd) String() string {
 
 func (c Cmd) Run(runDir Path) error {
 	if c == "" {
-		return errors.New("cmd is empty")
+		return helper.EmptyCmdError
 	}
 
 	args := strings.Split(c.String(), " ")
