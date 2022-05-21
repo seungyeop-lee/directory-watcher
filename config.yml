@@ -1,0 +1,18 @@
+initCmd: echo 'root initCmd'
+endCmd: echo 'root endCmd'
+beforeCmd: echo 'root beforeCmd'
+afterCmd: echo 'root afterCmd'
+sets:
+  - initCmd: echo 'sets1 initCmd'
+    endCmd: echo 'sets1 endCmd'
+    cmd: echo 'sets1 cmd'
+    path: './dir1'
+    excludeDir:
+      - './dir1/tmp'
+    waitMillisecond: 3000 # default 100
+  - initCmd: echo 'sets2 initCmd'
+    endCmd: echo 'sets2 endCmd'
+    cmd: echo 'sets2 cmd'
+    path: './dir2'
+    excludeDir:
+      - './dir2/tmp'
