@@ -9,9 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/seungyeop-lee/directory-watcher/helper"
-	"github.com/seungyeop-lee/directory-watcher/runner"
 	"gopkg.in/yaml.v3"
+
+	"github.com/seungyeop-lee/directory-watcher/helper"
+	"github.com/seungyeop-lee/directory-watcher/mapper"
+	"github.com/seungyeop-lee/directory-watcher/runner"
 )
 
 var (
@@ -42,7 +44,7 @@ func main() {
 		panic(fileErr)
 	}
 
-	yamlCommandSets := YamlCommandSets{}
+	yamlCommandSets := mapper.YamlCommandSets{}
 	yamlErr := yaml.Unmarshal(b, &yamlCommandSets)
 	if yamlErr != nil {
 		panic(yamlErr)
