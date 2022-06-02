@@ -1,47 +1,9 @@
 package runner
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
-
-	"github.com/seungyeop-lee/directory-watcher/helper"
 )
-
-type Cmd string
-
-func (c Cmd) String() string {
-	return string(c)
-}
-
-func (c Cmd) Run(runDir Path) error {
-	if c == "" {
-		return helper.EmptyCmdError
-	}
-
-	args := strings.Split(c.String(), " ")
-	cmd := exec.Command(args[0], args[1:]...)
-
-	cmd.Dir = runDir.String()
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("can't start command: %s", err)
-	}
-	err := cmd.Wait()
-
-	if err != nil {
-		return fmt.Errorf("command fails to run or doesn't complete successfully: %v", err)
-	}
-
-	return nil
-}
 
 type Path string
 

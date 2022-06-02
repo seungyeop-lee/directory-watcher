@@ -42,12 +42,13 @@ func main() {
 		panic(fileErr)
 	}
 
-	yamlErr := yaml.Unmarshal(b, &commandSets)
+	yamlCommandSets := YamlCommandSets{}
+	yamlErr := yaml.Unmarshal(b, &yamlCommandSets)
 	if yamlErr != nil {
 		panic(yamlErr)
 	}
 
-	r := runner.NewRunners(commandSets, helper.NewBasicLogger(isVerbose))
+	r := runner.NewRunners(yamlCommandSets.BuildCommandSets(), helper.NewBasicLogger(isVerbose))
 
 	go r.Do()
 

@@ -1,4 +1,6 @@
-initCmd: echo 'root initCmd'
+initCmd:
+  - echo 'a'
+  - echo 'b'
 endCmd: echo 'root endCmd'
 beforeCmd: echo 'root beforeCmd'
 afterCmd: echo 'root afterCmd'
