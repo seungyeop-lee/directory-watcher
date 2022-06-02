@@ -13,6 +13,23 @@ type Cmd interface {
 	Run(runDir Path) error
 }
 
+type Cmds []Cmd
+
+func (c Cmds) Run(runDir Path) error {
+	for _, cmd := range c {
+		err := cmd.Run(runDir)
+		if err != nil {
+			switch err {
+			case helper.EmptyCmdError:
+				break
+			default:
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 type EmptyCmd struct{}
 
 func (e EmptyCmd) Run(_ Path) error {
@@ -64,4 +81,17 @@ func (m MultiLineCmd) Run(runDir Path) error {
 		}
 	}
 	return nil
+}
+
+type StructuredCmd struct {
+	Cmd Cmd
+	Dir Path
+}
+
+func (s StructuredCmd) Run(runDir Path) error {
+	if s.Dir == "" {
+		s.Dir = runDir
+	}
+
+	return s.Cmd.Run(s.Dir)
 }

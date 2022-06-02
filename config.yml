@@ -1,7 +1,9 @@
 initCmd:
   - echo 'a'
   - echo 'b'
-endCmd: echo 'root endCmd'
+endCmd:
+  cmd: ls
+  dir: "./cmd"
 beforeCmd: echo 'root beforeCmd'
 afterCmd: echo 'root afterCmd'
 sets:

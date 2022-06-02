@@ -20,19 +20,75 @@ func (c YamlCmdConverter) Convert() runner.Cmd {
 	v := reflect.ValueOf(c.yamlCmd)
 	switch v.Kind() {
 	case reflect.String:
-		s := v.Interface().(string)
-		return runner.SingleCmd(s)
+		return c.mapToSingleCmd(v)
+	case reflect.Map:
+		return c.mapToStructuredCmd(v)
 	case reflect.Slice:
-		result := runner.MultiLineCmd{}
-		cmdInterfaces := v.Interface().([]interface{})
-		for _, cmdInterface := range cmdInterfaces {
-			v2 := reflect.ValueOf(cmdInterface)
-			result.Cmds = append(result.Cmds, runner.SingleCmd(v2.Interface().(string)))
-		}
-		return result
+		return c.mapForSlice(v)
 	default:
 		return runner.EmptyCmd{}
 	}
+}
+
+func (c YamlCmdConverter) mapToSingleCmd(v reflect.Value) runner.SingleCmd {
+	s := v.Interface().(string)
+	return runner.SingleCmd(s)
+}
+
+func (c YamlCmdConverter) mapToStructuredCmd(v reflect.Value) runner.StructuredCmd {
+	mapData := map[string]reflect.Value{}
+	for _, e := range v.MapKeys() {
+		index := v.MapIndex(e)
+		if index.Kind() == reflect.Interface {
+			index = index.Elem()
+		}
+		mapData[e.String()] = index
+	}
+
+	switch mapData["cmd"].Kind() {
+	case reflect.String:
+		return runner.StructuredCmd{
+			Cmd: c.mapToSingleCmd(mapData["cmd"]),
+			Dir: runner.Path(mapData["dir"].Interface().(string)),
+		}
+	case reflect.Slice:
+		return runner.StructuredCmd{
+			Cmd: c.mapForMultiLineCmd(mapData["cmd"]),
+			Dir: runner.Path(mapData["dir"].Interface().(string)),
+		}
+	}
+
+	return runner.StructuredCmd{
+		Cmd: runner.EmptyCmd{},
+		Dir: "",
+	}
+}
+
+func (c YamlCmdConverter) mapForMultiLineCmd(v reflect.Value) runner.MultiLineCmd {
+	result := runner.MultiLineCmd{}
+	cmdInterfaces := v.Interface().([]interface{})
+	for _, cmdInterface := range cmdInterfaces {
+		v2 := reflect.ValueOf(cmdInterface)
+		result.Cmds = append(result.Cmds, c.mapToSingleCmd(v2))
+	}
+	return result
+}
+
+func (c YamlCmdConverter) mapForSlice(v reflect.Value) runner.Cmds {
+	result := runner.Cmds{}
+	cmdInterfaces := v.Interface().([]interface{})
+	for _, cmdInterface := range cmdInterfaces {
+		v2 := reflect.ValueOf(cmdInterface)
+		switch v2.Kind() {
+		case reflect.String:
+			result = append(result, c.mapToSingleCmd(v2))
+		case reflect.Map:
+			result = append(result, c.mapToStructuredCmd(v2))
+		case reflect.Slice:
+			result = append(result, c.mapForMultiLineCmd(v2))
+		}
+	}
+	return result
 }
 
 type YamlPathConverter struct {
