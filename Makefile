@@ -15,5 +15,14 @@ windows-build:
 .PHONY: build
 build: linux-build macos-build windows-build
 
+.PHONY: run
 run:
 	go run cmd/main.go -c config.yml
+
+.PHONY: runv
+runv:
+	go run cmd/main.go -c config.yml -v
+
+.PHONY: rund
+rund:
+	go run cmd/main.go -c config.yml -d

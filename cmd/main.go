@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -17,9 +19,9 @@ import (
 )
 
 var (
-	cfgPath     string
-	isVerbose   bool
-	commandSets runner.CommandSets
+	cfgPath   string
+	isVerbose bool
+	isDebug   bool
 )
 
 func main() {
@@ -33,6 +35,7 @@ func main() {
 
 	flag.StringVar(&cfgPath, "c", "", "config path")
 	flag.BoolVar(&isVerbose, "v", false, "verbose")
+	flag.BoolVar(&isDebug, "d", false, "debug")
 	flag.Parse()
 	if cfgPath == "" {
 		flag.Usage()
@@ -50,7 +53,17 @@ func main() {
 		panic(yamlErr)
 	}
 
-	r := runner.NewRunners(yamlCommandSets.BuildCommandSets(), helper.NewBasicLogger(isVerbose))
+	logger := helper.NewBasicLogger(getLogLevel())
+	commandSets := yamlCommandSets.BuildCommandSets()
+
+	if isDebug {
+		yamlCommandSetsJsonStr, _ := json.MarshalIndent(yamlCommandSets, "", "	")
+		logger.Debug(bytes.NewBuffer(yamlCommandSetsJsonStr).String())
+		commandSetsJsonStr, _ := json.MarshalIndent(commandSets, "", "	")
+		logger.Debug(bytes.NewBuffer(commandSetsJsonStr).String())
+	}
+
+	r := runner.NewRunners(commandSets, logger)
 
 	go r.Do()
 
@@ -65,4 +78,15 @@ func main() {
 	}()
 
 	<-done
+}
+
+func getLogLevel() helper.LogLevel {
+	result := helper.ERROR
+	if isVerbose {
+		result = helper.INFO
+	}
+	if isDebug {
+		result = helper.DEBUG
+	}
+	return result
 }
