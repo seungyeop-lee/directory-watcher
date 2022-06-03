@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,8 +51,11 @@ func (r runner) Do() {
 		select {
 		case ev := <-watcher.Events:
 			if ev.Op&fsnotify.Create == fsnotify.Create {
+				r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
+				if r.defaultExcludeFile(ev.Name) {
+					break
+				}
 				if helper.IsExist(ev.Name) && helper.IsDir(ev.Name) && !r.commandSet.ExcludeDir.Equal(Path(ev.Name)) {
-					r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
 					watcher.Add(ev.Name)
 				}
 			}
@@ -160,4 +164,8 @@ func (r runner) Stop(wg *sync.WaitGroup) {
 
 	r.exitCh <- true
 	<-r.endCmdFinished
+}
+
+func (r runner) defaultExcludeFile(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
