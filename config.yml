@@ -13,8 +13,8 @@ sets:
     path: './dir1'
     excludeDir:
       - './dir1/tmp'
-    excludeExt:
-      - '.txt'
+    excludeSuffix:
+      - '_test.go'
     waitMillisecond: 1000 # default 100
   - initCmd: echo 'sets2 initCmd'
     endCmd: echo 'sets2 endCmd'

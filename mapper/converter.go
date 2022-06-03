@@ -119,18 +119,18 @@ func (c YamlPathsConverter) Convert() runner.Paths {
 	return result
 }
 
-type YamlExtsConverter struct {
-	yamlExts YamlExts
+type YamlPathSuffixesConverter struct {
+	yamlPathSuffixes YamlPathSuffixes
 }
 
-func NewYamlExtsConverter(yamlExts YamlExts) *YamlExtsConverter {
-	return &YamlExtsConverter{yamlExts: yamlExts}
+func NewYmlPathSuffixesConverter(yamlPathSuffixes YamlPathSuffixes) *YamlPathSuffixesConverter {
+	return &YamlPathSuffixesConverter{yamlPathSuffixes: yamlPathSuffixes}
 }
 
-func (c YamlExtsConverter) Convert() runner.Exts {
-	result := runner.Exts{}
-	for _, e := range c.yamlExts {
-		result = append(result, runner.Ext(e))
+func (c YamlPathSuffixesConverter) Convert() runner.PathSuffixes {
+	result := runner.PathSuffixes{}
+	for _, e := range c.yamlPathSuffixes {
+		result = append(result, runner.PathSuffix(e))
 	}
 	return result
 }

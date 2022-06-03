@@ -1,8 +1,10 @@
 package runner
 
 import (
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -48,8 +50,12 @@ func (p Path) IsDir() bool {
 	return stat.IsDir()
 }
 
-func (p Path) Ext() string {
-	return filepath.Ext(string(p))
+func (p Path) Abs() string {
+	abs, err := filepath.Abs(string(p))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return abs
 }
 
 type Paths []Path
@@ -72,13 +78,17 @@ func (p Paths) IsSubFolder(input Path) bool {
 	return false
 }
 
-type Ext string
+type PathSuffix string
 
-type Exts []Ext
+func (s PathSuffix) Contain(input Path) bool {
+	return strings.HasSuffix(input.Abs(), string(s))
+}
 
-func (e Exts) Equal(input Ext) bool {
-	for _, ext := range e {
-		if ext == input {
+type PathSuffixes []PathSuffix
+
+func (s PathSuffixes) Contain(input Path) bool {
+	for _, ps := range s {
+		if ps.Contain(input) {
 			return true
 		}
 	}
@@ -100,13 +110,13 @@ type CommandSets struct {
 }
 
 type CommandSet struct {
-	InitCmd         Cmd         `yaml:"initCmd"`
-	EndCmd          Cmd         `yaml:"endCmd"`
-	GlobalBeforeCmd Cmd         `yaml:"beforeCmd"`
-	GlobalAfterCmd  Cmd         `yaml:"afterCmd"`
-	Cmd             Cmd         `yaml:"cmd"`
-	Path            Path        `yaml:"path"`
-	ExcludeDir      Paths       `yaml:"excludeDir"`
-	ExcludeExt      Exts        `yaml:"excludeExt"`
-	WaitMillisecond Millisecond `yaml:"waitMillisecond"`
+	InitCmd         Cmd          `yaml:"initCmd"`
+	EndCmd          Cmd          `yaml:"endCmd"`
+	GlobalBeforeCmd Cmd          `yaml:"beforeCmd"`
+	GlobalAfterCmd  Cmd          `yaml:"afterCmd"`
+	Cmd             Cmd          `yaml:"cmd"`
+	Path            Path         `yaml:"path"`
+	ExcludeDir      Paths        `yaml:"excludeDir"`
+	ExcludeSuffix   PathSuffixes `yaml:"excludeExt"`
+	WaitMillisecond Millisecond  `yaml:"waitMillisecond"`
 }

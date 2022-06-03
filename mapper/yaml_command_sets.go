@@ -10,7 +10,7 @@ type YamlPath string
 
 type YamlPaths []YamlPath
 
-type YamlExts []string
+type YamlPathSuffixes []string
 
 type YamlMillisecond uint
 
@@ -43,7 +43,7 @@ func (s YamlCommandSubSets) CommandSets() []runner.CommandSet {
 			Cmd:             NewYamlCmdConverter(v.Cmd).Convert(),
 			Path:            NewYamlPathConverter(v.Path).Convert(),
 			ExcludeDir:      NewYamlPathsConverter(v.ExcludeDir).Convert(),
-			ExcludeExt:      NewYamlExtsConverter(v.ExcludeExt).Convert(),
+			ExcludeSuffix:   NewYmlPathSuffixesConverter(v.ExcludeSuffix).Convert(),
 			WaitMillisecond: NewYamlWaitMillisecondConverter(v.WaitMillisecond).Convert(),
 		})
 	}
@@ -51,11 +51,11 @@ func (s YamlCommandSubSets) CommandSets() []runner.CommandSet {
 }
 
 type YamlCommandSet struct {
-	InitCmd         YamlCmd         `yaml:"initCmd"`
-	EndCmd          YamlCmd         `yaml:"endCmd"`
-	Cmd             YamlCmd         `yaml:"cmd"`
-	Path            YamlPath        `yaml:"path"`
-	ExcludeDir      YamlPaths       `yaml:"excludeDir"`
-	ExcludeExt      YamlExts        `yaml:"excludeExt"`
-	WaitMillisecond YamlMillisecond `yaml:"waitMillisecond"`
+	InitCmd         YamlCmd          `yaml:"initCmd"`
+	EndCmd          YamlCmd          `yaml:"endCmd"`
+	Cmd             YamlCmd          `yaml:"cmd"`
+	Path            YamlPath         `yaml:"path"`
+	ExcludeDir      YamlPaths        `yaml:"excludeDir"`
+	ExcludeSuffix   YamlPathSuffixes `yaml:"excludeSuffix"`
+	WaitMillisecond YamlMillisecond  `yaml:"waitMillisecond"`
 }

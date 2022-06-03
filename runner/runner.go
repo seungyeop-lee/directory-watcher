@@ -108,8 +108,7 @@ func (r runner) run(evChan chan Event) {
 	for {
 		select {
 		case ev := <-evChan:
-			r.logger.Debug(ev.String())
-			if r.commandSet.ExcludeExt.Equal(Ext(ev.Path.Ext())) {
+			if r.commandSet.ExcludeSuffix.Contain(ev.Path) {
 				break
 			}
 			threshold = helper.CreateThreshold(r.commandSet.WaitMillisecond.Duration())
