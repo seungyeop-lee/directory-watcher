@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -18,7 +19,11 @@ func (p Path) Equal(input Path) bool {
 	return pAbs == inputAbs
 }
 
-func (p Path) IsSubFolder(input Path) bool {
+func (p Path) IsSubDir(input Path) bool {
+	if !p.IsDir() || !input.IsDir() {
+		return false
+	}
+
 	pAbs, _ := filepath.Abs(string(p))
 	inputAbs, _ := filepath.Abs(string(input))
 
@@ -35,6 +40,18 @@ func (p Path) IsSubFolder(input Path) bool {
 	return true
 }
 
+func (p Path) IsDir() bool {
+	stat, err := os.Stat(string(p))
+	if err != nil {
+		return false
+	}
+	return stat.IsDir()
+}
+
+func (p Path) Ext() string {
+	return filepath.Ext(string(p))
+}
+
 type Paths []Path
 
 func (p Paths) Equal(input Path) bool {
@@ -48,7 +65,20 @@ func (p Paths) Equal(input Path) bool {
 
 func (p Paths) IsSubFolder(input Path) bool {
 	for _, path := range p {
-		if path.IsSubFolder(input) {
+		if path.IsSubDir(input) {
+			return true
+		}
+	}
+	return false
+}
+
+type Ext string
+
+type Exts []Ext
+
+func (e Exts) Equal(input Ext) bool {
+	for _, ext := range e {
+		if ext == input {
 			return true
 		}
 	}
@@ -77,5 +107,6 @@ type CommandSet struct {
 	Cmd             Cmd         `yaml:"cmd"`
 	Path            Path        `yaml:"path"`
 	ExcludeDir      Paths       `yaml:"excludeDir"`
+	ExcludeExt      Exts        `yaml:"excludeExt"`
 	WaitMillisecond Millisecond `yaml:"waitMillisecond"`
 }

@@ -10,6 +10,8 @@ type YamlPath string
 
 type YamlPaths []YamlPath
 
+type YamlExts []string
+
 type YamlMillisecond uint
 
 type YamlCommandSets struct {
@@ -41,6 +43,7 @@ func (s YamlCommandSubSets) CommandSets() []runner.CommandSet {
 			Cmd:             NewYamlCmdConverter(v.Cmd).Convert(),
 			Path:            NewYamlPathConverter(v.Path).Convert(),
 			ExcludeDir:      NewYamlPathsConverter(v.ExcludeDir).Convert(),
+			ExcludeExt:      NewYamlExtsConverter(v.ExcludeExt).Convert(),
 			WaitMillisecond: NewYamlWaitMillisecondConverter(v.WaitMillisecond).Convert(),
 		})
 	}
@@ -53,5 +56,6 @@ type YamlCommandSet struct {
 	Cmd             YamlCmd         `yaml:"cmd"`
 	Path            YamlPath        `yaml:"path"`
 	ExcludeDir      YamlPaths       `yaml:"excludeDir"`
+	ExcludeExt      YamlExts        `yaml:"excludeExt"`
 	WaitMillisecond YamlMillisecond `yaml:"waitMillisecond"`
 }

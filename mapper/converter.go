@@ -119,6 +119,22 @@ func (c YamlPathsConverter) Convert() runner.Paths {
 	return result
 }
 
+type YamlExtsConverter struct {
+	yamlExts YamlExts
+}
+
+func NewYamlExtsConverter(yamlExts YamlExts) *YamlExtsConverter {
+	return &YamlExtsConverter{yamlExts: yamlExts}
+}
+
+func (c YamlExtsConverter) Convert() runner.Exts {
+	result := runner.Exts{}
+	for _, e := range c.yamlExts {
+		result = append(result, runner.Ext(e))
+	}
+	return result
+}
+
 type YamlWaitMillisecondConverter struct {
 	yamlMillisecond YamlMillisecond
 }

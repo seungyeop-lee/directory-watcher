@@ -103,11 +103,15 @@ func (r runner) initRun() {
 	r.logger.Info(fmt.Sprint("initCmd finished:", r.commandSet.InitCmd))
 }
 
-func (r runner) run(ev chan Event) {
+func (r runner) run(evChan chan Event) {
 	var threshold <-chan time.Time
 	for {
 		select {
-		case <-ev:
+		case ev := <-evChan:
+			r.logger.Debug(ev.String())
+			if r.commandSet.ExcludeExt.Equal(Ext(ev.Path.Ext())) {
+				break
+			}
 			threshold = helper.CreateThreshold(r.commandSet.WaitMillisecond.Duration())
 		case <-threshold:
 			r.startBeforeCmd()

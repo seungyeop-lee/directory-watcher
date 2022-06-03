@@ -39,8 +39,8 @@ func TestPath_IsSubFolder(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.p.IsSubFolder(tt.args.input); got != tt.want {
-				t.Errorf("IsSubFolder() = %v, want %v", got, tt.want)
+			if got := tt.p.IsSubDir(tt.args.input); got != tt.want {
+				t.Errorf("IsSubDir() = %v, want %v", got, tt.want)
 			}
 		})
 	}
