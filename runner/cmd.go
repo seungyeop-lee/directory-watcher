@@ -88,10 +88,6 @@ type StructuredCmd struct {
 	Dir Path
 }
 
-func (s StructuredCmd) Run(runDir Path) error {
-	if s.Dir == "" {
-		s.Dir = runDir
-	}
-
+func (s StructuredCmd) Run(_ Path) error {
 	return s.Cmd.Run(s.Dir)
 }
