@@ -2,6 +2,7 @@
 linux-build:
 	GOOS=linux GOARCH=386 go build -ldflags="-w -s" -o bin/directory-watcher-linux-386 cmd/main.go
 	GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o bin/directory-watcher-linux-amd64 cmd/main.go
+	GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o bin/directory-watcher-linux-arm64 cmd/main.go
 
 .PHONY: macos-build
 macos-build:
