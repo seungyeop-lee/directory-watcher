@@ -1,24 +1,31 @@
-initCmd:
-  - echo 'a'
-  - echo 'b'
-endCmd:
-  cmd: ls
-  dir: "./cmd"
-beforeCmd: echo 'root beforeCmd'
-afterCmd: echo 'root afterCmd'
-sets:
-  - initCmd: echo 'sets1 initCmd'
-    endCmd: echo 'sets1 endCmd'
-    cmd: echo 'sets1 cmd'
-    path: './dir1'
-    excludeDir:
-      - './dir1/tmp'
-    excludeSuffix:
-      - '_test.go'
-    waitMillisecond: 1000 # default 100
-  - initCmd: echo 'sets2 initCmd'
-    endCmd: echo 'sets2 endCmd'
-    cmd: echo 'sets2 cmd'
-    path: './dir2'
-    excludeDir:
-      - './dir2/tmp'
+global:
+  lifeCycle:
+    onStartWatch:
+      - echo 'global onStartWatch'
+    onBeforeChange:
+      - echo 'global onBeforeChange'
+    onAfterChange:
+      - echo 'global onAfterChange'
+    onFinishWatch:
+      - echo 'global onFinishWatch'
+watchTargets:
+  - path: './dir1'
+    lifeCycle:
+      onChange:
+        - echo 'dir1 onChange'
+  - path: './dir2'
+    lifeCycle:
+      onStartWatch:
+        - echo 'dir2 onStartWatch'
+      onChange:
+        - echo 'dir2 onChange'
+      onFinishWatch:
+        - echo 'dir2 onFinishWatch'
+    option:
+      excludeDir:
+        - './dir2/tmp'
+      excludePrefix:
+        - 'test'
+      excludeSuffix:
+        - '_test.go'
+      waitMillisecond: 1000 # default 100
