@@ -114,7 +114,6 @@ func (r watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	r.callOnFinishWatch()
-	r.watcher.Close()
 }
 
 func (r watchTargetRunner) addDir() {
