@@ -118,7 +118,7 @@ func (r watchTargetRunner) Stop(wg *sync.WaitGroup) {
 
 func (r watchTargetRunner) addDir() {
 	if !helper.IsExist(r.path.String()) {
-		r.logger.Error("not exist path")
+		r.logger.Error(fmt.Sprintf("not exist path: %s", r.path))
 		return
 	}
 
