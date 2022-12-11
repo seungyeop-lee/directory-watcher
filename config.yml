@@ -24,8 +24,6 @@ watchTargets:
     option:
       excludeDir:
         - './dir2/tmp'
-      excludePrefix:
-        - 'test'
       excludeSuffix:
         - '_test.go'
       waitMillisecond: 1000 # default 100
@@ -41,14 +39,6 @@ watchTargets:
           cmd:
           - "pwd"
           - "ls -al"
-    option:
-      excludeDir:
-        - './dir2/tmp'
-      excludePrefix:
-        - 'test'
-      excludeSuffix:
-        - '_test.go'
-      waitMillisecond: 1000 # default 100
   - path: './not_exist_dir'
     lifeCycle:
       onChange:
