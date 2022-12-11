@@ -15,6 +15,7 @@ windows-build:
 
 .PHONY: build
 build: linux-build macos-build windows-build
+	(cd bin && chmod +x *)
 
 .PHONY: run
 run:
