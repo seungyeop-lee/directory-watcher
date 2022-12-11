@@ -35,26 +35,28 @@ func (c CmdInfoConverter) mapToSingleCmd(v reflect.Value) domain.SingleCmd {
 	return domain.SingleCmd(s)
 }
 
-func (c CmdInfoConverter) mapToStructuredCmd(v reflect.Value) domain.StructuredCmd {
+func (c CmdInfoConverter) mapToStructuredCmd(m reflect.Value) domain.StructuredCmd {
 	mapData := map[string]reflect.Value{}
-	for _, e := range v.MapKeys() {
-		index := v.MapIndex(e)
-		if index.Kind() == reflect.Interface {
-			index = index.Elem()
+	for _, k := range m.MapKeys() {
+		v := m.MapIndex(k)
+		if v.Kind() == reflect.Interface {
+			v = v.Elem()
 		}
-		mapData[e.String()] = index
+		mapData[k.String()] = v
 	}
+
+	dir := mapData["dir"].Interface().(string)
 
 	switch mapData["cmd"].Kind() {
 	case reflect.String:
 		return domain.StructuredCmd{
 			Cmd: c.mapToSingleCmd(mapData["cmd"]),
-			Dir: domain.Path(mapData["dir"].Interface().(string)),
+			Dir: domain.Path(dir),
 		}
 	case reflect.Slice:
 		return domain.StructuredCmd{
 			Cmd: c.mapForMultiLineCmd(mapData["cmd"]),
-			Dir: domain.Path(mapData["dir"].Interface().(string)),
+			Dir: domain.Path(dir),
 		}
 	}
 
@@ -74,18 +76,18 @@ func (c CmdInfoConverter) mapForMultiLineCmd(v reflect.Value) domain.MultiLineCm
 	return result
 }
 
-func (c CmdInfoConverter) mapForSlice(v reflect.Value) domain.Cmds {
+func (c CmdInfoConverter) mapForSlice(s reflect.Value) domain.Cmds {
 	result := domain.Cmds{}
-	cmdInterfaces := v.Interface().([]interface{})
+	cmdInterfaces := s.Interface().([]interface{})
 	for _, cmdInterface := range cmdInterfaces {
-		v2 := reflect.ValueOf(cmdInterface)
-		switch v2.Kind() {
+		v := reflect.ValueOf(cmdInterface)
+		switch v.Kind() {
 		case reflect.String:
-			result = append(result, c.mapToSingleCmd(v2))
+			result = append(result, c.mapToSingleCmd(v))
 		case reflect.Map:
-			result = append(result, c.mapToStructuredCmd(v2))
+			result = append(result, c.mapToStructuredCmd(v))
 		case reflect.Slice:
-			result = append(result, c.mapForMultiLineCmd(v2))
+			result = append(result, c.mapForMultiLineCmd(v))
 		}
 	}
 	return result
