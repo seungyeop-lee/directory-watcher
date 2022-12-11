@@ -99,12 +99,13 @@ func (r watchTargetRunner) Run() {
 			}
 		case err := <-r.watcher.Errors:
 			if v, ok := err.(*os.SyscallError); ok {
+				// 인터럽트 발생은 에러로 처리하지 않는다.
 				if v.Err == syscall.EINTR {
 					continue
 				}
-				r.logger.Error(fmt.Sprint("watcher.Error: SyscallError:", v))
+				r.logger.Debug(fmt.Sprint("watcher.Error: SyscallError:", v))
 			}
-			r.logger.Error(fmt.Sprint("watcher.Error:", err))
+			r.logger.Debug(fmt.Sprint("watcher.Error:", err))
 		}
 	}
 }
