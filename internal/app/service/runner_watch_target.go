@@ -8,11 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/internal/helper"
-
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/seungyeop-lee/directory-watcher/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/internal/helper"
 )
 
 type watchTargetRunners []*watchTargetRunner
