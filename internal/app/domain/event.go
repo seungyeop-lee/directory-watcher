@@ -1,6 +1,8 @@
-package runner
+package domain
 
-import "github.com/fsnotify/fsnotify"
+import (
+	"github.com/fsnotify/fsnotify"
+)
 
 type Operation uint
 
@@ -22,8 +24,8 @@ func NewOperationByFsnotify(input fsnotify.Op) Operation {
 }
 
 const (
-	Unknown = 0
-	Create Operation = 1 << iota
+	Unknown           = 0
+	Create  Operation = 1 << iota
 	Write
 	Remove
 	Rename

@@ -1,4 +1,4 @@
-package runner
+package domain
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/seungyeop-lee/directory-watcher/helper"
+	"github.com/seungyeop-lee/directory-watcher/internal/helper"
 )
 
 type Cmd interface {
@@ -17,14 +17,8 @@ type Cmds []Cmd
 
 func (c Cmds) Run(runDir Path) error {
 	for _, cmd := range c {
-		err := cmd.Run(runDir)
-		if err != nil {
-			switch err {
-			case helper.EmptyCmdError:
-				break
-			default:
-				return err
-			}
+		if err := filterError(cmd.Run(runDir)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -32,15 +26,19 @@ func (c Cmds) Run(runDir Path) error {
 
 type EmptyCmd struct{}
 
+var _ Cmd = EmptyCmd{}
+
 func (e EmptyCmd) Run(_ Path) error {
 	return nil
 }
 
 type SingleCmd string
 
+var _ Cmd = SingleCmd("")
+
 func (c SingleCmd) Run(runDir Path) error {
 	if c == "" {
-		return helper.EmptyCmdError
+		return helper.NewEmptyCmdError()
 	}
 
 	args := strings.Split(string(c), " ")
@@ -68,16 +66,12 @@ type MultiLineCmd struct {
 	Cmds []SingleCmd
 }
 
+var _ Cmd = MultiLineCmd{}
+
 func (m MultiLineCmd) Run(runDir Path) error {
 	for _, cmd := range m.Cmds {
-		err := cmd.Run(runDir)
-		if err != nil {
-			switch err {
-			case helper.EmptyCmdError:
-				break
-			default:
-				return err
-			}
+		if err := filterError(cmd.Run(runDir)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -88,6 +82,21 @@ type StructuredCmd struct {
 	Dir Path
 }
 
+var _ Cmd = StructuredCmd{}
+
 func (s StructuredCmd) Run(_ Path) error {
 	return s.Cmd.Run(s.Dir)
+}
+
+func filterError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	switch err.(type) {
+	case helper.EmptyCmdError:
+		return nil
+	default:
+		return err
+	}
 }

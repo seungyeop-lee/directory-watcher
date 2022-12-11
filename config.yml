@@ -29,3 +29,27 @@ watchTargets:
       excludeSuffix:
         - '_test.go'
       waitMillisecond: 1000 # default 100
+  - path: './dir3'
+    lifeCycle:
+      onStartWatch:
+        - echo 'dir3 onStartWatch'
+      onChange:
+        - dir: "cmd"
+          cmd: "pwd"
+      onFinishWatch:
+        - dir: "internal"
+          cmd:
+          - "pwd"
+          - "ls -al"
+    option:
+      excludeDir:
+        - './dir2/tmp'
+      excludePrefix:
+        - 'test'
+      excludeSuffix:
+        - '_test.go'
+      waitMillisecond: 1000 # default 100
+  - path: './not_exist_dir'
+    lifeCycle:
+      onChange:
+        - echo 'not_exist_dir onChange'

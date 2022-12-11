@@ -20,17 +20,18 @@ make build
 
 빌드 후 `bin` 폴더에 생성된 실행파일을 실행 
 
-## usage
+## 사용법
 
 ```shell
-./bin/directory-watcher-macos-amd64
+./bin/directory-watcher-macos-amd64 -h
 
-directory-watcher run
-Usage of ./bin/directory-watcher-macos-amd64:
-  -c string
-        config path
-  -d    debug
-  -v    verbose
+Usage:
+  directory-watcher-macos-amd64 [flags]
+
+Flags:
+  -c, --config-path string   set config path (default "config.yml")
+  -h, --help                 help for directory-watcher-macos-amd64
+  -l, --log-level string     set log level (default "ERROR")
 ```
 
 ## 동작 다이어그램

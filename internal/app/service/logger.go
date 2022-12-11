@@ -1,6 +1,6 @@
-package runner
+package service
 
-type logger interface {
+type Logger interface {
 	Debug(string)
 	Info(string)
 	Error(string)

@@ -1,6 +1,25 @@
 package helper
 
-import "log"
+import (
+	"log"
+)
+
+const LogLevelStringDefaultValue = "ERROR"
+
+type LogLevelString string
+
+func (l LogLevelString) GetLogLevel() LogLevel {
+	switch l {
+	case "ERROR":
+		return ERROR
+	case "INFO":
+		return INFO
+	case "DEBUG":
+		return DEBUG
+	default:
+		return ERROR
+	}
+}
 
 type LogLevel uint
 
