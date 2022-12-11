@@ -9,11 +9,11 @@ global:
     onFinishWatch:
       - echo 'global onFinishWatch'
 watchTargets:
-  - path: './dir1'
+  - path: 'dir1'
     lifeCycle:
       onChange:
         - echo 'dir1 onChange'
-  - path: './dir2'
+  - path: 'dir2'
     lifeCycle:
       onStartWatch:
         - echo 'dir2 onStartWatch'
@@ -23,11 +23,11 @@ watchTargets:
         - echo 'dir2 onFinishWatch'
     option:
       excludeDir:
-        - './dir2/tmp'
+        - 'dir2/tmp'
       excludeSuffix:
         - '_test.go'
       waitMillisecond: 1000 # default 100
-  - path: './dir3'
+  - path: 'dir3'
     lifeCycle:
       onStartWatch:
         - echo 'dir3 onStartWatch'
@@ -39,7 +39,7 @@ watchTargets:
           cmd:
           - "pwd"
           - "ls -al"
-  - path: './not_exist_dir'
+  - path: 'not_exist_dir'
     lifeCycle:
       onChange:
         - echo 'not_exist_dir onChange'

@@ -34,6 +34,40 @@ Flags:
   -l, --log-level string     set log level (default "ERROR")
 ```
 
+## config.yml
+
+실제 파일은 `config.example.yml` 예제 참조
+
+```yaml
+global:
+  lifeCycle:
+    onStartWatch: # global onStartWatch hook
+      - [cmdInfo]
+    onBeforeChange: # global onBeforeChange hook
+      - [cmdInfo]
+    onAfterChange: # global onAfterChange hook
+      - [cmdInfo]
+    onFinishWatch: # global onFinishWatch hook
+      - [cmdInfo]
+watchTargets:
+  - path: [감시대상 폴더 path]
+    lifeCycle:
+      onStartWatch: # onStartWatch hook
+        - [cmdInfo]
+      onChange: # onChange hook
+        - [cmdInfo]
+      onFinishWatch: # onFinishWatch hook
+        - [cmdInfo]
+    option:
+      excludeDir:
+        - [감시 제외대상 폴더 path]
+      excludeSuffix:
+        - [감시 제외대상 파일 접미사]
+      waitMillisecond: [이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100]
+```
+
+[cmdInfo]는 [cmd 사양](#cmd-사양) 참조
+
 ## 동작 다이어그램
 
 ![directory-watcher-life-cycle.png](static/directory-watcher-life-cycle.png)

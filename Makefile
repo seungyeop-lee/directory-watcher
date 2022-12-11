@@ -18,12 +18,12 @@ build: linux-build macos-build windows-build
 
 .PHONY: run
 run:
-	go run main.go -c config.yml
+	go run main.go -c config.example.yml
 
-.PHONY: runv
+.PHONY: runi
 runi:
-	go run main.go -c config.yml --log-level=INFO
+	go run main.go -c config.example.yml --log-level=INFO
 
 .PHONY: rund
 rund:
-	go run main.go -c config.yml --log-level=DEBUG
+	go run main.go -c config.example.yml --log-level=DEBUG
