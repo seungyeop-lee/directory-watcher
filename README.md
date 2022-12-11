@@ -1,5 +1,38 @@
 # Directory Watcher
 
+디렉토리 내 변경 (생성, 수정, 삭제)이 발생 시 정해진 커맨드를 실행하게 하는 프로그램
+
+## 기능 및 특징
+
+- 여러개의 디렉토리 감시 가능
+- 각 디렉토리 별 변경 발생 시 실행되는 커맨드 개별 설정 가능
+- 공통적으로 실행되어야 하는 커맨드 설정, 감시 시작 및 감시 종료 시 실행되어야 하는 커맨드 설정 가능
+- 감시 대상 디렉토리 내 감시 제외 디렉토리 추가 가능
+- 감시 대상 디렉토리 내 감시 제외 접미사 추가 가능
+
+## 빌드
+
+```shell
+make build
+```
+
+## 실행
+
+빌드 후 `bin` 폴더에 생성된 실행파일을 실행 
+
+## usage
+
+```shell
+./bin/directory-watcher-macos-amd64
+
+directory-watcher run
+Usage of ./bin/directory-watcher-macos-amd64:
+  -c string
+        config path
+  -d    debug
+  -v    verbose
+```
+
 ## 동작 다이어그램
 
 ![directory-watcher-life-cycle.png](static/directory-watcher-life-cycle.png)
