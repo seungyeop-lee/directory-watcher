@@ -12,7 +12,7 @@
 
 ## 실행
 
-`bin` 폴더에 생성된 실행파일을 실행 
+`bin` 폴더에 생성된 실행파일을 실행
 
 ## 사용법
 
@@ -36,60 +36,46 @@ Flags:
 global:
   lifeCycle:
     onStartWatch: # global onStartWatch hook
-      - [cmdInfo]
+      - '실행 커맨드'
+      - dir: '실행 커맨드가 실행 될 디렉토리경로'
+        cmd: '실행 커맨드'
+      - dir: '실행 커맨드가 실행 될 디렉토리경로'
+        cmd:
+          - '실행 커맨드 1'
+          - '실행 커맨드 2'
     onBeforeChange: # global onBeforeChange hook
-      - [cmdInfo]
+      [ global onStartWatch hook의 사양과 동일 ]
     onAfterChange: # global onAfterChange hook
-      - [cmdInfo]
+      [ global onStartWatch hook의 사양과 동일 ]
     onFinishWatch: # global onFinishWatch hook
-      - [cmdInfo]
+      [ global onStartWatch hook의 사양과 동일 ]
 watchTargets:
-  - path: [감시대상 폴더 path]
+  - path: [ 감시대상 폴더 path ]
     lifeCycle:
       onStartWatch: # onStartWatch hook
-        - [cmdInfo]
+        [ global onStartWatch hook의 사양과 동일 ]
       onChange: # onChange hook
-        - [cmdInfo]
+        [ global onStartWatch hook의 사양과 동일 ]
       onFinishWatch: # onFinishWatch hook
-        - [cmdInfo]
+        [ global onStartWatch hook의 사양과 동일 ]
     option:
       excludeDir:
-        - [감시 제외대상 폴더 path]
+        - [ 감시 제외대상 폴더 path ]
       excludeSuffix:
-        - [감시 제외대상 파일 접미사]
-      waitMillisecond: [이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100]
+        - [ 감시 제외대상 파일 접미사 ]
+      waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
 ```
 
-[cmdInfo]는 [cmd 사양](#cmd-사양) 참조
+### cmd 실행 위치
+
+| dir | global onStartWatch, global onFinishWatch | 그외 hook    |
+|-----|-------------------------------------------|------------|
+| O   | dir 설정 위치                                 | dir 설정 위치  |
+| X   | 프로그램 실행 위치                                | path 설정 위치 |
 
 ## 동작 다이어그램
 
 ![directory-watcher-life-cycle.png](static/directory-watcher-life-cycle.png)
-
-## cmd 사양
-
-### yaml
-
-```yaml
-# lifeCycle하부 callback에 동일 사양 적용
-cmdInfo:
-  - '실행 커맨드'
-  - dir: '실행 커맨드가 실행 될 디렉토리경로'
-    cmd: '실행 커맨드'
-  - dir: '실행 커맨드가 실행 될 디렉토리경로'
-    cmd:
-      - '실행 커맨드 1'
-      - '실행 커맨드 2'
-```
-
-### cmd 실행 위치 적용 룰
-
-- global
-  - dir O => dir 값 적용
-  - dir X => 프로그램 실행 위치 적용
-- watchTargets
-  - dir O => dir 값 적용
-  - dir X => path 값 적용
 
 ## 빌드
 
