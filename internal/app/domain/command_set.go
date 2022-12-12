@@ -31,8 +31,7 @@ type WatchTargetsLifeCycle struct {
 }
 
 type WatchTargetsOption struct {
-	ExcludeDir Paths
-	//ExcludePrefix   PathPrefix
+	ExcludeDir      Paths
 	ExcludeSuffix   PathSuffixes
 	WaitMillisecond Millisecond
 }

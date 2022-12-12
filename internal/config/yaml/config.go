@@ -7,7 +7,6 @@ import (
 type CmdInfo interface{}
 type Path string
 type Paths []Path
-type PathPrefix []string
 type PathSuffixes []string
 type Millisecond uint
 
@@ -89,7 +88,6 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle() domain.WatchTargetsLifeCyc
 
 type WatchTargetsOptionConfig struct {
 	ExcludeDir      Paths        `yaml:"excludeDir"`
-	ExcludePrefix   PathPrefix   `yaml:"excludePrefix"`
 	ExcludeSuffix   PathSuffixes `yaml:"excludeSuffix"`
 	WaitMillisecond Millisecond  `yaml:"waitMillisecond"`
 }
