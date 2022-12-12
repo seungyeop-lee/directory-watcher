@@ -26,30 +26,30 @@ func (c CmdInfoConverter) Convert() domain.Cmd {
 	}
 }
 
-func (c CmdInfoConverter) mapForSlice(s reflect.Value) domain.Cmds {
+func (c CmdInfoConverter) mapForSlice(cmdInfoSliceValue reflect.Value) domain.Cmds {
 	result := domain.Cmds{}
-	cmdInterfaces := s.Interface().([]interface{})
-	for _, cmdInterface := range cmdInterfaces {
-		v := reflect.ValueOf(cmdInterface)
-		switch v.Kind() {
+	cmdInfoSlice := cmdInfoSliceValue.Interface().([]interface{})
+	for _, cmdInfo := range cmdInfoSlice {
+		cmdInfoValue := reflect.ValueOf(cmdInfo)
+		switch cmdInfoValue.Kind() {
 		case reflect.String:
-			result = append(result, c.mapToSingleCmd(v))
+			result = append(result, c.mapToSingleCmd(cmdInfoValue))
 		case reflect.Map:
-			result = append(result, c.mapToStructuredCmd(v))
+			result = append(result, c.mapToStructuredCmd(cmdInfoValue))
 		}
 	}
 	return result
 }
 
-func (c CmdInfoConverter) mapToSingleCmd(v reflect.Value) domain.SingleCmd {
-	s := v.Interface().(string)
+func (c CmdInfoConverter) mapToSingleCmd(cmdStringValue reflect.Value) domain.SingleCmd {
+	s := cmdStringValue.Interface().(string)
 	return domain.SingleCmd(s)
 }
 
-func (c CmdInfoConverter) mapToStructuredCmd(m reflect.Value) domain.Cmd {
+func (c CmdInfoConverter) mapToStructuredCmd(cmdInfoMapValue reflect.Value) domain.Cmd {
 	mapData := map[string]reflect.Value{}
-	for _, k := range m.MapKeys() {
-		v := m.MapIndex(k)
+	for _, k := range cmdInfoMapValue.MapKeys() {
+		v := cmdInfoMapValue.MapIndex(k)
 		if v.Kind() == reflect.Interface {
 			v = v.Elem()
 		}
@@ -90,12 +90,12 @@ func isEmptyDir(dirValue reflect.Value) bool {
 	}
 }
 
-func (c CmdInfoConverter) mapForMultiLineCmd(v reflect.Value) domain.MultiLineCmd {
+func (c CmdInfoConverter) mapForMultiLineCmd(cmdStringSliceValue reflect.Value) domain.MultiLineCmd {
 	result := domain.MultiLineCmd{}
-	cmdInterfaces := v.Interface().([]interface{})
-	for _, cmdInterface := range cmdInterfaces {
-		v2 := reflect.ValueOf(cmdInterface)
-		result.Cmds = append(result.Cmds, c.mapToSingleCmd(v2))
+	cmdStringSlice := cmdStringSliceValue.Interface().([]interface{})
+	for _, cmdString := range cmdStringSlice {
+		cmdStringValue := reflect.ValueOf(cmdString)
+		result.Cmds = append(result.Cmds, c.mapToSingleCmd(cmdStringValue))
 	}
 	return result
 }
