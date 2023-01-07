@@ -10,8 +10,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/seungyeop-lee/directory-watcher/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
 type watchTargetRunners []*watchTargetRunner

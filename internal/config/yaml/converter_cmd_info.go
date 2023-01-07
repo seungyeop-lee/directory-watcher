@@ -3,7 +3,7 @@ package yaml
 import (
 	"reflect"
 
-	"github.com/seungyeop-lee/directory-watcher/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
 
 type CmdInfoConverter struct {

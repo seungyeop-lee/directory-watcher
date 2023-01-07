@@ -13,7 +13,7 @@
 ## 설치
 
 ```shell
-$ go install github.com/seungyeop-lee/directory-watcher@latest
+$ go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
 
 ## 사용법

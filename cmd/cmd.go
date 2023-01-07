@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/seungyeop-lee/directory-watcher/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/internal/app/service"
-	yamlConfig "github.com/seungyeop-lee/directory-watcher/internal/config/yaml"
-	"github.com/seungyeop-lee/directory-watcher/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/service"
+	yamlConfig "github.com/seungyeop-lee/directory-watcher/v2/internal/config/yaml"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
 func Execute() {

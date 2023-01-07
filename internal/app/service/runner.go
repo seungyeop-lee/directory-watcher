@@ -3,7 +3,7 @@ package service
 import (
 	"sync"
 
-	"github.com/seungyeop-lee/directory-watcher/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
 
 type runner struct {

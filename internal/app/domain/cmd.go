@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/seungyeop-lee/directory-watcher/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
 type Cmd interface {
