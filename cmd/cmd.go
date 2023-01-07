@@ -21,6 +21,7 @@ import (
 func Execute() {
 	rootCmd.Flags().StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
 	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
+	rootCmd.Flags().BoolP("version", "v", false, "show version")
 
 	if err := rootCmd.Execute(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
@@ -29,10 +30,20 @@ func Execute() {
 }
 
 var executeFileName = filepath.Base(os.Args[0])
+var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use: executeFileName,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		versionView, err := cmd.Flags().GetBool("version")
+		if err != nil {
+			return err
+		}
+		if versionView {
+			fmt.Println(version)
+			return nil
+		}
+
 		logger, err := getLogger(cmd)
 		if err != nil {
 			return err
