@@ -28,6 +28,7 @@ type watchTargetRunner struct {
 	excludeDir      domain.Paths
 	excludeSuffix   domain.PathSuffixes
 	waitMillisecond domain.Millisecond
+	watchSubDir     bool
 
 	logger  Logger
 	watcher *fsnotify.Watcher
@@ -49,6 +50,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		excludeDir:      commandSet.Option.ExcludeDir,
 		excludeSuffix:   commandSet.Option.ExcludeSuffix,
 		waitMillisecond: commandSet.Option.WaitMillisecond,
+		watchSubDir:     commandSet.Option.WatchSubDir,
 		logger:          logger,
 		watcher:         watcher,
 	}
@@ -86,12 +88,14 @@ func (r watchTargetRunner) Run() {
 				if domain.FileName(ev.Name).IsDefaultExcludeFile() {
 					break
 				}
-				if domain.Path(ev.Name).IsDir() && !r.excludeDir.Equal(domain.Path(ev.Name)) {
-					r.watcher.Add(ev.Name)
+
+				// 생성된 리소스가 directory인 경우, 설정에 따라 감시 대상으로 추가 한다.
+				if r.watchSubDir && domain.Path(ev.Name).IsDir() && !r.excludeDir.Equal(domain.Path(ev.Name)) {
+					_ = r.watcher.Add(ev.Name)
 				}
 			} else if ev.Op&fsnotify.Remove == fsnotify.Remove {
 				r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))
-				r.watcher.Remove(ev.Name)
+				_ = r.watcher.Remove(ev.Name)
 			}
 			if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Remove == fsnotify.Remove {
 				r.logger.Info(fmt.Sprintf("%s has changed", ev.Name))
@@ -120,6 +124,16 @@ func (r watchTargetRunner) addDir() {
 	if !helper.IsExist(r.path.String()) {
 		r.logger.Error(fmt.Sprintf("not exist path: %s", r.path))
 		return
+	}
+
+	// watchSubDir이 false이면 하위 폴더를 감시하지 않는다.
+	if !r.watchSubDir {
+		path := r.path
+		r.logger.Info(fmt.Sprint("add path:", path))
+		err := r.watcher.Add(path.String())
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	err := filepath.Walk(r.path.String(), func(path string, info os.FileInfo, err error) error {

@@ -34,4 +34,5 @@ type WatchTargetsOption struct {
 	ExcludeDir      Paths
 	ExcludeSuffix   PathSuffixes
 	WaitMillisecond Millisecond
+	WatchSubDir     bool
 }

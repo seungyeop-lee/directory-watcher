@@ -90,6 +90,7 @@ type WatchTargetsOptionConfig struct {
 	ExcludeDir      Paths        `yaml:"excludeDir"`
 	ExcludeSuffix   PathSuffixes `yaml:"excludeSuffix"`
 	WaitMillisecond Millisecond  `yaml:"waitMillisecond"`
+	WatchSubDir     *bool        `yaml:"watchSubDir"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
@@ -97,5 +98,6 @@ func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
 		ExcludeDir:      NewPathsConverter(c.ExcludeDir).Convert(),
 		ExcludeSuffix:   NewPathSuffixesConverter(c.ExcludeSuffix).Convert(),
 		WaitMillisecond: NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
+		WatchSubDir:     NewWatchSubDirConverter(c.WatchSubDir).Convert(),
 	}
 }
