@@ -36,7 +36,10 @@ changelog:
   sort: asc
   filters:
     exclude:
+      - '^style:'
+      - '^comment:'
       - '^docs:'
+      - '^chore:'
       - '^test:'
 
 brews:
