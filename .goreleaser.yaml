@@ -43,4 +43,5 @@ brews:
   - tap:
       owner: seungyeop-lee
       name: homebrew-tap
+      branch: main
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
