@@ -38,8 +38,9 @@ Usage:
 
 Flags:
   -c, --config-path string   set config path (default "config.yml")
-  -h, --help                 help for directory-watcher-macos-amd64
+  -h, --help                 help for directory-watcher
   -l, --log-level string     set log level (default "ERROR")
+  -v, --version              version for directory-watcher
 ```
 
 ## config.yml
