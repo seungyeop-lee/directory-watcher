@@ -25,6 +25,8 @@ var (
 
 func Execute() {
 	executeFileName = filepath.Base(os.Args[0])
+	rootCmd.Use = executeFileName
+
 	if version == "" {
 		if info, ok := debug.ReadBuildInfo(); ok {
 			version = info.Main.Version
@@ -41,8 +43,6 @@ func Execute() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:          executeFileName,
-	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger, err := getLogger(cmd)
 		if err != nil {
