@@ -3,10 +3,10 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -18,32 +18,32 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
+var (
+	executeFileName string
+	version         string
+)
+
 func Execute() {
+	executeFileName = filepath.Base(os.Args[0])
+	if version == "" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			version = info.Main.Version
+		}
+	}
+	rootCmd.Version = version
+
 	rootCmd.Flags().StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
 	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
-	rootCmd.Flags().BoolP("version", "v", false, "show version")
 
 	if err := rootCmd.Execute(); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-var executeFileName = filepath.Base(os.Args[0])
-var version = "dev"
-
 var rootCmd = &cobra.Command{
-	Use: executeFileName,
+	Use:          executeFileName,
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		versionView, err := cmd.Flags().GetBool("version")
-		if err != nil {
-			return err
-		}
-		if versionView {
-			fmt.Println(version)
-			return nil
-		}
-
 		logger, err := getLogger(cmd)
 		if err != nil {
 			return err
