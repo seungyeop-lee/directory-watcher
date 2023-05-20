@@ -12,9 +12,21 @@
 
 ## 설치
 
-```shell
+### Homebrew
+
+```console
+$ brew install seungyeop-lee/tap/directory-watcher
+```
+
+### `go install`
+
+```console
 $ go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
+
+### Releases
+
+[releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에서 실행파일을 다운로드
 
 ## 사용법
 
