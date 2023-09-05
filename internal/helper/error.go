@@ -13,3 +13,16 @@ func NewEmptyCmdError() EmptyCmdError {
 func (e *emptyCmdError) Error() string {
 	return ""
 }
+
+func FilterError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	switch err.(type) {
+	case EmptyCmdError:
+		return nil
+	default:
+		return err
+	}
+}

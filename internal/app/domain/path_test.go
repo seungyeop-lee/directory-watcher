@@ -1,6 +1,8 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestPath_IsSubDirLogical(t *testing.T) {
 	type args struct {

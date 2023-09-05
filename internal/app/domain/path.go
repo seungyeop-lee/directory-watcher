@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type Paths []Path
@@ -79,21 +78,4 @@ func (p Path) Abs() string {
 		log.Fatal(err)
 	}
 	return abs
-}
-
-type PathSuffixes []PathSuffix
-
-func (s PathSuffixes) Contain(input Path) bool {
-	for _, ps := range s {
-		if ps.Contain(input) {
-			return true
-		}
-	}
-	return false
-}
-
-type PathSuffix string
-
-func (s PathSuffix) Contain(input Path) bool {
-	return strings.HasSuffix(input.Abs(), string(s))
 }

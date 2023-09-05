@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
@@ -136,22 +135,22 @@ func (r watchTargetRunner) addDir() {
 		}
 	}
 
-	err := filepath.Walk(r.path.String(), func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(r.path.String(), func(p string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() {
 			return nil
 		}
-		if r.excludeDir.Equal(domain.Path(path)) {
+		if r.excludeDir.Equal(domain.Path(p)) {
 			return nil
 		}
-		if r.excludeDir.IsSubFolder(domain.Path(path)) {
+		if r.excludeDir.IsSubFolder(domain.Path(p)) {
 			return nil
 		}
 
-		r.logger.Info(fmt.Sprint("add path:", path))
-		return r.watcher.Add(path)
+		r.logger.Info(fmt.Sprint("add path:", p))
+		return r.watcher.Add(p)
 	})
 
 	if err != nil {

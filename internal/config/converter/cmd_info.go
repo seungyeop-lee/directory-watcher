@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	cmd "github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmdimpl"
 )
 
 type CmdInfo interface{}
@@ -24,7 +25,7 @@ func (c CmdInfoConverter) Convert() domain.Cmd {
 	case reflect.Slice:
 		return c.mapForSlice(v)
 	default:
-		return domain.EmptyCmd{}
+		return cmd.EmptyCmd{}
 	}
 }
 
@@ -43,9 +44,9 @@ func (c CmdInfoConverter) mapForSlice(cmdInfoSliceValue reflect.Value) domain.Cm
 	return result
 }
 
-func (c CmdInfoConverter) mapToSingleCmd(cmdStringValue reflect.Value) domain.SingleCmd {
+func (c CmdInfoConverter) mapToSingleCmd(cmdStringValue reflect.Value) cmd.SingleCmd {
 	s := cmdStringValue.Interface().(string)
-	return domain.SingleCmd(s)
+	return cmd.SingleCmd(s)
 }
 
 func (c CmdInfoConverter) mapToStructuredCmd(cmdInfoMapValue reflect.Value) domain.Cmd {
@@ -63,7 +64,7 @@ func (c CmdInfoConverter) mapToStructuredCmd(cmdInfoMapValue reflect.Value) doma
 		if isEmptyDir(mapData["dir"]) {
 			return c.mapToSingleCmd(mapData["cmd"])
 		}
-		return domain.StructuredCmd{
+		return cmd.StructuredCmd{
 			Cmd: c.mapToSingleCmd(mapData["cmd"]),
 			Dir: domain.Path(mapData["dir"].Interface().(string)),
 		}
@@ -71,14 +72,14 @@ func (c CmdInfoConverter) mapToStructuredCmd(cmdInfoMapValue reflect.Value) doma
 		if isEmptyDir(mapData["dir"]) {
 			return c.mapForMultiLineCmd(mapData["cmd"])
 		}
-		return domain.StructuredCmd{
+		return cmd.StructuredCmd{
 			Cmd: c.mapForMultiLineCmd(mapData["cmd"]),
 			Dir: domain.Path(mapData["dir"].Interface().(string)),
 		}
 	}
 
-	return domain.StructuredCmd{
-		Cmd: domain.EmptyCmd{},
+	return cmd.StructuredCmd{
+		Cmd: cmd.EmptyCmd{},
 		Dir: "",
 	}
 }
@@ -92,8 +93,8 @@ func isEmptyDir(dirValue reflect.Value) bool {
 	}
 }
 
-func (c CmdInfoConverter) mapForMultiLineCmd(cmdStringSliceValue reflect.Value) domain.MultiLineCmd {
-	result := domain.MultiLineCmd{}
+func (c CmdInfoConverter) mapForMultiLineCmd(cmdStringSliceValue reflect.Value) cmd.MultiLineCmd {
+	result := cmd.MultiLineCmd{}
 	cmdStringSlice := cmdStringSliceValue.Interface().([]interface{})
 	for _, cmdString := range cmdStringSlice {
 		cmdStringValue := reflect.ValueOf(cmdString)
