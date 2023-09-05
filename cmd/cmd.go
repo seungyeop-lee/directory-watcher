@@ -9,13 +9,12 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
-
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/service"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 	yamlConfig "github.com/seungyeop-lee/directory-watcher/v2/internal/config/yaml"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -54,10 +53,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		config := yamlConfig.Config{}
-		if err := yaml.Unmarshal(configFile, &config); err != nil {
-			return err
-		}
+		config := yamlConfig.NewConfig(configFile)
 		debugLogConfig(logger, config)
 
 		commandSet := config.BuildCommandSet()
@@ -112,7 +108,7 @@ func getConfigFile(cmd *cobra.Command) ([]byte, error) {
 	return configFile, nil
 }
 
-func debugLogConfig(logger service.Logger, config yamlConfig.Config) {
+func debugLogConfig(logger service.Logger, config config.Config) {
 	logger.Debug("--- yaml config file map result ---")
 	configJsonStr, _ := json.MarshalIndent(config, "", "	")
 	logger.Debug(bytes.NewBuffer(configJsonStr).String())

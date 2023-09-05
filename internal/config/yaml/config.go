@@ -2,8 +2,20 @@ package yaml
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/config/converter"
+	"gopkg.in/yaml.v3"
 )
+
+var _ config.Config = (*Config)(nil)
+
+func NewConfig(configFile []byte) config.Config {
+	c := Config{}
+	if err := yaml.Unmarshal(configFile, &c); err != nil {
+		panic(err)
+	}
+	return &c
+}
 
 type Config struct {
 	Global       GlobalConfig        `yaml:"global"`
