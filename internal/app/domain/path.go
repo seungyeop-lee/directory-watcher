@@ -45,6 +45,10 @@ func (p Path) IsSubDir(input Path) bool {
 		return false
 	}
 
+	return p.isSubDirLogical(input)
+}
+
+func (p Path) isSubDirLogical(input Path) bool {
 	pAbs, _ := filepath.Abs(string(p))
 	inputAbs, _ := filepath.Abs(string(input))
 
