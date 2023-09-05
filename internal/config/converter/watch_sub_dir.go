@@ -1,4 +1,4 @@
-package yaml
+package converter
 
 const defaultWatchSubDirValue bool = true
 

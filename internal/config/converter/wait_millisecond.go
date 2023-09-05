@@ -1,8 +1,10 @@
-package yaml
+package converter
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
+
+type Millisecond uint
 
 const defaultWaitMillisecondValue Millisecond = 100
 

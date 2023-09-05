@@ -2,13 +2,8 @@ package yaml
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config/converter"
 )
-
-type CmdInfo interface{}
-type Path string
-type Paths []Path
-type PathSuffixes []string
-type Millisecond uint
 
 type Config struct {
 	Global       GlobalConfig        `yaml:"global"`
@@ -33,18 +28,18 @@ func (c GlobalConfig) BuildCommandSet() domain.GlobalCommandSet {
 }
 
 type GlobalLifeCycleConfig struct {
-	OnStartWatch   CmdInfo `yaml:"onStartWatch"`
-	OnBeforeChange CmdInfo `yaml:"onBeforeChange"`
-	OnAfterChange  CmdInfo `yaml:"onAfterChange"`
-	OnFinishWatch  CmdInfo `yaml:"onFinishWatch"`
+	OnStartWatch   converter.CmdInfo `yaml:"onStartWatch"`
+	OnBeforeChange converter.CmdInfo `yaml:"onBeforeChange"`
+	OnAfterChange  converter.CmdInfo `yaml:"onAfterChange"`
+	OnFinishWatch  converter.CmdInfo `yaml:"onFinishWatch"`
 }
 
 func (c GlobalLifeCycleConfig) BuildLifeCycle() domain.GlobalLifeCycle {
 	return domain.GlobalLifeCycle{
-		OnStartWatch:   NewCmdInfoConverter(c.OnStartWatch).Convert(),
-		OnBeforeChange: NewCmdInfoConverter(c.OnBeforeChange).Convert(),
-		OnAfterChange:  NewCmdInfoConverter(c.OnAfterChange).Convert(),
-		OnFinishWatch:  NewCmdInfoConverter(c.OnFinishWatch).Convert(),
+		OnStartWatch:   converter.NewCmdInfoConverter(c.OnStartWatch).Convert(),
+		OnBeforeChange: converter.NewCmdInfoConverter(c.OnBeforeChange).Convert(),
+		OnAfterChange:  converter.NewCmdInfoConverter(c.OnAfterChange).Convert(),
+		OnFinishWatch:  converter.NewCmdInfoConverter(c.OnFinishWatch).Convert(),
 	}
 }
 
@@ -59,45 +54,45 @@ func (cs WatchTargetsConfigs) BuildCommandSets() domain.WatchTargetsCommandSets 
 }
 
 type WatchTargetsConfig struct {
-	Path      Path                        `yaml:"path"`
+	Path      converter.Path              `yaml:"path"`
 	LifeCycle WatchTargetsLifeCycleConfig `yaml:"lifeCycle"`
 	Option    WatchTargetsOptionConfig    `yaml:"option"`
 }
 
 func (c WatchTargetsConfig) BuildCommandSet() domain.WatchTargetsCommandSet {
 	return domain.WatchTargetsCommandSet{
-		Path:      NewPathConverter(c.Path).Convert(),
+		Path:      converter.NewPathConverter(c.Path).Convert(),
 		LifeCycle: c.LifeCycle.BuildLifeCycle(),
 		Option:    c.Option.BuildOption(),
 	}
 }
 
 type WatchTargetsLifeCycleConfig struct {
-	OnStartWatch  CmdInfo `yaml:"onStartWatch"`
-	OnChange      CmdInfo `yaml:"onChange"`
-	OnFinishWatch CmdInfo `yaml:"onFinishWatch"`
+	OnStartWatch  converter.CmdInfo `yaml:"onStartWatch"`
+	OnChange      converter.CmdInfo `yaml:"onChange"`
+	OnFinishWatch converter.CmdInfo `yaml:"onFinishWatch"`
 }
 
 func (c WatchTargetsLifeCycleConfig) BuildLifeCycle() domain.WatchTargetsLifeCycle {
 	return domain.WatchTargetsLifeCycle{
-		OnStartWatch:  NewCmdInfoConverter(c.OnStartWatch).Convert(),
-		OnChange:      NewCmdInfoConverter(c.OnChange).Convert(),
-		OnFinishWatch: NewCmdInfoConverter(c.OnFinishWatch).Convert(),
+		OnStartWatch:  converter.NewCmdInfoConverter(c.OnStartWatch).Convert(),
+		OnChange:      converter.NewCmdInfoConverter(c.OnChange).Convert(),
+		OnFinishWatch: converter.NewCmdInfoConverter(c.OnFinishWatch).Convert(),
 	}
 }
 
 type WatchTargetsOptionConfig struct {
-	ExcludeDir      Paths        `yaml:"excludeDir"`
-	ExcludeSuffix   PathSuffixes `yaml:"excludeSuffix"`
-	WaitMillisecond Millisecond  `yaml:"waitMillisecond"`
-	WatchSubDir     *bool        `yaml:"watchSubDir"`
+	ExcludeDir      converter.Paths        `yaml:"excludeDir"`
+	ExcludeSuffix   converter.PathSuffixes `yaml:"excludeSuffix"`
+	WaitMillisecond converter.Millisecond  `yaml:"waitMillisecond"`
+	WatchSubDir     *bool                  `yaml:"watchSubDir"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
 	return domain.WatchTargetsOption{
-		ExcludeDir:      NewPathsConverter(c.ExcludeDir).Convert(),
-		ExcludeSuffix:   NewPathSuffixesConverter(c.ExcludeSuffix).Convert(),
-		WaitMillisecond: NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
-		WatchSubDir:     NewWatchSubDirConverter(c.WatchSubDir).Convert(),
+		ExcludeDir:      converter.NewPathsConverter(c.ExcludeDir).Convert(),
+		ExcludeSuffix:   converter.NewPathSuffixesConverter(c.ExcludeSuffix).Convert(),
+		WaitMillisecond: converter.NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
+		WatchSubDir:     converter.NewWatchSubDirConverter(c.WatchSubDir).Convert(),
 	}
 }

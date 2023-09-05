@@ -1,10 +1,12 @@
-package yaml
+package converter
 
 import (
 	"reflect"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
+
+type CmdInfo interface{}
 
 type CmdInfoConverter struct {
 	cmdInfo CmdInfo

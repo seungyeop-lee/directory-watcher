@@ -1,8 +1,11 @@
-package yaml
+package converter
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
+
+type Path string
+type Paths []Path
 
 type PathConverter struct {
 	path Path
