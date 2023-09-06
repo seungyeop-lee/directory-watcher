@@ -12,8 +12,8 @@ rund:
 
 .PHONY: release-test-snapshot
 release-test-snapshot:
-	goreleaser release --skip-publish --rm-dist --snapshot
+	goreleaser release --skip-publish --clean --snapshot
 
 .PHONY: release-test
 release-test:
-	goreleaser release --skip-publish --rm-dist
+	goreleaser release --skip-publish --clean
