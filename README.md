@@ -91,6 +91,7 @@ watchTargets:
       waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
       watchSubDir: [ 하위 디렉토리 감시 여부, default는 true ]
       watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제), default는 "CUD" ]
+      noWait: [ 이벤트 발생 후 대기시간 없이 바로 hook을 실행할지 여부, default는 false ]
 ```
 
 ### cmd 실행 위치
@@ -112,6 +113,12 @@ watchTargets:
 | {{.ExtName}}    | 이벤트가 일어난 파일의 확장자           | .txt                                             |
 | {{.DirPath}}    | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로 | test/dir2                                        |
 | {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로 | /Users/example/directory-watcher/test/dir2       |
+
+### waitMillisecond와 noWait
+
+- `watchTargets.path` 내부에서 이벤트가 발생하게 되면 waitMillisecond 만큼 대기 후 hook을 실행합니다.
+- 대기 중 `watchTargets.path` 내부에서 다른 이벤트가 발생하게 되면 그 전 이벤트는 무시됩니다. 즉, 새로 생긴 이벤트 기준으로 waitMillisecond 만큼 다시 대기 후 hook을 실행합니다.
+- `watchTargets.path` 내부의 이벤트가 무시되지 않고, 모든 이벤트로 인해 hook이 즉시 실행되길 원한다면 noWait를 true로 설정합니다. (이벤트에 대한 hook은 순차적으로 실행됩니다.)
 
 ## 동작 다이어그램
 

@@ -29,6 +29,7 @@ type watchTargetRunner struct {
 	waitMillisecond domain.Millisecond
 	watchSubDir     bool
 	watchEvent      domain.WatchEvent
+	noWait          bool
 
 	logger  Logger
 	watcher *fsnotify.Watcher
@@ -52,6 +53,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		waitMillisecond: commandSet.Option.WaitMillisecond,
 		watchSubDir:     commandSet.Option.WatchSubDir,
 		watchEvent:      commandSet.Option.WatchEvent,
+		noWait:          commandSet.Option.NoWait,
 		logger:          logger,
 		watcher:         watcher,
 	}
@@ -64,26 +66,7 @@ func (r watchTargetRunner) Run() {
 
 	event := make(chan domain.Event)
 
-	go func(evChan chan domain.Event) {
-		var e struct {
-			event     domain.Event
-			threshold <-chan time.Time
-		}
-		for {
-			select {
-			case ev := <-evChan:
-				if r.excludeSuffix.Contain(ev.Path) {
-					break
-				}
-				e.event = ev
-				e.threshold = helper.CreateThreshold(r.waitMillisecond.Duration())
-			case <-e.threshold:
-				r.callOnBeforeChange(e.event)
-				r.callOnChange(e.event)
-				r.callOnAfterChange(e.event)
-			}
-		}
-	}(event)
+	go r.selectEventHandler()(event)
 
 	for {
 		select {
@@ -119,12 +102,48 @@ func (r watchTargetRunner) Run() {
 	}
 }
 
+func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
+	if r.noWait {
+		return func(evChan chan domain.Event) {
+			for e := range evChan {
+				if r.excludeSuffix.Contain(e.Path) {
+					continue
+				}
+				r.callOnBeforeChange(e)
+				r.callOnChange(e)
+				r.callOnAfterChange(e)
+			}
+		}
+	} else {
+		return func(evChan chan domain.Event) {
+			var e struct {
+				event     domain.Event
+				threshold <-chan time.Time
+			}
+			for {
+				select {
+				case ev := <-evChan:
+					if r.excludeSuffix.Contain(ev.Path) {
+						break
+					}
+					e.event = ev
+					e.threshold = helper.CreateThreshold(r.waitMillisecond.Duration())
+				case <-e.threshold:
+					r.callOnBeforeChange(e.event)
+					r.callOnChange(e.event)
+					r.callOnAfterChange(e.event)
+				}
+			}
+		}
+	}
+}
+
 func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
 	if ev.Op.Has(fsnotify.Create) {
 		r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
 	}
 	if ev.Op.Has(fsnotify.Write) {
-		r.logger.Info(fmt.Sprintf("%s has changed", ev.Name))
+		r.logger.Info(fmt.Sprintf("%s has modified", ev.Name))
 	}
 	if ev.Op.Has(fsnotify.Remove) {
 		r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))

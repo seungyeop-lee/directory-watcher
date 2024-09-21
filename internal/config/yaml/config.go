@@ -99,6 +99,7 @@ type WatchTargetsOptionConfig struct {
 	WaitMillisecond converter.Millisecond  `yaml:"waitMillisecond"`
 	WatchSubDir     *bool                  `yaml:"watchSubDir"`
 	WatchEvent      converter.WatchEvent   `yaml:"watchEvent"`
+	NoWait          *bool                  `yaml:"noWait"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
@@ -108,5 +109,6 @@ func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
 		WaitMillisecond: converter.NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
 		WatchSubDir:     converter.NewWatchSubDirConverter(c.WatchSubDir).Convert(),
 		WatchEvent:      converter.NewWatchEventConverter(c.WatchEvent).Convert(),
+		NoWait:          converter.NewNoWaitConverter(c.NoWait).Convert(),
 	}
 }

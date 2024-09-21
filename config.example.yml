@@ -28,7 +28,8 @@ watchTargets:
         - '_test.go'
         - '~'
       waitMillisecond: 1000 # default 100
-      watchEvent: CD
+      watchEvent: CDU
+      noWait: true # default false
   - path: 'test/dir3'
     lifeCycle:
       onStartWatch:

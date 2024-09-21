@@ -36,4 +36,5 @@ type WatchTargetsOption struct {
 	WaitMillisecond Millisecond
 	WatchSubDir     bool
 	WatchEvent      WatchEvent
+	NoWait          bool
 }
