@@ -90,6 +90,7 @@ watchTargets:
         - [ 감시 제외대상 파일 접미사 ]
       waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
       watchSubDir: [ 하위 디렉토리 감시 여부, default는 true ]
+      watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제), default는 "CUD" ]
 ```
 
 ### cmd 실행 위치

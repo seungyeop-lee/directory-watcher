@@ -28,6 +28,7 @@ type watchTargetRunner struct {
 	excludeSuffix   domain.PathSuffixes
 	waitMillisecond domain.Millisecond
 	watchSubDir     bool
+	watchEvent      domain.WatchEvent
 
 	logger  Logger
 	watcher *fsnotify.Watcher
@@ -50,6 +51,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		excludeSuffix:   commandSet.Option.ExcludeSuffix,
 		waitMillisecond: commandSet.Option.WaitMillisecond,
 		watchSubDir:     commandSet.Option.WatchSubDir,
+		watchEvent:      commandSet.Option.WatchEvent,
 		logger:          logger,
 		watcher:         watcher,
 	}
@@ -82,8 +84,9 @@ func (r watchTargetRunner) Run() {
 	for {
 		select {
 		case ev := <-r.watcher.Events:
+			r.printEventLog(ev)
+
 			if ev.Op&fsnotify.Create == fsnotify.Create {
-				r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
 				if domain.FileName(ev.Name).IsDefaultExcludeFile() {
 					break
 				}
@@ -93,11 +96,10 @@ func (r watchTargetRunner) Run() {
 					_ = r.watcher.Add(ev.Name)
 				}
 			} else if ev.Op&fsnotify.Remove == fsnotify.Remove {
-				r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))
 				_ = r.watcher.Remove(ev.Name)
 			}
-			if ev.Op&fsnotify.Create == fsnotify.Create || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Remove == fsnotify.Remove {
-				r.logger.Info(fmt.Sprintf("%s has changed", ev.Name))
+
+			if r.watchEvent.IsListening(ev.Op) {
 				event <- domain.NewEventByFsnotify(ev)
 			}
 		case err := <-r.watcher.Errors:
@@ -110,6 +112,18 @@ func (r watchTargetRunner) Run() {
 			}
 			r.logger.Debug(fmt.Sprint("watcher.Error:", err))
 		}
+	}
+}
+
+func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
+	if ev.Op.Has(fsnotify.Create) {
+		r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
+	}
+	if ev.Op.Has(fsnotify.Write) {
+		r.logger.Info(fmt.Sprintf("%s has changed", ev.Name))
+	}
+	if ev.Op.Has(fsnotify.Remove) {
+		r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))
 	}
 }
 
