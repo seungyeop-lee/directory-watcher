@@ -40,10 +40,10 @@ func (c GlobalConfig) BuildCommandSet() domain.GlobalCommandSet {
 }
 
 type GlobalLifeCycleConfig struct {
-	OnStartWatch   converter.CmdInfo `yaml:"onStartWatch"`
-	OnBeforeChange converter.CmdInfo `yaml:"onBeforeChange"`
-	OnAfterChange  converter.CmdInfo `yaml:"onAfterChange"`
-	OnFinishWatch  converter.CmdInfo `yaml:"onFinishWatch"`
+	OnStartWatch   config.CmdInfo `yaml:"onStartWatch"`
+	OnBeforeChange config.CmdInfo `yaml:"onBeforeChange"`
+	OnAfterChange  config.CmdInfo `yaml:"onAfterChange"`
+	OnFinishWatch  config.CmdInfo `yaml:"onFinishWatch"`
 }
 
 func (c GlobalLifeCycleConfig) BuildLifeCycle() domain.GlobalLifeCycle {
@@ -66,7 +66,7 @@ func (cs WatchTargetsConfigs) BuildCommandSets() domain.WatchTargetsCommandSets 
 }
 
 type WatchTargetsConfig struct {
-	Path      converter.Path              `yaml:"path"`
+	Path      config.Path                 `yaml:"path"`
 	LifeCycle WatchTargetsLifeCycleConfig `yaml:"lifeCycle"`
 	Option    WatchTargetsOptionConfig    `yaml:"option"`
 }
@@ -80,9 +80,9 @@ func (c WatchTargetsConfig) BuildCommandSet() domain.WatchTargetsCommandSet {
 }
 
 type WatchTargetsLifeCycleConfig struct {
-	OnStartWatch  converter.CmdInfo `yaml:"onStartWatch"`
-	OnChange      converter.CmdInfo `yaml:"onChange"`
-	OnFinishWatch converter.CmdInfo `yaml:"onFinishWatch"`
+	OnStartWatch  config.CmdInfo `yaml:"onStartWatch"`
+	OnChange      config.CmdInfo `yaml:"onChange"`
+	OnFinishWatch config.CmdInfo `yaml:"onFinishWatch"`
 }
 
 func (c WatchTargetsLifeCycleConfig) BuildLifeCycle() domain.WatchTargetsLifeCycle {
@@ -94,12 +94,12 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle() domain.WatchTargetsLifeCyc
 }
 
 type WatchTargetsOptionConfig struct {
-	ExcludeDir      converter.Paths        `yaml:"excludeDir"`
-	ExcludeSuffix   converter.PathSuffixes `yaml:"excludeSuffix"`
-	WaitMillisecond converter.Millisecond  `yaml:"waitMillisecond"`
-	WatchSubDir     *bool                  `yaml:"watchSubDir"`
-	WatchEvent      converter.WatchEvent   `yaml:"watchEvent"`
-	NoWait          *bool                  `yaml:"noWait"`
+	ExcludeDir      config.Paths        `yaml:"excludeDir"`
+	ExcludeSuffix   config.PathSuffixes `yaml:"excludeSuffix"`
+	WaitMillisecond config.Millisecond  `yaml:"waitMillisecond"`
+	WatchSubDir     *bool               `yaml:"watchSubDir"`
+	WatchEvent      config.WatchEvent   `yaml:"watchEvent"`
+	NoWait          *bool               `yaml:"noWait"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {

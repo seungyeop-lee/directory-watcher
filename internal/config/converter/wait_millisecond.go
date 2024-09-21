@@ -2,17 +2,16 @@ package converter
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 )
 
-type Millisecond uint
-
-const defaultWaitMillisecondValue Millisecond = 100
+const defaultWaitMillisecondValue config.Millisecond = 100
 
 type WaitMillisecondConverter struct {
-	millisecond Millisecond
+	millisecond config.Millisecond
 }
 
-func NewWaitMillisecondConverter(millisecond Millisecond) *WaitMillisecondConverter {
+func NewWaitMillisecondConverter(millisecond config.Millisecond) *WaitMillisecondConverter {
 	return &WaitMillisecondConverter{millisecond: millisecond}
 }
 

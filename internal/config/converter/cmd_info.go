@@ -5,15 +5,14 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 )
 
-type CmdInfo interface{}
-
 type CmdInfoConverter struct {
-	cmdInfo CmdInfo
+	cmdInfo config.CmdInfo
 }
 
-func NewCmdInfoConverter(cmdInfo CmdInfo) *CmdInfoConverter {
+func NewCmdInfoConverter(cmdInfo config.CmdInfo) *CmdInfoConverter {
 	return &CmdInfoConverter{
 		cmdInfo: cmdInfo,
 	}

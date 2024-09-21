@@ -2,15 +2,14 @@ package converter
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 )
 
-type PathSuffixes []string
-
 type PathSuffixesConverter struct {
-	pathSuffixes PathSuffixes
+	pathSuffixes config.PathSuffixes
 }
 
-func NewPathSuffixesConverter(pathSuffixes PathSuffixes) *PathSuffixesConverter {
+func NewPathSuffixesConverter(pathSuffixes config.PathSuffixes) *PathSuffixesConverter {
 	return &PathSuffixesConverter{pathSuffixes: pathSuffixes}
 }
 

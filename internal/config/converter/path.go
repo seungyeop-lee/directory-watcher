@@ -2,16 +2,14 @@ package converter
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 )
 
-type Path string
-type Paths []Path
-
 type PathConverter struct {
-	path Path
+	path config.Path
 }
 
-func NewPathConverter(path Path) *PathConverter {
+func NewPathConverter(path config.Path) *PathConverter {
 	return &PathConverter{path: path}
 }
 
@@ -20,10 +18,10 @@ func (c PathConverter) Convert() domain.Path {
 }
 
 type PathsConverter struct {
-	paths Paths
+	paths config.Paths
 }
 
-func NewPathsConverter(paths Paths) *PathsConverter {
+func NewPathsConverter(paths config.Paths) *PathsConverter {
 	return &PathsConverter{paths: paths}
 }
 
