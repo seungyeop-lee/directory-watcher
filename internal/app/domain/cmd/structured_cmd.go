@@ -11,6 +11,6 @@ type StructuredCmd struct {
 
 var _ domain.Cmd = (*StructuredCmd)(nil)
 
-func (s StructuredCmd) Run(_ domain.Path) error {
-	return s.Cmd.Run(s.Dir)
+func (s StructuredCmd) Run(_ domain.Path, event *domain.Event) error {
+	return s.Cmd.Run(s.Dir, event)
 }

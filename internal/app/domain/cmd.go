@@ -1,5 +1,5 @@
 package domain
 
 type Cmd interface {
-	Run(runDir Path) error
+	Run(runDir Path, event *Event) error
 }

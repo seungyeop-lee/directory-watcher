@@ -79,3 +79,19 @@ func (p Path) Abs() string {
 	}
 	return abs
 }
+
+func (p Path) FileName() string {
+	return filepath.Base(string(p))
+}
+
+func (p Path) ExtName() string {
+	return filepath.Ext(string(p))
+}
+
+func (p Path) DirPath() string {
+	return filepath.Dir(string(p))
+}
+
+func (p Path) DirAbsPath() string {
+	return filepath.Dir(p.Abs())
+}

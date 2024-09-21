@@ -11,9 +11,9 @@ type MultiLineCmd struct {
 
 var _ domain.Cmd = (*MultiLineCmd)(nil)
 
-func (m MultiLineCmd) Run(runDir domain.Path) error {
+func (m MultiLineCmd) Run(runDir domain.Path, event *domain.Event) error {
 	for _, cmd := range m.Cmds {
-		if err := helper.FilterError(cmd.Run(runDir)); err != nil {
+		if err := helper.FilterError(cmd.Run(runDir, event)); err != nil {
 			return err
 		}
 	}

@@ -8,6 +8,6 @@ type EmptyCmd struct{}
 
 var _ domain.Cmd = (*EmptyCmd)(nil)
 
-func (e EmptyCmd) Run(_ domain.Path) error {
+func (e EmptyCmd) Run(_ domain.Path, _ *domain.Event) error {
 	return nil
 }

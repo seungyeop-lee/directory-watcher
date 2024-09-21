@@ -65,18 +65,22 @@ func (r watchTargetRunner) Run() {
 	event := make(chan domain.Event)
 
 	go func(evChan chan domain.Event) {
-		var threshold <-chan time.Time
+		var e struct {
+			event     domain.Event
+			threshold <-chan time.Time
+		}
 		for {
 			select {
 			case ev := <-evChan:
 				if r.excludeSuffix.Contain(ev.Path) {
 					break
 				}
-				threshold = helper.CreateThreshold(r.waitMillisecond.Duration())
-			case <-threshold:
-				r.callOnBeforeChange()
-				r.callOnChange()
-				r.callOnAfterChange()
+				e.event = ev
+				e.threshold = helper.CreateThreshold(r.waitMillisecond.Duration())
+			case <-e.threshold:
+				r.callOnBeforeChange(e.event)
+				r.callOnChange(e.event)
+				r.callOnAfterChange(e.event)
 			}
 		}
 	}(event)
@@ -174,34 +178,34 @@ func (r watchTargetRunner) addDir() {
 
 func (r watchTargetRunner) callOnStartWatch() {
 	err := r.printInfo("callOnStartWatch", r.onStartWatch, func() error {
-		return r.onStartWatch.Run(r.path)
+		return r.onStartWatch.Run(r.path, nil)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
 	}
 }
 
-func (r watchTargetRunner) callOnBeforeChange() {
+func (r watchTargetRunner) callOnBeforeChange(event domain.Event) {
 	err := r.printInfo("callOnBeforeChange", r.onBeforeChange, func() error {
-		return r.onBeforeChange.Run(r.path)
+		return r.onBeforeChange.Run(r.path, &event)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
 	}
 }
 
-func (r watchTargetRunner) callOnChange() {
+func (r watchTargetRunner) callOnChange(event domain.Event) {
 	err := r.printInfo("callOnChange", r.onChange, func() error {
-		return r.onChange.Run(r.path)
+		return r.onChange.Run(r.path, &event)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
 	}
 }
 
-func (r watchTargetRunner) callOnAfterChange() {
+func (r watchTargetRunner) callOnAfterChange(event domain.Event) {
 	err := r.printInfo("callOnAfterChange", r.onAfterChange, func() error {
-		return r.onAfterChange.Run(r.path)
+		return r.onAfterChange.Run(r.path, &event)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
@@ -210,7 +214,7 @@ func (r watchTargetRunner) callOnAfterChange() {
 
 func (r watchTargetRunner) callOnFinishWatch() {
 	err := r.printInfo("callOnFinishWatch", r.onFinishWatch, func() error {
-		return r.onFinishWatch.Run(r.path)
+		return r.onFinishWatch.Run(r.path, nil)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
