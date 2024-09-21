@@ -16,14 +16,22 @@
 
 ### Homebrew
 
-```console
-$ brew install seungyeop-lee/tap/directory-watcher
+```shell
+brew install seungyeop-lee/tap/directory-watcher
 ```
 
 ### `go install`
 
-```console
-$ go install github.com/seungyeop-lee/directory-watcher/v2@latest
+```shell
+go install github.com/seungyeop-lee/directory-watcher/v2@latest
+```
+
+### Docker
+
+```shell
+docker run --rm \
+  -v $PWD/config.yml:/config.yml \
+   ghcr.io/seungyeop-lee/directory-watcher -c /config.yml
 ```
 
 ### Releases

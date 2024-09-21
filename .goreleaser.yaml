@@ -49,3 +49,33 @@ brews:
       owner: seungyeop-lee
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+    goarch: amd64
+    extra_files:
+      - entrypoint.sh
+  - image_templates:
+      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+    goarch: arm64
+    extra_files:
+      - entrypoint.sh
+
+docker_manifests:
+  - name_template: "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-amd64"
+      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/seungyeop-lee/directory-watcher:latest"
+    image_templates:
+      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-amd64"
+      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-arm64"
