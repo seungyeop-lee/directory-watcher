@@ -57,6 +57,11 @@ directory-watcher
 
 ```shell
 docker run --rm ghcr.io/seungyeop-lee/directory-watcher
+
+# 알려진 이슈: bind mount된 디렉토리에서 파일 삭제 시 삭제 이벤트 누락
+# 호스트 시스템에서 컨테이너에 bind mount된 디렉토리 내의 파일을 삭제할 경우, 삭제 이벤트가 항상 감지되는 것은 아닙니다. 
+# 이는 파일 시스템 알림 라이브러리(fsnotify)의 알려진 문제입니다.
+# 자세한 내용은 다음을 참조하세요: https://github.com/fsnotify/fsnotify/issues/592
 ```
 
 이 커맨드는 다음과 같은 옵션을 제공합니다.

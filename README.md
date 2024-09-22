@@ -57,6 +57,11 @@ It can also be run using docker.
 
 ```shell
 docker run --rm ghcr.io/seungyeop-lee/directory-watcher
+
+# Known Issue: Inconsistent Delete Events with Bind Mounts
+# When deleting files on the host system within a directory that's been bind-mounted into a container, the delete event may not always be detected. 
+# This is a known issue with the underlying file system notification library (fsnotify).
+# For more details, see: https://github.com/fsnotify/fsnotify/issues/592
 ```
 
 This command provides the following options:
