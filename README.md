@@ -29,9 +29,7 @@ go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ### Docker
 
 ```shell
-docker run --rm \
-  -v $PWD/config.yml:/config.yml \
-   ghcr.io/seungyeop-lee/directory-watcher -c /config.yml
+docker run --rm ghcr.io/seungyeop-lee/directory-watcher
 ```
 
 ### Releases
