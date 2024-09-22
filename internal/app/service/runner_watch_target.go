@@ -139,6 +139,7 @@ func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
 }
 
 func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
+	r.logger.Debug(fmt.Sprintf("event: %s", ev.String()))
 	if ev.Op.Has(fsnotify.Create) {
 		r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
 	}
