@@ -86,7 +86,7 @@ func (r watchTargetRunner) Run() {
 				_ = r.watcher.Remove(ev.Name)
 			}
 
-			if r.watchEvent.IsListening(ev.Op) {
+			if r.watchEvent.IsListening(ev) {
 				event <- domain.NewEventByFsnotify(ev)
 			}
 		case err := <-r.watcher.Errors:

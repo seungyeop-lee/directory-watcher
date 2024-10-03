@@ -10,17 +10,22 @@ type WatchEvent struct {
 	Delete bool
 }
 
-func (e WatchEvent) IsListening(op fsnotify.Op) bool {
-	if e.Create && op.Has(fsnotify.Create) {
-		return true
+func (e WatchEvent) IsListening(ev fsnotify.Event) bool {
+	// 삭제된 경우, 경로를 통해 디렉토리인지를 판단 할 수 없는 한계가 있음.
+	if Path(ev.Name).IsDir() {
+		return false
 	}
-	if e.Update && op.Has(fsnotify.Write) {
+
+	switch {
+	case e.Create && ev.Op.Has(fsnotify.Create):
 		return true
-	}
-	if e.Delete && op.Has(fsnotify.Remove) {
+	case e.Update && ev.Op.Has(fsnotify.Write):
 		return true
+	case e.Delete && ev.Op.Has(fsnotify.Remove):
+		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func WatchAllEvent() WatchEvent {
