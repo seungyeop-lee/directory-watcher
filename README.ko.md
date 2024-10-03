@@ -141,11 +141,19 @@ watchTargets:
 | {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
 | {{.Event}}      | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
 
+## 주의사항
+
 ### waitMillisecond와 noWait
 
 - `watchTargets.path` 내부에서 이벤트가 발생하게 되면 waitMillisecond 만큼 대기 후 hook을 실행합니다.
 - 대기 중 `watchTargets.path` 내부에서 다른 이벤트가 발생하게 되면 그 전 이벤트는 무시됩니다. 즉, 새로 생긴 이벤트 기준으로 waitMillisecond 만큼 다시 대기 후 hook을 실행합니다.
 - `watchTargets.path` 내부의 이벤트가 무시되지 않고, 모든 이벤트로 인해 hook이 즉시 실행되길 원한다면 noWait를 true로 설정합니다. (이벤트에 대한 hook은 순차적으로 실행됩니다.)
+
+### 폴더 이벤트 감지에 대한 제약사항
+
+- 기본동작은 감시 대상 폴더 내의 **파일**의 이벤트에 따라 hook을 실행합니다.
+- 즉, 폴더의 생성 및 이름 수정으로는 hook이 실행되지 않습니다.
+- 그러나, 폴더의 삭제 (빈 폴더 포함)에 대해서는 삭제 대상이 폴더임을 인식 할 수 없어 hook이 실행됩니다.
 
 ## 동작 다이어그램
 

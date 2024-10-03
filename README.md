@@ -141,11 +141,19 @@ The following describes the command execution location for each hook:
 | {{.DirAbsPath}} | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
 | {{.Event}}      | Event type (C: create, U: update, D: delete)            | C                                                            |
 
+## Caution
+
 ### waitMillisecond and noWait
 
 - When an event occurs within `watchTargets.path`, the hook is executed after waiting for waitMillisecond.
 - If another event occurs within `watchTargets.path` during the waiting period, the previous event is ignored. That is, the waitMillisecond is reset based on the new event, and the hook is executed after the new waiting period.
 - If you want the hook to be executed immediately for every event within `watchTargets.path` without ignoring any events, set noWait to true. (Hooks for events are executed sequentially.)
+
+### Limitations on Folder Event Detection
+
+- By default, hooks are executed based on **file** events within the monitored folder.
+- Therefore, hooks are not executed for folder creation or renaming.
+- However, hooks are executed for folder deletion (including empty folders) as it cannot be recognized that the target is a folder.
 
 ## Operational Diagram
 
