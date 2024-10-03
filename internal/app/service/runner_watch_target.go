@@ -73,7 +73,7 @@ func (r watchTargetRunner) Run() {
 		case ev := <-r.watcher.Events:
 			r.printEventLog(ev)
 
-			if ev.Op&fsnotify.Create == fsnotify.Create {
+			if ev.Op.Has(fsnotify.Create) {
 				if domain.FileName(ev.Name).IsDefaultExcludeFile() {
 					break
 				}
@@ -82,7 +82,7 @@ func (r watchTargetRunner) Run() {
 				if r.watchSubDir && domain.Path(ev.Name).IsDir() && !r.excludeDir.Equal(domain.Path(ev.Name)) {
 					_ = r.watcher.Add(ev.Name)
 				}
-			} else if ev.Op&fsnotify.Remove == fsnotify.Remove {
+			} else if ev.Op.Has(fsnotify.Remove) {
 				_ = r.watcher.Remove(ev.Name)
 			}
 
