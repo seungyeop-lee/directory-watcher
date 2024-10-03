@@ -18,7 +18,7 @@ watchTargets:
       onStartWatch:
         - echo 'dir2 onStartWatch'
       onChange:
-        - echo 'dir2 onChange {{.Path}}, {{.AbsPath}}, {{.FileName}}, {{.ExtName}}, {{.DirPath}}, {{.DirAbsPath}}'
+        - echo 'dir2 onChange {{.Path}}, {{.AbsPath}}, {{.FileName}}, {{.ExtName}}, {{.DirPath}}, {{.DirAbsPath}}, {{.Event}}'
       onFinishWatch:
         - echo 'dir2 onFinishWatch'
     option:

@@ -131,14 +131,15 @@ watchTargets:
 
 ### 실행 커맨드 내 사용가능 변수
 
-| 변수              | 설명                         | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
-|-----------------|----------------------------|--------------------------------------------------|
-| {{.Path}}       | 이벤트가 일어난 파일의 상대 경로         | test/dir2/b.txt                                  |
-| {{.AbsPath}}    | 이벤트가 일어난 파일의 절대 경로         | /Users/example/directory-watcher/test/dir2/b.txt |
-| {{.FileName}}   | 이벤트가 일어난 파일 이름             | b.txt                                            |
-| {{.ExtName}}    | 이벤트가 일어난 파일의 확장자           | .txt                                             |
-| {{.DirPath}}    | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로 | test/dir2                                        |
-| {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로 | /Users/example/directory-watcher/test/dir2       |
+| 변수              | 설명                           | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
+|-----------------|------------------------------|--------------------------------------------------|
+| {{.Path}}       | 이벤트가 일어난 파일의 상대 경로           | test/dir2/b.txt                                  |
+| {{.AbsPath}}    | 이벤트가 일어난 파일의 절대 경로           | /Users/example/directory-watcher/test/dir2/b.txt |
+| {{.FileName}}   | 이벤트가 일어난 파일 이름               | b.txt                                            |
+| {{.ExtName}}    | 이벤트가 일어난 파일의 확장자             | .txt                                             |
+| {{.DirPath}}    | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로   | test/dir2                                        |
+| {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
+| {{.Event}}      | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
 
 ### waitMillisecond와 noWait
 

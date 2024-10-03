@@ -64,6 +64,7 @@ func (c SingleCmd) buildCmdStringWithEventInfo(event *domain.Event) (string, err
 		"ExtName":    event.Path.ExtName(),
 		"DirPath":    event.Path.DirPath(),
 		"DirAbsPath": event.Path.DirAbsPath(),
+		"Event":      event.Operation.String(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("can't execute command: %s", err)

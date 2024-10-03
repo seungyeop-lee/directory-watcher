@@ -12,34 +12,22 @@ type Event struct {
 func NewEventByFsnotify(input fsnotify.Event) Event {
 	return Event{
 		Path:      Path(input.Name),
-		Operation: NewOperationByFsnotify(input.Op),
+		Operation: Operation(input.Op),
 	}
 }
 
-const (
-	Unknown           = 0
-	Create  Operation = 1 << iota
-	Write
-	Remove
-	Rename
-	Chmod
-)
+type Operation fsnotify.Op
 
-type Operation uint
-
-func NewOperationByFsnotify(input fsnotify.Op) Operation {
-	switch input {
-	case fsnotify.Create:
-		return Create
-	case fsnotify.Write:
-		return Write
-	case fsnotify.Remove:
-		return Remove
-	case fsnotify.Rename:
-		return Rename
-	case fsnotify.Chmod:
-		return Chmod
+func (o Operation) String() string {
+	op := fsnotify.Op(o)
+	switch {
+	case op.Has(fsnotify.Create):
+		return "C"
+	case op.Has(fsnotify.Write):
+		return "U"
+	case op.Has(fsnotify.Remove):
+		return "D"
 	default:
-		return Unknown
+		return "Unknown"
 	}
 }

@@ -139,6 +139,7 @@ The following describes the command execution location for each hook:
 | {{.ExtName}}    | Extension of the file where the event occurred          | .txt                                                         |
 | {{.DirPath}}    | Relative path of the directory where the event occurred | test/dir2                                                    |
 | {{.DirAbsPath}} | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
+| {{.Event}}      | Event type (C: create, U: update, D: delete)            | C                                                            |
 
 ### waitMillisecond and noWait
 
