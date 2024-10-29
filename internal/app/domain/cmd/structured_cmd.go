@@ -1,16 +1,18 @@
 package cmd
 
 import (
+	"os/exec"
+
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
 
 type StructuredCmd struct {
-	Cmd domain.Cmd
+	Cmd ExecCmdBuilder
 	Dir domain.Path
 }
 
-var _ domain.Cmd = (*StructuredCmd)(nil)
+var _ ExecCmdBuilder = (*StructuredCmd)(nil)
 
-func (s StructuredCmd) Run(_ domain.Path, event *domain.Event) error {
-	return s.Cmd.Run(s.Dir, event)
+func (s StructuredCmd) Build(runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error) {
+	return s.Cmd.Build(s.Dir, event)
 }

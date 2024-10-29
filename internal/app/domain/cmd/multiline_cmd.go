@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os/exec"
+
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
@@ -9,13 +11,16 @@ type MultiLineCmd struct {
 	Cmds []SingleCmd
 }
 
-var _ domain.Cmd = (*MultiLineCmd)(nil)
+var _ ExecCmdBuilder = (*MultiLineCmd)(nil)
 
-func (m MultiLineCmd) Run(runDir domain.Path, event *domain.Event) error {
+func (m MultiLineCmd) Build(runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error) {
+	var result []*exec.Cmd
 	for _, cmd := range m.Cmds {
-		if err := helper.FilterError(cmd.Run(runDir, event)); err != nil {
-			return err
+		if cmds, err := helper.FilterError(cmd.Build(runDir, event)); err != nil {
+			return nil, err
+		} else {
+			result = append(result, cmds...)
 		}
 	}
-	return nil
+	return result, nil
 }

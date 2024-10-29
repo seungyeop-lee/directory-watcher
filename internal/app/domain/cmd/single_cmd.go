@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"text/template"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
@@ -13,16 +14,16 @@ import (
 
 type SingleCmd string
 
-var _ domain.Cmd = (*SingleCmd)(nil)
+var _ ExecCmdBuilder = (*SingleCmd)(nil)
 
-func (c SingleCmd) Run(runDir domain.Path, event *domain.Event) error {
+func (c SingleCmd) Build(runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error) {
 	if c == "" {
-		return helper.NewEmptyCmdError()
+		return nil, helper.NewEmptyCmdError()
 	}
 
 	argsStr, err := c.buildCmdStringWithEventInfo(event)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	args := strings.Split(argsStr, " ")
@@ -33,17 +34,12 @@ func (c SingleCmd) Run(runDir domain.Path, event *domain.Event) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("can't start command: %s", err)
-	}
-	err = cmd.Wait()
-
-	if err != nil {
-		return fmt.Errorf("command fails to run or doesn't complete successfully: %v", err)
+	//Setpgid: true로 설정하면 프로세스 그룹이 만들어지고, 자식 프로세스들도 이 그룹에 포함 됨
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
 	}
 
-	return nil
+	return []*exec.Cmd{cmd}, nil
 }
 
 func (c SingleCmd) buildCmdStringWithEventInfo(event *domain.Event) (string, error) {

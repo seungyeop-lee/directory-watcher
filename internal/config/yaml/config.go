@@ -2,6 +2,7 @@ package yaml
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/config/converter"
 	"gopkg.in/yaml.v3"
@@ -86,10 +87,11 @@ type WatchTargetsLifeCycleConfig struct {
 }
 
 func (c WatchTargetsLifeCycleConfig) BuildLifeCycle() domain.WatchTargetsLifeCycle {
+	currentCmd := &cmd.CurrentCmd{}
 	return domain.WatchTargetsLifeCycle{
-		OnStartWatch:  converter.NewCmdInfoConverter(c.OnStartWatch).Convert(),
-		OnChange:      converter.NewCmdInfoConverter(c.OnChange).Convert(),
-		OnFinishWatch: converter.NewCmdInfoConverter(c.OnFinishWatch).Convert(),
+		OnStartWatch:  converter.NewCmdInfoConverter(c.OnStartWatch).ConvertWith(currentCmd),
+		OnChange:      converter.NewCmdInfoConverter(c.OnChange).ConvertWith(currentCmd),
+		OnFinishWatch: converter.NewCmdInfoConverter(c.OnFinishWatch).ConvertWith(currentCmd),
 	}
 }
 

@@ -19,6 +19,8 @@ watchTargets:
         - echo 'dir2 onStartWatch'
       onChange:
         - echo 'dir2 onChange {{.Path}}, {{.AbsPath}}, {{.FileName}}, {{.ExtName}}, {{.DirPath}}, {{.DirAbsPath}}, {{.Event}}'
+        - sleep 10000
+        - echo 'dir2 onChange after sleep'
       onFinishWatch:
         - echo 'dir2 onFinishWatch'
     option:
