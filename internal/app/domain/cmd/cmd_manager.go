@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os/exec"
 	"sync"
-	"syscall"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 )
@@ -70,8 +69,7 @@ func (c *CurrentCmd) Terminate() {
 	defer c.mutex.Unlock()
 
 	if c.cmd != nil && c.cmd.Process != nil {
-		//-cmd.Process.Pid를 사용하여 프로세스 그룹 전체에 SIGINT 신호 발송 (음수 PID 사용)
-		_ = syscall.Kill(-c.cmd.Process.Pid, syscall.SIGINT)
+		_ = terminateProcess(c.cmd.Process.Pid)
 		_ = c.cmd.Wait()
 	}
 	c.cmd = nil

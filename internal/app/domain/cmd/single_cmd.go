@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"text/template"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
@@ -34,10 +33,7 @@ func (c SingleCmd) Build(runDir domain.Path, event *domain.Event) ([]*exec.Cmd, 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	//Setpgid: true로 설정하면 프로세스 그룹이 만들어지고, 자식 프로세스들도 이 그룹에 포함 됨
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
+	setupForOs(cmd)
 
 	return []*exec.Cmd{cmd}, nil
 }
