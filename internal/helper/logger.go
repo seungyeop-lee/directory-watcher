@@ -6,6 +6,8 @@ import (
 
 const LogLevelStringDefaultValue = "ERROR"
 
+var GlobalLogger Logger
+
 type LogLevelString string
 
 func (l LogLevelString) GetLogLevel() LogLevel {
@@ -29,12 +31,18 @@ const (
 	DEBUG
 )
 
+type Logger interface {
+	Debug(string)
+	Info(string)
+	Error(string)
+}
+
 type basicLogger struct {
 	logLevel LogLevel
 }
 
-func NewBasicLogger(logLevel LogLevel) basicLogger {
-	return basicLogger{
+func NewBasicLogger(logLevel LogLevel) Logger {
+	return &basicLogger{
 		logLevel: logLevel,
 	}
 }

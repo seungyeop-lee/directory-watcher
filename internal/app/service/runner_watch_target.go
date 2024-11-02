@@ -31,11 +31,11 @@ type watchTargetRunner struct {
 	watchEvent      domain.WatchEvent
 	noWait          bool
 
-	logger  Logger
+	logger  helper.Logger
 	watcher *fsnotify.Watcher
 }
 
-func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger Logger) *watchTargetRunner {
+func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger) *watchTargetRunner {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		logger.Error(err.Error())

@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
 type runner struct {
@@ -11,7 +12,7 @@ type runner struct {
 	watchTargets watchTargetRunners
 }
 
-func NewRunner(commandSet domain.CommandSet, logger Logger) *runner {
+func NewRunner(commandSet domain.CommandSet, logger helper.Logger) *runner {
 	result := runner{}
 	result.global = NewGlobalRunner(commandSet.Global, logger)
 	for _, watchTarget := range commandSet.WatchTargets {

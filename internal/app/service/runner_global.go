@@ -4,16 +4,17 @@ import (
 	"fmt"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
 type globalRunner struct {
 	onStartWatch  domain.Cmd
 	onFinishWatch domain.Cmd
 
-	logger Logger
+	logger helper.Logger
 }
 
-func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger Logger) *globalRunner {
+func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger) *globalRunner {
 	return &globalRunner{
 		onStartWatch:  commandSet.LifeCycle.OnStartWatch,
 		onFinishWatch: commandSet.LifeCycle.OnFinishWatch,

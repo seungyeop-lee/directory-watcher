@@ -47,6 +47,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		helper.GlobalLogger = logger
 
 		configFile, err := getConfigFile(cmd)
 		if err != nil {
@@ -82,7 +83,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func getLogger(cmd *cobra.Command) (service.Logger, error) {
+func getLogger(cmd *cobra.Command) (helper.Logger, error) {
 	logLevelStr, err := cmd.Flags().GetString("log-level")
 	if err != nil {
 		return nil, err
@@ -108,13 +109,13 @@ func getConfigFile(cmd *cobra.Command) ([]byte, error) {
 	return configFile, nil
 }
 
-func debugLogConfig(logger service.Logger, config config.Config) {
+func debugLogConfig(logger helper.Logger, config config.Config) {
 	logger.Debug("--- yaml config file map result ---")
 	configJsonStr, _ := json.MarshalIndent(config, "", "	")
 	logger.Debug(bytes.NewBuffer(configJsonStr).String())
 }
 
-func debugLogCommandSet(logger service.Logger, commandSet domain.CommandSet) {
+func debugLogCommandSet(logger helper.Logger, commandSet domain.CommandSet) {
 	logger.Debug("--- command set struct ---")
 	commandSetJsonStr, _ := json.MarshalIndent(commandSet, "", "	")
 	logger.Debug(bytes.NewBuffer(commandSetJsonStr).String())
