@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"sync"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
 
 type ExecCmdBuilder interface {
@@ -43,13 +43,14 @@ func (c *Manager) Run(runDir domain.Path, event *domain.Event) error {
 	go func() {
 		for _, cmd := range cmds {
 			if err := c.current.Start(cmd); err != nil {
-				fmt.Println("Manager/Run/Start: " + err.Error())
+				helper.GlobalLogger.Debug("Manager/Run/Start: " + err.Error())
 			}
 
 			stop, err := c.current.Wait()
 			if err != nil {
-				fmt.Println("Manager/Run/Wait: " + err.Error())
+				helper.GlobalLogger.Debug("Manager/Run/Wait: " + err.Error())
 			}
+			c.current.Clear()
 			if stop {
 				break
 			}
@@ -69,8 +70,9 @@ func (c *CurrentCmd) Terminate() {
 	defer c.mutex.Unlock()
 
 	if c.cmd != nil && c.cmd.Process != nil {
-		_ = terminateProcess(c.cmd.Process.Pid)
-		_ = c.cmd.Wait()
+		if err := terminateProcess(c.cmd); err != nil {
+			helper.GlobalLogger.Debug("CurrentCmd/Terminate: " + err.Error())
+		}
 	}
 	c.cmd = nil
 }
@@ -102,4 +104,11 @@ func (c *CurrentCmd) Wait() (stop bool, err error) {
 	}
 
 	return false, nil
+}
+
+func (c *CurrentCmd) Clear() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.cmd = nil
 }
