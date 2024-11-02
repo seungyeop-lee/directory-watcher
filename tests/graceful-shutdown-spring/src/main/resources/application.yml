@@ -1,0 +1,5 @@
+server:
+  shutdown: graceful
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s  # graceful shutdown 대기 시간을 20초로 설정

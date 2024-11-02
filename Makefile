@@ -25,3 +25,7 @@ rund-docker:
 	-v $(PWD)/config.example.yml:/config.yml \
 	-v $(PWD)/test:/test \
 	ghcr.io/seungyeop-lee/directory-watcher:$(DOCKER_VERSION) -c /config.yml -l DEBUG
+
+.PHONY: run-tests
+run-tests:
+	(cd tests && go run ../main.go -c config.yml --log-level=INFO)
