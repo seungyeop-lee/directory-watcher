@@ -24,7 +24,7 @@ func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger) *
 
 func (g globalRunner) CallOnStartWatch() {
 	err := g.printInfo("CallOnStartWatch", g.onStartWatch, func() error {
-		return g.onStartWatch.Run("", nil)
+		return g.onStartWatch.Run(helper.NewWatcherContext(), "", nil)
 	})
 	if err != nil {
 		g.logger.Error(err.Error())
@@ -33,7 +33,7 @@ func (g globalRunner) CallOnStartWatch() {
 
 func (g globalRunner) CallOnFinishWatch() {
 	err := g.printInfo("CallOnFinishWatch", g.onFinishWatch, func() error {
-		return g.onFinishWatch.Run("", nil)
+		return g.onFinishWatch.Run(helper.NewWatcherContext(), "", nil)
 	})
 	if err != nil {
 		g.logger.Error(err.Error())

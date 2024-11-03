@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,7 +16,7 @@ type SingleCmd string
 
 var _ ExecCmdBuilder = (*SingleCmd)(nil)
 
-func (c SingleCmd) Build(runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error) {
+func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error) {
 	if c == "" {
 		return nil, helper.NewEmptyCmdError()
 	}
@@ -26,14 +27,14 @@ func (c SingleCmd) Build(runDir domain.Path, event *domain.Event) ([]*exec.Cmd, 
 	}
 
 	args := strings.Split(argsStr, " ")
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	cmd.Dir = runDir.String()
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	setupForOs(cmd)
+	helper.SetupForOs(cmd)
 
 	return []*exec.Cmd{cmd}, nil
 }

@@ -19,16 +19,12 @@ func NewCmdInfoConverter(cmdInfo config.CmdInfo) *CmdInfoConverter {
 }
 
 func (c CmdInfoConverter) Convert() domain.Cmd {
-	return c.ConvertWith(&cmd.CurrentCmd{})
-}
-
-func (c CmdInfoConverter) ConvertWith(currentCmd *cmd.CurrentCmd) domain.Cmd {
 	v := reflect.ValueOf(c.cmdInfo)
 	switch v.Kind() {
 	case reflect.Slice:
-		return cmd.NewManager(mapForSlice(v), currentCmd)
+		return cmd.NewManager(mapForSlice(v))
 	default:
-		return cmd.NewManager(cmd.EmptyCmd{}, currentCmd)
+		return cmd.NewManager(cmd.EmptyCmd{})
 	}
 }
 

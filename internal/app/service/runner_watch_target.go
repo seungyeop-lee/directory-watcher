@@ -33,6 +33,8 @@ type watchTargetRunner struct {
 
 	logger  helper.Logger
 	watcher *fsnotify.Watcher
+
+	hookCtx *helper.WatcherContext
 }
 
 func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger) *watchTargetRunner {
@@ -56,11 +58,12 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		noWait:          commandSet.Option.NoWait,
 		logger:          logger,
 		watcher:         watcher,
+		hookCtx:         helper.NewWatcherContext(),
 	}
 }
 
 func (r watchTargetRunner) Run() {
-	r.callOnStartWatch()
+	r.runStartHook()
 
 	r.addDir()
 
@@ -102,6 +105,19 @@ func (r watchTargetRunner) Run() {
 	}
 }
 
+func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
+	r.logger.Debug(fmt.Sprintf("event: %s", ev.String()))
+	if ev.Op.Has(fsnotify.Create) {
+		r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
+	}
+	if ev.Op.Has(fsnotify.Write) {
+		r.logger.Info(fmt.Sprintf("%s has modified", ev.Name))
+	}
+	if ev.Op.Has(fsnotify.Remove) {
+		r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))
+	}
+}
+
 func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
 	if r.noWait {
 		return func(evChan chan domain.Event) {
@@ -109,9 +125,7 @@ func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
 				if r.excludeSuffix.Contain(e.Path) {
 					continue
 				}
-				r.callOnBeforeChange(e)
-				r.callOnChange(e)
-				r.callOnAfterChange(e)
+				r.runChangeHook(e)
 			}
 		}
 	} else {
@@ -129,32 +143,48 @@ func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
 					e.event = ev
 					e.threshold = helper.CreateThreshold(r.waitMillisecond.Duration())
 				case <-e.threshold:
-					r.callOnBeforeChange(e.event)
-					r.callOnChange(e.event)
-					r.callOnAfterChange(e.event)
+					r.runChangeHook(e.event)
 				}
 			}
 		}
 	}
 }
 
-func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
-	r.logger.Debug(fmt.Sprintf("event: %s", ev.String()))
-	if ev.Op.Has(fsnotify.Create) {
-		r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
-	}
-	if ev.Op.Has(fsnotify.Write) {
-		r.logger.Info(fmt.Sprintf("%s has modified", ev.Name))
-	}
-	if ev.Op.Has(fsnotify.Remove) {
-		r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))
-	}
+func (r watchTargetRunner) runStartHook() {
+	go func() {
+		r.callOnStartWatch()
+	}()
+}
+
+func (r watchTargetRunner) runFinishHook() {
+	r.hookCtx.CancelAndNew()
+
+	hookFinished := make(chan struct{})
+	go func() {
+		r.callOnFinishWatch()
+		hookFinished <- struct{}{}
+	}()
+	<-hookFinished
+}
+
+func (r watchTargetRunner) runChangeHook(e domain.Event) {
+	r.hookCtx.CancelAndNew()
+	r.hookCtx.SetWaitNumber(1)
+
+	go func() {
+		r.hookCtx.MarkStart()
+		r.callOnBeforeChange(e)
+		r.callOnChange(e)
+		r.callOnAfterChange(e)
+	}()
+
+	r.hookCtx.WaitStart()
 }
 
 func (r watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	r.callOnFinishWatch()
+	r.runFinishHook()
 }
 
 func (r watchTargetRunner) addDir() {
@@ -198,7 +228,7 @@ func (r watchTargetRunner) addDir() {
 
 func (r watchTargetRunner) callOnStartWatch() {
 	err := r.printInfo("callOnStartWatch", r.onStartWatch, func() error {
-		return r.onStartWatch.Run(r.path, nil)
+		return r.onStartWatch.Run(r.hookCtx, r.path, nil)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
@@ -207,7 +237,7 @@ func (r watchTargetRunner) callOnStartWatch() {
 
 func (r watchTargetRunner) callOnBeforeChange(event domain.Event) {
 	err := r.printInfo("callOnBeforeChange", r.onBeforeChange, func() error {
-		return r.onBeforeChange.Run(r.path, &event)
+		return r.onBeforeChange.Run(r.hookCtx, r.path, &event)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
@@ -216,7 +246,7 @@ func (r watchTargetRunner) callOnBeforeChange(event domain.Event) {
 
 func (r watchTargetRunner) callOnChange(event domain.Event) {
 	err := r.printInfo("callOnChange", r.onChange, func() error {
-		return r.onChange.Run(r.path, &event)
+		return r.onChange.Run(r.hookCtx, r.path, &event)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
@@ -225,7 +255,7 @@ func (r watchTargetRunner) callOnChange(event domain.Event) {
 
 func (r watchTargetRunner) callOnAfterChange(event domain.Event) {
 	err := r.printInfo("callOnAfterChange", r.onAfterChange, func() error {
-		return r.onAfterChange.Run(r.path, &event)
+		return r.onAfterChange.Run(r.hookCtx, r.path, &event)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
@@ -234,7 +264,7 @@ func (r watchTargetRunner) callOnAfterChange(event domain.Event) {
 
 func (r watchTargetRunner) callOnFinishWatch() {
 	err := r.printInfo("callOnFinishWatch", r.onFinishWatch, func() error {
-		return r.onFinishWatch.Run(r.path, nil)
+		return r.onFinishWatch.Run(r.hookCtx, r.path, nil)
 	})
 	if err != nil {
 		r.logger.Error(err.Error())
