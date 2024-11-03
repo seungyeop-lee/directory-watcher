@@ -20,6 +20,7 @@ For example, you can set up tasks such as automatically creating backups when a 
 - Configure whether to monitor subdirectories
 - Configure which events to monitor (C: Create, U: Update, D: Delete)
 - Define variables that can be used within the execution commands
+- When an event occurs during command execution, stop the currently running command and execute a new command (to handle daemon processes)
 
 ## Installation
 
