@@ -20,7 +20,7 @@ For example, you can set up tasks such as automatically creating backups when a 
 - Configure whether to monitor subdirectories
 - Configure which events to monitor (C: Create, U: Update, D: Delete)
 - Define variables that can be used within the execution commands
-- When an event occurs during command execution, stop the currently running command and execute a new command (to handle daemon processes)
+- Allow stopping the currently running command and executing a new command when an event occurs during command execution (to handle daemon processes)
 
 ## Installation
 
@@ -119,6 +119,7 @@ watchTargets:
       watchSubDir: [ whether to monitor subdirectories, default is true ]
       watchEvent: [ monitoring events (C: create, U: update, D: delete), default is "CUD" ]
       noWait: [ whether to execute the hook immediately without waiting after an event occurs, default is false ]
+      interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
 
 ### Command Execution Location

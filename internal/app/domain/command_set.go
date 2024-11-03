@@ -37,4 +37,5 @@ type WatchTargetsOption struct {
 	WatchSubDir     bool
 	WatchEvent      WatchEvent
 	NoWait          bool
+	Interruptible   Interruptible
 }

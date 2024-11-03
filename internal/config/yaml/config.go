@@ -100,6 +100,7 @@ type WatchTargetsOptionConfig struct {
 	WatchSubDir     *bool               `yaml:"watchSubDir"`
 	WatchEvent      config.WatchEvent   `yaml:"watchEvent"`
 	NoWait          *bool               `yaml:"noWait"`
+	Interruptible   *bool               `yaml:"interruptible"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
@@ -110,5 +111,6 @@ func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
 		WatchSubDir:     converter.NewWatchSubDirConverter(c.WatchSubDir).Convert(),
 		WatchEvent:      converter.NewWatchEventConverter(c.WatchEvent).Convert(),
 		NoWait:          converter.NewNoWaitConverter(c.NoWait).Convert(),
+		Interruptible:   converter.NewInterruptibleConverter(c.Interruptible).Convert(),
 	}
 }

@@ -7,3 +7,5 @@ watchTargets:
       onChange:
         - dir: "graceful-shutdown-spring"
           cmd: './gradlew bootRun'
+    option:
+      interruptible: true
