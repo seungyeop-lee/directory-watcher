@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft/2019-09/schema#",
+  "title": "Directory Watcher Configuration Schema",
+  "description": "JSON schema for the configuration file of Directory Watcher.",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Global configurations applicable to all watch targets.",
+      "properties": {
+        "lifeCycle": {
+          "$ref": "#/definitions/lifeCycleHooks",
+          "description": "Global lifecycle hooks."
+        }
+      },
+      "required": [
+        "lifeCycle"
+      ],
+      "additionalProperties": false
+    },
+    "watchTargets": {
+      "type": "array",
+      "description": "List of directories to monitor.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path of the directory to monitor."
+          },
+          "lifeCycle": {
+            "type": "object",
+            "description": "Lifecycle hooks for this watch target.",
+            "properties": {
+              "onStartWatch": {
+                "$ref": "#/definitions/hookCommands",
+                "description": "Commands to execute when starting to watch this directory."
+              },
+              "onChange": {
+                "$ref": "#/definitions/hookCommands",
+                "description": "Commands to execute when a change is detected in this directory."
+              },
+              "onFinishWatch": {
+                "$ref": "#/definitions/hookCommands",
+                "description": "Commands to execute when stopping watching this directory."
+              }
+            },
+            "additionalProperties": false
+          },
+          "option": {
+            "type": "object",
+            "description": "Options for monitoring this directory.",
+            "properties": {
+              "excludeDir": {
+                "type": "array",
+                "description": "List of directory paths to exclude from monitoring.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "excludeSuffix": {
+                "type": "array",
+                "description": "List of file suffixes to exclude from monitoring.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "waitMillisecond": {
+                "type": "integer",
+                "description": "Wait time in milliseconds after an event occurs before executing the hook.",
+                "default": 100,
+                "minimum": 0
+              },
+              "watchSubDir": {
+                "type": "boolean",
+                "description": "Whether to monitor subdirectories.",
+                "default": true
+              },
+              "watchEvent": {
+                "type": "string",
+                "description": "Monitoring events (C: create, U: update, D: delete).",
+                "default": "CUD",
+                "pattern": "^[CUD]{1,3}$",
+                "examples": ["CUD", "CU", "CD"]
+              },
+              "noWait": {
+                "type": "boolean",
+                "description": "Whether to execute the hook immediately without waiting after an event occurs.",
+                "default": false
+              },
+              "interruptible": {
+                "type": "boolean",
+                "description": "Whether to stop the currently running command and execute a new command.",
+                "default": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "watchTargets"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "lifeCycleHooks": {
+      "type": "object",
+      "properties": {
+        "onStartWatch": {
+          "$ref": "#/definitions/hookCommands",
+          "description": "Commands to execute when starting the monitoring process."
+        },
+        "onBeforeChange": {
+          "$ref": "#/definitions/hookCommands",
+          "description": "Commands to execute before a change occurs."
+        },
+        "onAfterChange": {
+          "$ref": "#/definitions/hookCommands",
+          "description": "Commands to execute after a change occurs."
+        },
+        "onFinishWatch": {
+          "$ref": "#/definitions/hookCommands",
+          "description": "Commands to execute when stopping the monitoring process."
+        }
+      },
+      "additionalProperties": false
+    },
+    "hookCommands": {
+      "type": "array",
+      "description": "List of commands to execute.",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "description": "A command to execute.",
+            "examples": ["npm run build", "echo 'Change detected'"]
+          },
+          {
+            "type": "object",
+            "description": "An object specifying the command and the directory in which to execute it.",
+            "properties": {
+              "dir": {
+                "type": "string",
+                "description": "Directory path where the command will be executed."
+              },
+              "cmd": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "description": "A command to execute.",
+                    "examples": ["npm run build", "echo 'Change detected'"]
+                  },
+                  {
+                    "type": "array",
+                    "description": "List of commands to execute sequentially.",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "Command or list of commands to execute."
+              }
+            },
+            "required": [
+              "cmd"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  }
+}
