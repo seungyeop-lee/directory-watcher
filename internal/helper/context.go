@@ -6,9 +6,13 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/moby/term"
 )
 
 type WatcherContext struct {
+	baseCtx context.Context
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -17,11 +21,14 @@ type WatcherContext struct {
 	w    *sync.WaitGroup
 }
 
-func NewWatcherContext() *WatcherContext {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewWatcherContext(prefix string) *WatcherContext {
+	_, out, _ := term.StdStreams()
+	ctxWithFormatter := context.WithValue(context.Background(), FormatterKey, NewFormatter(prefix, NextColor(), out))
+	ctx, cancel := context.WithCancel(ctxWithFormatter)
 	return &WatcherContext{
-		ctx:    ctx,
-		cancel: cancel,
+		baseCtx: ctxWithFormatter,
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 
@@ -41,7 +48,7 @@ func (w *WatcherContext) CancelAndNew() {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(w.baseCtx)
 	w.ctx = ctx
 	w.cancel = cancel
 }

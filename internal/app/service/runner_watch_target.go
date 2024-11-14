@@ -38,7 +38,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 	if err != nil {
 		logger.Error(err.Error())
 	}
-	hookFuncBuilder := commandSet.Option.Interruptible.BuildHookFuncBuilder(domain.HookInfo{
+	hookFuncBuilder := commandSet.Option.Interruptible.BuildHookFuncBuilder(commandSet.Path.Alias(), domain.HookInfo{
 		OnStartWatch:   commandSet.LifeCycle.OnStartWatch,
 		OnBeforeChange: globalCommandSet.LifeCycle.OnBeforeChange,
 		OnChange:       commandSet.LifeCycle.OnChange,

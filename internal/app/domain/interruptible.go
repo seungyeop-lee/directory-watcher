@@ -20,16 +20,16 @@ type HookFunc struct {
 
 type HookFuncBuilder func(path Path) *HookFunc
 
-func (i Interruptible) BuildHookFuncBuilder(info HookInfo) HookFuncBuilder {
+func (i Interruptible) BuildHookFuncBuilder(alias string, info HookInfo) HookFuncBuilder {
 	if i {
-		return i.interruptibleHookFuncBuilder(info)
+		return i.interruptibleHookFuncBuilder(alias, info)
 	} else {
-		return i.sequentialHookFuncBuilder(info)
+		return i.sequentialHookFuncBuilder(alias, info)
 	}
 }
 
-func (i Interruptible) interruptibleHookFuncBuilder(info HookInfo) HookFuncBuilder {
-	hookCtx := helper.NewWatcherContext()
+func (i Interruptible) interruptibleHookFuncBuilder(alias string, info HookInfo) HookFuncBuilder {
+	hookCtx := helper.NewWatcherContext(alias)
 	return func(path Path) *HookFunc {
 		return &HookFunc{
 			RunStartHook: func() {
@@ -69,8 +69,8 @@ func (i Interruptible) interruptibleHookFuncBuilder(info HookInfo) HookFuncBuild
 	}
 }
 
-func (i Interruptible) sequentialHookFuncBuilder(info HookInfo) HookFuncBuilder {
-	hookCtx := helper.NewWatcherContext()
+func (i Interruptible) sequentialHookFuncBuilder(alias string, info HookInfo) HookFuncBuilder {
+	hookCtx := helper.NewWatcherContext(alias)
 	return func(path Path) *HookFunc {
 		return &HookFunc{
 			RunStartHook: func() {

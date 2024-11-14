@@ -1,10 +1,24 @@
 package helper
 
 import (
-	"log"
+	"fmt"
+	"io"
+
+	"github.com/moby/term"
 )
 
 const LogLevelStringDefaultValue = "ERROR"
+
+var ErrorLoggerOut io.Writer
+var InfoLoggerOut io.Writer
+var DebugLoggerOut io.Writer
+
+func init() {
+	_, out, _ := term.StdStreams()
+	ErrorLoggerOut = NewFormatter("[ERROR]", ErrorLoggerColorFunc, out)
+	InfoLoggerOut = NewFormatter("[INFO]", InfoLoggerColorFunc, out)
+	DebugLoggerOut = NewFormatter("[DEBUG]", DebugLoggerColorFunc, out)
+}
 
 var GlobalLogger Logger
 
@@ -49,13 +63,13 @@ func NewBasicLogger(logLevel LogLevel) Logger {
 
 func (l basicLogger) Debug(message string) {
 	if l.logLevel == DEBUG {
-		log.Println(message)
+		_, _ = fmt.Fprintln(DebugLoggerOut, message)
 	}
 }
 
 func (l basicLogger) Info(message string) {
 	if l.logLevel == DEBUG || l.logLevel == INFO {
-		log.Println(message)
+		_, _ = fmt.Fprintln(InfoLoggerOut, message)
 	}
 }
 
@@ -65,6 +79,6 @@ func (l basicLogger) Error(message string) {
 	}
 
 	if l.logLevel == DEBUG || l.logLevel == INFO || l.logLevel == ERROR {
-		log.Println(message)
+		_, _ = fmt.Fprintln(ErrorLoggerOut, message)
 	}
 }

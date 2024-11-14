@@ -95,3 +95,7 @@ func (p Path) DirPath() string {
 func (p Path) DirAbsPath() string {
 	return filepath.Dir(p.Abs())
 }
+
+func (p Path) Alias() string {
+	return filepath.Base(p.String())
+}

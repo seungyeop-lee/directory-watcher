@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"os/exec"
 	"strings"
 	"text/template"
+
+	"github.com/moby/term"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
@@ -31,9 +34,22 @@ func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.
 
 	cmd.Dir = runDir.String()
 
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	in, out := targetInOut(ctx)
+
+	cmd.Stdin = in
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	go printLog(ctx, stdoutPipe, out)
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+	go printLog(ctx, stderrPipe, out)
+
 	helper.SetupForOs(cmd)
 
 	return []*exec.Cmd{cmd}, nil
@@ -64,4 +80,29 @@ func (c SingleCmd) buildCmdStringWithEventInfo(event *domain.Event) (string, err
 	}
 
 	return b.String(), err
+}
+
+func targetInOut(ctx context.Context) (io.ReadCloser, io.Writer) {
+	termIn, termOut, _ := term.StdStreams()
+	out, ok := ctx.Value(helper.FormatterKey).(io.Writer)
+	if !ok {
+		out = termOut
+	}
+	return termIn, out
+}
+
+func printLog(ctx context.Context, rc io.ReadCloser, out io.Writer) {
+	scanner := bufio.NewScanner(rc)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if !scanner.Scan() {
+				return
+			}
+			line := scanner.Text() + "\n"
+			_, _ = fmt.Fprint(out, line)
+		}
+	}
 }
