@@ -64,6 +64,8 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 }
 
 func (r watchTargetRunner) Run() {
+	r.logger.Info("watch start: " + r.path.String())
+
 	r.runStartHook()
 
 	r.addDir()
@@ -115,7 +117,7 @@ func (r watchTargetRunner) addDir() {
 	// watchSubDir이 false이면 하위 폴더를 감시하지 않는다.
 	if !r.watchSubDir {
 		path := r.path
-		r.logger.Info(fmt.Sprint("add path:", path))
+		r.logger.Debug(fmt.Sprint("add path:", path))
 		err := r.watcher.Add(path.String())
 		if err != nil {
 			panic(err)
@@ -136,7 +138,7 @@ func (r watchTargetRunner) addDir() {
 			return nil
 		}
 
-		r.logger.Info(fmt.Sprint("add path:", p))
+		r.logger.Debug(fmt.Sprint("add path:", p))
 		return r.watcher.Add(p)
 	})
 
@@ -180,13 +182,13 @@ func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
 func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
 	r.logger.Debug(fmt.Sprintf("event: %s", ev.String()))
 	if ev.Op.Has(fsnotify.Create) {
-		r.logger.Info(fmt.Sprintf("%s has created", ev.Name))
+		r.logger.Debug(fmt.Sprintf("%s has created", ev.Name))
 	}
 	if ev.Op.Has(fsnotify.Write) {
-		r.logger.Info(fmt.Sprintf("%s has modified", ev.Name))
+		r.logger.Debug(fmt.Sprintf("%s has modified", ev.Name))
 	}
 	if ev.Op.Has(fsnotify.Remove) {
-		r.logger.Info(fmt.Sprintf("%s has removed", ev.Name))
+		r.logger.Debug(fmt.Sprintf("%s has removed", ev.Name))
 	}
 }
 

@@ -38,11 +38,14 @@ func (w *WatcherContext) CancelAndNew() {
 
 	w.cancel()
 	for _, cmd := range w.cmds {
-		GlobalLogger.Info("wait cancel command: " + cmd.String())
+		GlobalLogger.Debug("wait cancel command: " + cmd.String())
 		if cmd.Process != nil {
 			// cmd.Wait()를 할 경우, cancel을 했는데도 불구하고 계속 대기하는 문제가 있음
 			_, err := cmd.Process.Wait()
 			if err != nil {
+				if err.Error() == "wait: no child processes" {
+					continue
+				}
 				GlobalLogger.Error("wait cancel error:" + err.Error())
 			}
 		}
@@ -74,7 +77,7 @@ func (w *WatcherContext) SetWaitNumber(num int) {
 	w.m.Lock()
 	defer w.m.Unlock()
 
-	GlobalLogger.Info(fmt.Sprintf("SetWaitNumber: %v", num))
+	GlobalLogger.Debug(fmt.Sprintf("SetWaitNumber: %v", num))
 
 	w.w = &sync.WaitGroup{}
 	w.w.Add(num)
@@ -85,7 +88,7 @@ func (w *WatcherContext) MarkStart() {
 		return
 	}
 
-	GlobalLogger.Info("MarkStart")
+	GlobalLogger.Debug("MarkStart")
 	w.w.Done()
 }
 
@@ -94,7 +97,7 @@ func (w *WatcherContext) WaitStart() {
 		return
 	}
 
-	GlobalLogger.Info("WaitStart")
+	GlobalLogger.Debug("WaitStart")
 	w.w.Wait()
 }
 

@@ -44,9 +44,9 @@ func (g *globalRunner) CallOnFinishWatch() {
 }
 
 func (g *globalRunner) printInfo(methodName string, cmd domain.Cmd, fn func() error) error {
-	g.logger.Info(fmt.Sprintf("%s start: %v", methodName, cmd))
+	g.logger.Debug(fmt.Sprintf("%s start: %v", methodName, cmd))
 	err := fn()
-	g.logger.Info(fmt.Sprintf("%s finished: %v", methodName, cmd))
+	g.logger.Debug(fmt.Sprintf("%s finished: %v", methodName, cmd))
 
 	return err
 }

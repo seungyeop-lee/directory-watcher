@@ -39,12 +39,12 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 
 		select {
 		case e := <-runErr:
-			helper.GlobalLogger.Info("Run command: " + cmd.String())
+			helper.GlobalLogger.Debug("Run command: " + cmd.String())
 			if e != nil {
 				return e
 			}
 		case <-ctx.Context().Done():
-			helper.GlobalLogger.Info("Cancel command: " + cmd.String())
+			helper.GlobalLogger.Debug("Cancel command: " + cmd.String())
 			return ctx.Context().Err()
 		}
 	}
