@@ -3,6 +3,7 @@
 package helper
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -38,8 +39,9 @@ func postProcessForCancel(cmd *exec.Cmd) error {
 	_, err := cmd.Process.Wait()
 	if err != nil {
 		if err.Error() == "wait: no child processes" {
-			continue
+			return nil
 		}
-		GlobalLogger.Error("wait cancel error:" + err.Error())
+		return errors.New("wait cancel error:" + err.Error())
 	}
+	return nil
 }
