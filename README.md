@@ -3,6 +3,9 @@
     <a href="README.ko.md"><b>Korean</b></a>
 </p>
 
+> [!WARNING]
+> This program has been tested and confirmed to work on macOS. It is expected to work similarly on Linux. While it has been tested on Windows within a Git Bash environment, there have been instances where the process did not stop correctly when `interruptible: true` was set. Use caution on Windows.
+
 # Directory Watcher
 
 This program executes predefined commands when changes (creation, modification, deletion) occur within a directory.

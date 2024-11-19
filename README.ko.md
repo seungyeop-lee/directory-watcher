@@ -3,6 +3,9 @@
     <a href="README.ko.md"><b>한국어</b></a>
 </p>
 
+> [!WARNING]
+> 이 프로그램은 macOS에서 정상 작동하는 것이 확인되었습니다. Linux에서도 동일하게 작동할 것으로 예상됩니다. Windows의 Git Bash 환경에서도 테스트했으나, `interruptible: true` 설정 시 프로세스가 제대로 종료되지 않는 경우가 있으므로 주의해야 합니다.
+
 # Directory Watcher
 
 디렉토리 내 변경 (생성, 수정, 삭제)이 발생 시 정해진 커맨드를 실행하게 하는 프로그램입니다.
