@@ -32,6 +32,7 @@ watchTargets:
       waitMillisecond: 1000 # default 100
       watchEvent: CDU
       noWait: true # default false
+      interruptible: true
   - path: 'test/dir3'
     lifeCycle:
       onStartWatch:
