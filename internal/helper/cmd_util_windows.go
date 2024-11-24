@@ -5,37 +5,15 @@ package helper
 import (
 	"errors"
 	"os/exec"
+	"strconv"
 	"syscall"
 )
 
 func terminateProcess(cmd *exec.Cmd) error {
-	// 프로세스 그룹에 CTRL_BREAK_EVENT를 보냅니다.
-	err := sendCtrlBreak(cmd.Process.Pid)
-	if err != nil {
-		// CTRL_BREAK_EVENT 실패 시 직접 종료
-		return cmd.Process.Kill()
-	}
-	return nil
-}
-
-func sendCtrlBreak(pid int) error {
-	dll, err := syscall.LoadDLL("kernel32.dll")
-	if err != nil {
-		return err
-	}
-	defer dll.Release()
-
-	proc, err := dll.FindProc("GenerateConsoleCtrlEvent")
-	if err != nil {
-		return err
-	}
-
-	// CTRL_BREAK_EVENT를 프로세스 그룹에 보냅니다.
-	r, _, err := proc.Call(uintptr(syscall.CTRL_BREAK_EVENT), uintptr(pid))
-	if r == 0 {
-		return err
-	}
-	return nil
+	pid := cmd.Process.Pid
+	// https://stackoverflow.com/a/44551450
+	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(pid))
+	return kill.Start()
 }
 
 func SetupForOs(cmd *exec.Cmd) error {
@@ -47,8 +25,7 @@ func SetupForOs(cmd *exec.Cmd) error {
 }
 
 func postProcessForCancel(cmd *exec.Cmd) error {
-	// cmd.Wait()를 호출하지 않고 프로세스를 종료합니다.
-	err := terminateProcess(cmd)
+	_, err := cmd.Process.Wait()
 	if err != nil {
 		if err.Error() == "invalid argument" {
 			return nil
