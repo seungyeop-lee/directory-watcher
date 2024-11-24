@@ -1,11 +1,11 @@
 watchTargets:
-  - path: 'graceful-shutdown-spring/src'
+  - path: 'targets/graceful-shutdown-spring/src'
     lifeCycle:
       onStartWatch:
-        - dir: "graceful-shutdown-spring"
+        - dir: "targets/graceful-shutdown-spring"
           cmd: './gradlew bootRun'
       onChange:
-        - dir: "graceful-shutdown-spring"
+        - dir: "targets/graceful-shutdown-spring"
           cmd: './gradlew bootRun'
     option:
       interruptible: true

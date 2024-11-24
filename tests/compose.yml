@@ -1,0 +1,10 @@
+services:
+  gracefule-shutdown-spring:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./config.docker-linux.yml:/config.yml
+      - ./targets/graceful-shutdown-spring:/targets/graceful-shutdown-spring
+    working_dir: /
+    command: directory-watcher
