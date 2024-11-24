@@ -4,7 +4,9 @@
 </p>
 
 > [!WARNING]
-> This program has been tested and confirmed to work on macOS. It is expected to work similarly on Linux. While it has been tested on Windows within a Git Bash environment, there have been instances where the process did not stop correctly when `interruptible: true` was set. Use caution on Windows.
+> This program has been verified to work correctly on macOS and Linux.
+> On Windows, it can be used within Git Bash. Standard output may have issues in PowerShell or Command Prompt.
+> Also, on Windows, using the `interruptible: true` setting may cause child processes to not terminate correctly; caution is advised.
 
 # Directory Watcher
 
@@ -39,10 +41,10 @@ brew install seungyeop-lee/tap/directory-watcher
 go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
 
-### Docker
+### In Dockerfile
 
-```shell
-docker pull ghcr.io/seungyeop-lee/directory-watcher
+```dockerfile
+COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
 ```
 
 ### Releases
@@ -60,7 +62,7 @@ directory-watcher
 It can also be run using docker.
 
 ```shell
-docker run --rm ghcr.io/seungyeop-lee/directory-watcher
+docker run --rm ghcr.io/seungyeop-lee/directory-watcher:latest
 
 # Known Issue: Inconsistent Delete Events with Bind Mounts
 # When deleting files on the host system within a directory that's been bind-mounted into a container, the delete event may not always be detected. 

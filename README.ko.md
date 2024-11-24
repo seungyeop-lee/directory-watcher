@@ -4,7 +4,9 @@
 </p>
 
 > [!WARNING]
-> 이 프로그램은 macOS에서 정상 작동하는 것이 확인되었습니다. Linux에서도 동일하게 작동할 것으로 예상됩니다. Windows의 Git Bash 환경에서도 테스트했으나, `interruptible: true` 설정 시 프로세스가 제대로 종료되지 않는 경우가 있으므로 주의해야 합니다.
+> 이 프로그램은 macOS와 Linux에서 정상 작동하는 것을 확인하였습니다.
+> Windows환경에서는 Git Bash에서 사용이 가능합니다. Powershell이나 명령 프롬프트에서는 표준 출력에 문제가 있습니다. 
+> 또한 Windows환경에서 `interruptible: true` 설정 시 자식의 자식 프로세스가 제대로 종료되지 않는 경우가 있으므로 주의가 필요합니다.
 
 # Directory Watcher
 
@@ -39,10 +41,10 @@ brew install seungyeop-lee/tap/directory-watcher
 go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
 
-### Docker
+### In Dockerfile
 
-```shell
-docker pull ghcr.io/seungyeop-lee/directory-watcher
+```dockerfile
+COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
 ```
 
 ### Releases
@@ -60,7 +62,7 @@ directory-watcher
 또한 docker를 사용하여 실행할 수 있습니다.
 
 ```shell
-docker run --rm ghcr.io/seungyeop-lee/directory-watcher
+docker run --rm ghcr.io/seungyeop-lee/directory-watcher:latest
 
 # 알려진 이슈: bind mount된 디렉토리에서 파일 삭제 시 삭제 이벤트 누락
 # 호스트 시스템에서 컨테이너에 bind mount된 디렉토리 내의 파일을 삭제할 경우, 삭제 이벤트가 항상 감지되는 것은 아닙니다. 
