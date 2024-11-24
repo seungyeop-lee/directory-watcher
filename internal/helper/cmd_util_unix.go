@@ -41,6 +41,9 @@ func postProcessForCancel(cmd *exec.Cmd) error {
 		if err.Error() == "wait: no child processes" {
 			return nil
 		}
+		if err.Error() == "waitid: no child processes" {
+			return nil
+		}
 		return errors.New("wait cancel error:" + err.Error())
 	}
 	return nil
