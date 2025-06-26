@@ -13,7 +13,7 @@ func terminateProcess(cmd *exec.Cmd) error {
 	pid := cmd.Process.Pid
 	// https://stackoverflow.com/a/44551450
 	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(pid))
-	return kill.Start()
+	return kill.Run()
 }
 
 func SetupForOs(cmd *exec.Cmd) error {
