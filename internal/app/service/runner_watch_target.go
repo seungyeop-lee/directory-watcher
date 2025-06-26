@@ -31,6 +31,7 @@ type watchTargetRunner struct {
 
 	logger  helper.Logger
 	watcher *fsnotify.Watcher
+	stop    chan bool
 }
 
 func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger) *watchTargetRunner {
@@ -60,6 +61,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		noWait:          commandSet.Option.NoWait,
 		logger:          logger,
 		watcher:         watcher,
+		stop:            make(chan bool),
 	}
 }
 
@@ -74,6 +76,7 @@ func (r watchTargetRunner) Run() {
 
 	go r.selectEventHandler()(event)
 
+	DONE:
 	for {
 		select {
 		case ev := <-r.watcher.Events:
@@ -104,6 +107,8 @@ func (r watchTargetRunner) Run() {
 				r.logger.Debug(fmt.Sprint("watcher.Error: SyscallError:", v))
 			}
 			r.logger.Debug(fmt.Sprint("watcher.Error:", err))
+		case <-r.stop:
+			break DONE
 		}
 	}
 }
@@ -194,6 +199,15 @@ func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
 
 func (r watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	r.stop <- true
+
+	close(r.stop)
+
+	err := r.watcher.Close()
+	if err != nil {
+		return
+	}
 
 	r.runFinishHook()
 }
