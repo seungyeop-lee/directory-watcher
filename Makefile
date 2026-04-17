@@ -29,3 +29,7 @@ rund-docker:
 .PHONY: run-tests
 run-tests:
 	(cd tests && go run ../main.go -c config.yml --log-level=INFO)
+
+.PHONY: test
+test:
+	go test -race ./...
