@@ -33,3 +33,7 @@ run-tests:
 .PHONY: test
 test:
 	go test -race ./...
+
+.PHONY: beads-ui
+beads-ui:
+	bdui start --open
