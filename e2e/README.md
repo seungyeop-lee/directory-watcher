@@ -82,3 +82,24 @@ DW_E2E_FAULT=timeout go test -count=1 -v -run '^TestProcessLifecycle$' ./e2e
 DW_E2E_FAULT=failure go run ./e2e/linux -- -run '^TestProcessLifecycle$'
 DW_E2E_FAULT=timeout go run ./e2e/linux -- -run '^TestProcessLifecycle$'
 ```
+
+## 경합과 과부하 검증
+
+```sh
+go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle' ./e2e
+go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle'
+go test -race ./...
+```
+
+`TestFastInflowSlowHook`는 noWait·interruptible의 네 조합을 검사합니다. 80ms hook 실행 중 10ms 간격으로 고유 파일 24개 생성, 같은 파일 24회 변경, 제외 파일 25회 변경을 약 0.3초 동안 입력합니다. 유입 종료 뒤 마지막 유효 변경 완료를 기다리고, 비중단 noWait에서는 고유 파일 전체가 완료되었는지 확인합니다. 종료 시 대기 작업을 실행하지 않고 프로세스가 사라지는지도 검사합니다. `hookrec --delay=80ms`의 `BEGIN|PID|기록`, `CANCEL|PID|기록`과 완료 기록으로 실행·취소·잔존 PID를 관찰합니다.
+
+`TestStartHookShutdownModes`는 네 조합의 장시간 시작 hook, 변경·종료 경합과 실제 부모·자식·손자 정리를 검사합니다. `TestTargetsRunIndependently`는 한 대상의 800ms hook이 다른 대상의 처리를 막지 않는지 검사합니다. `TestBoundedOverloadCLI`는 시작 hook 실행 중 유효 생성 이벤트 257개 이상을 입력하여 애플리케이션 전달 대기열 포화, 대상·원인 로그, 비정상 종료와 프로세스 트리 정리를 검사합니다.
+
+제어된 내부 테스트는 OS 알림 개수와 무관하게 noWait의 정확한 순서, debounce의 마지막 유효 이벤트, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다. 대상별 대기 상한은 256개이며 실행은 한 세대, debounce 타이머는 하나입니다. 대기열이 가득 차면 버퍼를 무한 확장하거나 무한 대기하지 않고 유실 오류로 종료합니다. 종료는 대기열을 처리 완료하는 동작이 아니라 취소·정리하는 동작입니다.
+
+### 유실 검증의 구분
+
+- 실제 파일시스템 부하 테스트는 OS 알림의 중복·병합을 허용합니다. 파일 조작 횟수와 hook 횟수를 같다고 단정하지 않습니다.
+- CLI까지의 오류 전달은 검증 전용 소스 overlay로 fsnotify 유실 오류를 주입해 별도 검사할 수 있습니다. 배포 바이너리에는 주입 옵션이 없습니다. 주입 성공은 실제 OS overflow 관찰 증거가 아닙니다.
+- 실제 Linux overflow 실험은 fsnotify 수신을 잠시 멈추고 현재 `max_queued_events`보다 많은 파일을 생성한 뒤 `ErrEventOverflow`를 관찰합니다. 호스트·공유 커널 설정은 변경하지 않습니다. macOS kqueue는 이 sentinel을 보고하지 않으므로 같은 보장을 주장하지 않습니다.
+- fsnotify v1.7.0의 [이벤트·오류 계약](https://github.com/fsnotify/fsnotify/blob/v1.7.0/backend_inotify.go)과 [공통 오류](https://github.com/fsnotify/fsnotify/blob/v1.7.0/fsnotify.go)를 기준으로 합니다. 모든 OS 유실의 감지, 무제한 입력의 무손실 처리, 자동 복구는 보장하지 않습니다. 임의의 종료 hook에는 별도 제한 시간이 없으며, 프로세스 트리 검증은 SIGTERM을 처리하고 자손을 기다리는 보조 프로그램을 대상으로 합니다.

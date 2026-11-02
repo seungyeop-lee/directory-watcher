@@ -32,20 +32,8 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 	ctx.ApplyGracefulShutdown(cmds)
 
 	for _, cmd := range cmds {
-		runErr := make(chan error, 1)
-		go func(c *exec.Cmd) {
-			runErr <- c.Run()
-		}(cmd)
-
-		select {
-		case e := <-runErr:
-			helper.GlobalLogger.Debug("Run command: " + cmd.String())
-			if e != nil {
-				return e
-			}
-		case <-ctx.Context().Done():
-			helper.GlobalLogger.Debug("Cancel command: " + cmd.String())
-			return ctx.Context().Err()
+		if err := cmd.Run(); err != nil {
+			return err
 		}
 	}
 

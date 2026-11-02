@@ -1,7 +1,6 @@
 package service
 
 import (
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,13 +33,10 @@ func newTestEvent(path domain.Path, op fsnotify.Op) domain.Event {
 func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
 	// Given
 	var changeHookCallCount int32
-	var wg sync.WaitGroup
-	wg.Add(1)
 
 	// Mock runChangeHook
 	mockRunChangeHook := func(event domain.Event) {
 		atomic.AddInt32(&changeHookCallCount, 1)
-		wg.Done()
 	}
 
 	runner := &watchTargetRunner{
@@ -52,7 +48,9 @@ func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
 	}
 
 	eventChan := make(chan domain.Event)
-	go runner.selectEventHandler()(eventChan)
+	done := make(chan struct{})
+	go func() { runner.selectEventHandler()(eventChan); close(done) }()
+	defer func() { close(eventChan); <-done }()
 
 	// When
 	// 1. 유효한 이벤트를 보냄
@@ -61,10 +59,6 @@ func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
 	// 2. 짧은 시간 후 무시할 이벤트를 보냄
 	time.Sleep(10 * time.Millisecond)
 	eventChan <- newTestEvent(domain.Path("/test/test.swp"), fsnotify.Write)
-
-	// 3. 대기 후에도 추가적인 호출이 없는지 확인
-	// wg.Wait()를 여기서 하면 안됨. 두번째 이벤트에 의해 첫번째 이벤트가 다시 실행되는 버그 상황에서는
-	// wg.Done()이 두번 호출되어 panic이 발생함.
 
 	time.Sleep(200 * time.Millisecond) // 디바운스 시간보다 길게 대기하여 모든 호출이 발생하도록 함
 

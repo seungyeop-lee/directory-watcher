@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,12 +16,24 @@ import (
 
 type watchTargetRunners []*watchTargetRunner
 
+const dispatchCapacity = 256
+
+// FatalError preserves the watched target and cause of a failure requiring shutdown.
+type FatalError struct {
+	Path  domain.Path
+	Cause error
+}
+
+func (e *FatalError) Error() string { return fmt.Sprintf("watch target %q: %v", e.Path, e.Cause) }
+func (e *FatalError) Unwrap() error { return e.Cause }
+
 type watchTargetRunner struct {
 	path domain.Path
 
 	runStartHook  func()
 	runChangeHook func(event domain.Event)
 	runFinishHook func()
+	cancelHook    func()
 
 	excludeDir      domain.Paths
 	excludeSuffix   domain.PathSuffixes
@@ -29,16 +42,20 @@ type watchTargetRunner struct {
 	watchEvent      domain.WatchEvent
 	noWait          bool
 
-	logger  helper.Logger
-	watcher *fsnotify.Watcher
-	stop    chan bool
+	logger      helper.Logger
+	watcher     *fsnotify.Watcher
+	watchEvents <-chan fsnotify.Event
+	watchErrors <-chan error
+	initErr     error
+	stop        chan struct{}
+	done        chan struct{}
+	handlerDone chan struct{}
+	stopOnce    sync.Once
+	finishOnce  sync.Once
 }
 
 func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger) *watchTargetRunner {
 	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		logger.Error(err.Error())
-	}
 	hookFuncBuilder := commandSet.Option.Interruptible.BuildHookFuncBuilder(commandSet.Path.Alias(), domain.HookInfo{
 		OnStartWatch:   commandSet.LifeCycle.OnStartWatch,
 		OnBeforeChange: globalCommandSet.LifeCycle.OnBeforeChange,
@@ -48,11 +65,12 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 	})
 	hookFunc := hookFuncBuilder(commandSet.Path)
 
-	return &watchTargetRunner{
+	result := &watchTargetRunner{
 		path:            commandSet.Path,
 		runStartHook:    hookFunc.RunStartHook,
 		runChangeHook:   hookFunc.RunChangeHook,
 		runFinishHook:   hookFunc.RunFinishHook,
+		cancelHook:      hookFunc.Cancel,
 		excludeDir:      commandSet.Option.ExcludeDir,
 		excludeSuffix:   commandSet.Option.ExcludeSuffix,
 		waitMillisecond: commandSet.Option.WaitMillisecond,
@@ -61,62 +79,94 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		noWait:          commandSet.Option.NoWait,
 		logger:          logger,
 		watcher:         watcher,
-		stop:            make(chan bool),
+		initErr:         err,
+		stop:            make(chan struct{}),
+		done:            make(chan struct{}),
+		handlerDone:     make(chan struct{}),
 	}
+	if watcher != nil {
+		result.watchEvents = watcher.Events
+		result.watchErrors = watcher.Errors
+	}
+	return result
 }
 
-func (r watchTargetRunner) Run() {
+func (r *watchTargetRunner) Run() error {
+	defer close(r.done)
+	defer r.stopOnce.Do(func() { close(r.stop) })
+	if r.initErr != nil {
+		close(r.handlerDone)
+		return &FatalError{Path: r.path, Cause: r.initErr}
+	}
+	defer r.watcher.Close()
+	if err := r.addDir(); err != nil {
+		close(r.handlerDone)
+		return &FatalError{Path: r.path, Cause: err}
+	}
 	r.logger.Info("watch start: " + r.path.String())
-
-	r.runStartHook()
-
-	r.addDir()
-
-	event := make(chan domain.Event)
-
-	go r.selectEventHandler()(event)
-
-	DONE:
+	events := make(chan domain.Event, dispatchCapacity)
+	defer func() {
+		r.stopOnce.Do(func() { close(r.stop) })
+		close(events)
+	}()
+	go func() {
+		defer close(r.handlerDone)
+		r.runStartHook()
+		r.selectEventHandler()(events)
+	}()
 	for {
 		select {
-		case ev := <-r.watcher.Events:
+		case <-r.stop:
+			return nil
+		default:
+		}
+		select {
+		case <-r.stop:
+			return nil
+		case ev, ok := <-r.watchEvents:
+			if !ok {
+				return &FatalError{Path: r.path, Cause: errors.New("watcher event channel closed unexpectedly")}
+			}
 			r.printEventLog(ev)
-
 			if ev.Op.Has(fsnotify.Create) {
 				if domain.FileName(ev.Name).IsDefaultExcludeFile() {
-					break
+					continue
 				}
-
-				// 생성된 리소스가 directory인 경우, 설정에 따라 감시 대상으로 추가 한다.
 				if r.watchSubDir && domain.Path(ev.Name).IsDir() && !r.excludeDir.Equal(domain.Path(ev.Name)) {
-					_ = r.watcher.Add(ev.Name)
+					if err := r.watcher.Add(ev.Name); err != nil {
+						return &FatalError{Path: r.path, Cause: err}
+					}
 				}
 			} else if ev.Op.Has(fsnotify.Remove) {
 				_ = r.watcher.Remove(ev.Name)
 			}
-
-			if r.watchEvent.IsListening(ev) {
-				event <- domain.NewEventByFsnotify(ev)
+			if !r.watchEvent.IsListening(ev) || r.excludeSuffix.Contain(domain.Path(ev.Name)) {
+				continue
 			}
-		case err := <-r.watcher.Errors:
-			if v, ok := err.(*os.SyscallError); ok {
-				// 인터럽트 발생은 에러로 처리하지 않는다.
-				if v.Err == syscall.EINTR {
-					continue
-				}
-				r.logger.Debug(fmt.Sprint("watcher.Error: SyscallError:", v))
+			select {
+			case <-r.stop:
+				return nil
+			case events <- domain.NewEventByFsnotify(ev):
+			default:
+				return &FatalError{Path: r.path, Cause: fmt.Errorf("dispatch queue full (capacity %d): %w", dispatchCapacity, fsnotify.ErrEventOverflow)}
 			}
-			r.logger.Debug(fmt.Sprint("watcher.Error:", err))
-		case <-r.stop:
-			break DONE
+		case err, ok := <-r.watchErrors:
+			if !ok {
+				return &FatalError{Path: r.path, Cause: errors.New("watcher error channel closed unexpectedly")}
+			}
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			if err != nil {
+				return &FatalError{Path: r.path, Cause: err}
+			}
 		}
 	}
 }
 
-func (r watchTargetRunner) addDir() {
+func (r *watchTargetRunner) addDir() error {
 	if !helper.IsExist(r.path.String()) {
-		r.logger.Error(fmt.Sprintf("not exist path: %s", r.path))
-		return
+		return fmt.Errorf("not exist path: %s", r.path)
 	}
 
 	// watchSubDir이 false이면 하위 폴더를 감시하지 않는다.
@@ -125,7 +175,7 @@ func (r watchTargetRunner) addDir() {
 		r.logger.Debug(fmt.Sprint("add path:", path))
 		err := r.watcher.Add(path.String())
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 
@@ -147,44 +197,73 @@ func (r watchTargetRunner) addDir() {
 		return r.watcher.Add(p)
 	})
 
-	if err != nil {
-		panic(err)
-	}
+	return err
 }
 
-func (r watchTargetRunner) selectEventHandler() func(evChan chan domain.Event) {
-	if r.noWait {
-		return func(evChan chan domain.Event) {
-			for e := range evChan {
-				if r.excludeSuffix.Contain(e.Path) {
+func (r *watchTargetRunner) selectEventHandler() func(chan domain.Event) {
+	return func(input chan domain.Event) {
+		wait := r.waitMillisecond.Duration()
+		if wait == 0 {
+			wait = 100 * time.Millisecond
+		}
+		var timer *time.Timer
+		if !r.noWait {
+			timer = time.NewTimer(time.Hour)
+			if !timer.Stop() {
+				<-timer.C
+			}
+			defer timer.Stop()
+		}
+		var threshold <-chan time.Time
+		var latest domain.Event
+		for {
+			select {
+			case <-r.stop:
+				return
+			default:
+			}
+			select {
+			case <-r.stop:
+				return
+			case event, ok := <-input:
+				if !ok {
+					return
+				}
+				if r.excludeSuffix.Contain(event.Path) {
 					continue
 				}
-				r.runChangeHook(e)
-			}
-		}
-	} else {
-		return func(evChan chan domain.Event) {
-			var e struct {
-				event     domain.Event
-				threshold <-chan time.Time
-			}
-			for {
-				select {
-				case ev := <-evChan:
-					if r.excludeSuffix.Contain(ev.Path) {
-						break
+				if r.noWait {
+					select {
+					case <-r.stop:
+						return
+					default:
 					}
-					e.event = ev
-					e.threshold = helper.CreateThreshold(r.waitMillisecond.Duration())
-				case <-e.threshold:
-					r.runChangeHook(e.event)
+					r.runChangeHook(event)
+					continue
 				}
+				latest = event
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(wait)
+				threshold = timer.C
+			case <-threshold:
+				threshold = nil
+				select {
+				case <-r.stop:
+					return
+				default:
+				}
+				r.runChangeHook(latest)
 			}
 		}
 	}
 }
 
-func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
+func (r *watchTargetRunner) printEventLog(ev fsnotify.Event) {
 	r.logger.Debug(fmt.Sprintf("event: %s", ev.String()))
 	if ev.Op.Has(fsnotify.Create) {
 		r.logger.Debug(fmt.Sprintf("%s has created", ev.Name))
@@ -197,17 +276,15 @@ func (r watchTargetRunner) printEventLog(ev fsnotify.Event) {
 	}
 }
 
-func (r watchTargetRunner) Stop(wg *sync.WaitGroup) {
+func (r *watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	defer wg.Done()
-
-	r.stop <- true
-
-	close(r.stop)
-
-	err := r.watcher.Close()
-	if err != nil {
-		return
-	}
-
-	r.runFinishHook()
+	r.stopOnce.Do(func() { close(r.stop) })
+	r.finishOnce.Do(func() {
+		if r.cancelHook != nil {
+			r.cancelHook()
+		}
+		<-r.done
+		<-r.handlerDone
+		r.runFinishHook()
+	})
 }

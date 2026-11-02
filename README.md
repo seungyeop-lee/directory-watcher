@@ -156,6 +156,14 @@ The following describes the command execution location for each hook:
 - If another event occurs within `watchTargets.path` during the waiting period, the previous event is ignored. That is, the waitMillisecond is reset based on the new event, and the hook is executed after the new waiting period.
 - If you want the hook to be executed immediately for every event within `watchTargets.path` without ignoring any events, set noWait to true. (Hooks for events are executed sequentially.)
 
+### Overload and shutdown
+
+- Each target admits at most 256 pending events and one active hook generation. `noWait: true` preserves received-event order; it does not become latest-only under load. Debounce retains the last valid event, and excluded suffixes neither execute nor reset its timer.
+- A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
+- Interruptible replacement cancels and waits for the previous generation before starting another. A shutdown signal cancels active startup/change commands, discards pending changes, joins event handlers, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
+- Filesystem actions do not map one-to-one to notifications. In fsnotify v1.7.0, inotify reports `ErrEventOverflow`; kqueue on macOS does not report that sentinel. Application bounds do not guarantee detection of every OS-level loss. See [E2E scenarios and limits](e2e/README.md#경합과-과부하-검증).
+
+
 ### Limitations on Folder Event Detection
 
 - By default, hooks are executed based on **file** events within the monitored folder.

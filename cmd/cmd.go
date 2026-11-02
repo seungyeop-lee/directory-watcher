@@ -62,24 +62,26 @@ var rootCmd = &cobra.Command{
 
 		r := service.NewRunner(commandSet, logger)
 
-		go r.Run()
-
-		stopDone := make(chan bool)
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-		go func() {
-			// 종료 시그널 발생 대기
-			<-sigs
-			// runner 정지
-			r.Stop()
-			// runner 정지 완료 신호 발생
-			stopDone <- true
-		}()
-		// runner 정지 완료 신호 대기
-		<-stopDone
-
-		return nil
+		defer signal.Stop(sigs)
+		go r.Run()
+		var fatal error
+		select {
+		case fatal = <-r.Errors():
+			logger.Error(fatal.Error())
+		case <-sigs:
+		}
+		r.Stop()
+		// An error already received during shutdown must not become success.
+		if fatal == nil {
+			select {
+			case fatal = <-r.Errors():
+				logger.Error(fatal.Error())
+			default:
+			}
+		}
+		return fatal
 	},
 }
 

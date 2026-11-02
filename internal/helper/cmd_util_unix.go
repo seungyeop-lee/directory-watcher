@@ -3,7 +3,6 @@
 package helper
 
 import (
-	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -32,19 +31,4 @@ func SetupForOs(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
-}
-
-func postProcessForCancel(cmd *exec.Cmd) error {
-	// cmd.Wait()를 할 경우, cancel을 했는데도 불구하고 계속 대기하는 문제가 있음
-	_, err := cmd.Process.Wait()
-	if err != nil {
-		if err.Error() == "wait: no child processes" {
-			return nil
-		}
-		if err.Error() == "waitid: no child processes" {
-			return nil
-		}
-		return errors.New("wait cancel error:" + err.Error())
-	}
-	return nil
 }

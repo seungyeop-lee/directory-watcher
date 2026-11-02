@@ -17,6 +17,7 @@ func main() {
 	line := flag.String("line", "", "line to append")
 	depth := flag.Int("depth", -1, "long-running process descendant depth")
 	run := flag.String("run", "", "process generation identifier")
+	delay := flag.Duration("delay", 0, "delay before completing a line record")
 	flag.Parse()
 	if *file == "" {
 		fmt.Fprintln(os.Stderr, "hookrec: --file is required")
@@ -35,6 +36,18 @@ func main() {
 		}
 	}
 	if *depth < 0 {
+		if *delay > 0 {
+			signals := make(chan os.Signal, 1)
+			signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+			defer signal.Stop(signals)
+			appendLine(fmt.Sprintf("BEGIN|%d|%s", os.Getpid(), *line))
+			select {
+			case <-signals:
+				appendLine(fmt.Sprintf("CANCEL|%d|%s", os.Getpid(), *line))
+				return
+			case <-time.After(*delay):
+			}
+		}
 		appendLine(*line)
 		return
 	}
