@@ -26,9 +26,12 @@ rund-docker:
 	-v $(PWD)/test:/test \
 	ghcr.io/seungyeop-lee/directory-watcher:$(DOCKER_VERSION) -c /config.yml -l DEBUG
 
-.PHONY: run-tests
-run-tests:
-	(cd tests/manual && go run ../../main.go -c config.mac.yml --log-level=INFO)
+.PHONY: e2e e2e-linux
+e2e:
+	go test -count=1 -v ./e2e
+
+e2e-linux:
+	go run ./e2e/linux
 
 .PHONY: test
 test:

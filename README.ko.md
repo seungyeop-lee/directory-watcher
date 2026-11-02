@@ -168,6 +168,10 @@ watchTargets:
 
 ![directory-watcher-life-cycle.png](static/directory-watcher-life-cycle.png)
 
+## 개발 검증
+
+현재 워크트리 소스를 사용하는 macOS·Linux 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.md)를 확인하세요.
+
 ## 라이센스
 
 이 프로젝트는 [GPL-3.0 라이센스](LICENSE) 하에 제공됩니다. 자세한 내용은 라이센스 파일을 참조해주세요.

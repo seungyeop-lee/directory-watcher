@@ -18,3 +18,7 @@ func gracefulStop(cmd *exec.Cmd) error {
 }
 
 const canVerifyFinishHooks = false
+
+func forceStop(cmd *exec.Cmd) error { return cmd.Process.Kill() }
+
+func cleanupRecordedProcesses(file string) bool { return true }

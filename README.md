@@ -168,6 +168,10 @@ The following diagram illustrates how `Directory Watcher` works:
 
 ![directory-watcher-life-cycle.png](static/directory-watcher-life-cycle.png)
 
+## Development checks
+
+See the [E2E guide (Korean)](e2e/README.md) for automated macOS/Linux checks against the current worktree and instructions for adding scenarios.
+
 ## License
 
 This project is licensed under the [GPL-3.0 License](LICENSE). See the license file for details.
