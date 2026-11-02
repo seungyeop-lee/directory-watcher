@@ -32,13 +32,13 @@ jobs:
       - run: go vet ./...
       - run: go test -count=1 -race ./...
       - name: Repeat Windows graceful lifecycle without test cache
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh
         run: |
           go test -count=3 -v -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|TestStartHookShutdownModes)$' ./e2e
           if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle repetition failed: $LASTEXITCODE" }
       - name: Verify Windows failure and timeout diagnostics
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
