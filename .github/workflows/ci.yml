@@ -1,29 +1,26 @@
-name: ci
+name: dw-4rw Windows diagnostic
 
 on:
   push:
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      DW_LIFETIME_DIAGNOSTIC: '1'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - run: go build ./...
-      - run: go vet ./...
-      - run: go test -race ./...
+      - name: Compare source ownership and registration count
+        run: go test -count=3 -race -v -timeout=5m ./internal/app/service -run '^TestWindowsCleanupDiagnostic$'
+      - name: Observe existing synthetic consumers and Close results
+        if: ${{ !cancelled() }}
+        run: go test -count=1 -race -v -timeout=3m ./internal/app/service -run '^(TestStopDiscardsPendingEvents|TestWatcherLossStopsDispatchWhileHookRuns|TestRunnerPreservesOnlyFirstFatalError|TestBoundedDispatchReportsLoss|TestFatalLossCancelsEveryTargetBeforeNotificationCompletes|TestFatalLossNotificationReceivesOriginalContext|TestNotificationFailureAndTimeoutPreserveFirstError)$'

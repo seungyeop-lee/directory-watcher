@@ -98,7 +98,13 @@ func (r *watchTargetRunner) Run() error {
 		close(r.handlerDone)
 		return &FatalError{Path: r.path, Cause: r.initErr}
 	}
-	defer r.watcher.Close()
+	defer func() {
+		before := time.Now()
+		err := r.watcher.Close()
+		if os.Getenv("DW_LIFETIME_DIAGNOSTIC") == "1" {
+			fmt.Fprintf(os.Stderr, "DIAGNOSTIC CLOSE path=%q at=%s duration=%s err=%v\n", r.path, time.Now().UTC().Format(time.RFC3339Nano), time.Since(before), err)
+		}
+	}()
 	if err := r.addDir(); err != nil {
 		close(r.handlerDone)
 		return &FatalError{Path: r.path, Cause: err}
