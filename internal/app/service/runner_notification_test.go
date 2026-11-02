@@ -59,6 +59,7 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 	})
 	logger := &notificationLog{}
 	r := NewRunner(set, logger)
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	events := []chan fsnotify.Event{make(chan fsnotify.Event, 8), make(chan fsnotify.Event, 8)}
 	sources := []chan error{make(chan error, 1), make(chan error, 1)}
 	for n, target := range r.watchTargets {
@@ -145,6 +146,7 @@ func TestFatalLossNotificationReceivesOriginalContext(t *testing.T) {
 	set := testCommandSet(t.TempDir())
 	set.Global.LifeCycle.OnError = command.NewManager(command.SingleCmd(os.Args[0] + " -test.run=^TestNotificationRecorderProcess$"))
 	r := NewRunner(set, &notificationLog{})
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, source := controlledSource(r.watchTargets[0])
 	go r.Run()
 	source <- fsnotify.ErrEventOverflow
@@ -180,6 +182,7 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 				})
 			}
 			r := NewRunner(set, logger)
+			assertWatchDirectoriesRemovable(t, r.watchTargets...)
 			_, source := controlledSource(r.watchTargets[0])
 			go r.Run()
 			cause := fsnotify.ErrEventOverflow

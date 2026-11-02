@@ -20,7 +20,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Compare source ownership and registration count
-        run: go test -count=3 -race -v -timeout=5m ./internal/app/service -run '^TestWindowsCleanupDiagnostic$'
+        run: go test -count=3 -race -v -timeout=5m ./internal/app/service -run '^(TestWindowsOwnerPositiveControl|TestWindowsCleanupDiagnostic)$'
       - name: Observe existing synthetic consumers and Close results
         if: ${{ !cancelled() }}
         run: go test -count=1 -race -v -timeout=3m ./internal/app/service -run '^(TestStopDiscardsPendingEvents|TestWatcherLossStopsDispatchWhileHookRuns|TestRunnerPreservesOnlyFirstFatalError|TestBoundedDispatchReportsLoss|TestFatalLossCancelsEveryTargetBeforeNotificationCompletes|TestFatalLossNotificationReceivesOriginalContext|TestNotificationFailureAndTimeoutPreserveFirstError)$'

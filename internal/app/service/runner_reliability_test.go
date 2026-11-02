@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 
 func TestStopDiscardsPendingEvents(t *testing.T) {
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
@@ -63,6 +65,7 @@ func TestDebounceHandlerTerminatesWhenInputCloses(t *testing.T) {
 
 func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	assertWatchDirectoriesRemovable(t, r)
 	events, watchErrors := controlledSource(r)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	r.runStartHook = func() {}
@@ -104,6 +107,7 @@ func testCommandSet(paths ...string) domain.CommandSet {
 func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 	helper.GlobalLogger = newMockLogger()
 	r := NewRunner(testCommandSet(t.TempDir(), t.TempDir()), newMockLogger())
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, firstErrors := controlledSource(r.watchTargets[0])
 	secondErrors := make(chan error, 1)
 	r.watchTargets[1].watchErrors = secondErrors
@@ -125,6 +129,7 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 
 func TestBoundedDispatchReportsLoss(t *testing.T) {
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	r.runStartHook = func() {}
@@ -262,6 +267,25 @@ func controlledSource(r *watchTargetRunner) (chan fsnotify.Event, chan error) {
 	events, watchErrors := make(chan fsnotify.Event), make(chan error)
 	r.watchEvents, r.watchErrors = events, watchErrors
 	return events, watchErrors
+}
+
+var resourceDeletionDiagnostic func(*testing.T, string)
+
+func assertWatchDirectoriesRemovable(t *testing.T, targets ...*watchTargetRunner) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, target := range targets {
+			before := time.Now()
+			err := os.RemoveAll(target.path.String())
+			t.Logf("resource removal path=%q at=%s duration=%s err=%v", target.path, time.Now().UTC().Format(time.RFC3339Nano), time.Since(before), err)
+			if err != nil {
+				if resourceDeletionDiagnostic != nil {
+					resourceDeletionDiagnostic(t, target.path.String())
+				}
+				t.Errorf("watch directory remains in use after Stop: %v", err)
+			}
+		}
+	})
 }
 
 func TestZeroDebounceKeepsDefaultWait(t *testing.T) {
