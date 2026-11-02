@@ -18,12 +18,85 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
+      - name: Configure E2E diagnostics
+        shell: bash
+        run: echo "DW_E2E_DIAGNOSTICS=$RUNNER_TEMP/dw-e2e" >> "$GITHUB_ENV"
       - run: go build ./...
       - run: go vet ./...
-      - run: go test -race ./...
+      - run: go test -count=1 -race ./...
+      - name: Repeat Windows graceful lifecycle without test cache
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          go test -count=3 -v -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|TestStartHookShutdownModes)$' ./e2e
+          if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle repetition failed: $LASTEXITCODE" }
+      - name: Verify Windows failure and timeout diagnostics
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          New-Item -ItemType Directory -Force $env:DW_E2E_DIAGNOSTICS | Out-Null
+          $guardBin = Join-Path $env:DW_E2E_DIAGNOSTICS 'cleanup-guard.exe'
+          $guardRecords = Join-Path $env:DW_E2E_DIAGNOSTICS 'cleanup-guard.records'
+          go build -o $guardBin ./e2e/hookrec
+          if ($LASTEXITCODE -ne 0) { throw "Cleanup guard build failed" }
+          $guard = Start-Process -FilePath $guardBin -ArgumentList "--file=$guardRecords", '--depth=2' -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(15)
+            do {
+              $ready = @(Get-Content $guardRecords -ErrorAction SilentlyContinue | Select-String '\|ready$')
+              if ((Get-Date) -gt $deadline -or $guard.HasExited) { throw "Cleanup guard did not become ready" }
+              if ($ready.Count -ne 3) { Start-Sleep -Milliseconds 20 }
+            } until ($ready.Count -eq 3)
+            foreach ($fault in 'failure', 'timeout') {
+              $env:DW_E2E_FAULT = $fault
+              $log = Join-Path $env:DW_E2E_DIAGNOSTICS "$fault.log"
+              go test -count=1 -v -timeout=2m -run '^TestProcessLifecycle$' ./e2e 2>&1 | Tee-Object -FilePath $log
+              $status = $LASTEXITCODE
+              Remove-Item Env:DW_E2E_FAULT
+              if ($status -eq 0) { throw "Intentional $fault unexpectedly passed" }
+              $output = Get-Content $log -Raw
+              $expected = if ($fault -eq 'timeout') { 'timeout: intentional timeout' } else { 'intentional failure after process tree readiness' }
+              if (-not $output.Contains($expected)) { throw "Missing $fault diagnostic" }
+              $matches = [regex]::Matches($output, 'diagnostics retained: ([^\r\n]+)')
+              if ($matches.Count -ne 1) { throw "Expected one retained diagnostic directory" }
+              $dir = $matches[0].Groups[1].Value.Trim()
+              foreach ($name in 'records.log', 'watcher.log', 'watcher.pid', 'cleanup.log', 'records.log.processes') {
+                if (-not (Test-Path (Join-Path $dir $name))) { throw "Missing $name" }
+              }
+              $cleanup = Get-Content (Join-Path $dir 'cleanup.log') -Raw
+              if (($cleanup | Select-String -Pattern 'alive=false' -AllMatches).Matches.Count -ne 3 -or $cleanup.Contains('alive=true')) {
+                throw "Process cleanup did not confirm three terminated helpers: $cleanup"
+              }
+              if ($output.Contains('process cleanup failed')) { throw "Cleanup failed" }
+              $watcherPid = [int](Get-Content (Join-Path $dir 'watcher.pid'))
+              if (Get-Process -Id $watcherPid -ErrorAction SilentlyContinue) { throw "Watcher remains after cleanup" }
+              foreach ($record in $ready) {
+                $guardPid = [int]($record.Line.Split('|')[1])
+                if (-not (Get-Process -Id $guardPid -ErrorAction SilentlyContinue)) { throw "Cleanup killed unrelated guard PID $guardPid" }
+              }
+              Write-Output "$fault diagnostics verified; unrelated guard parent/child/grandchild still alive"
+            }
+          } finally {
+            Remove-Item Env:DW_E2E_FAULT -ErrorAction SilentlyContinue
+            if (-not $guard.HasExited) {
+              taskkill /T /F /PID $guard.Id
+              if ($LASTEXITCODE -ne 0) { throw "Cleanup guard removal failed" }
+              if (-not $guard.WaitForExit(3000)) { throw "Cleanup guard did not exit" }
+            }
+          }
+          $global:LASTEXITCODE = 0
+      - name: Preserve E2E failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diagnostics-${{ matrix.os }}
+          path: ${{ env.DW_E2E_DIAGNOSTICS }}
+          if-no-files-found: ignore

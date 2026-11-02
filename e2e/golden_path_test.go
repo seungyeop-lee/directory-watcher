@@ -28,10 +28,7 @@ func TestGoldenPath(t *testing.T) {
 	}
 	s.waitLines(11)
 	s.stop()
-	expected := expectedSequence(target)
-	if canVerifyFinishHooks {
-		expected = append(expected, "TARGET:onFinishWatch", "GLOBAL:onFinishWatch")
-	}
+	expected := append(expectedSequence(target), "TARGET:onFinishWatch", "GLOBAL:onFinishWatch")
 	actual := readLinesLenient(s.records)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("hook sequence or seven event variables mismatch\nwant: %q\ngot: %q", expected, actual)

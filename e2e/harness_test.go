@@ -20,6 +20,10 @@ var watcherBin, hookrecBin string
 func TestMain(m *testing.M) { os.Exit(runTests(m)) }
 
 func runTests(m *testing.M) (code int) {
+	if err := prepareConsole(); err != nil {
+		fmt.Fprintln(os.Stderr, "console:", err)
+		return 1
+	}
 	dir, err := os.MkdirTemp("", "dw-e2e-bin-*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -68,7 +72,13 @@ type scenario struct {
 
 func newScenario(t *testing.T) *scenario {
 	t.Helper()
-	work, err := os.MkdirTemp("", "dw-e2e-*")
+	base := os.Getenv("DW_E2E_DIAGNOSTICS")
+	if base != "" {
+		if err := os.MkdirAll(base, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	work, err := os.MkdirTemp(base, "dw-e2e-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,12 +236,15 @@ func (s *scenario) stop() {
 			return false
 		}
 	})
-	if canVerifyFinishHooks && s.exit != nil {
+	if s.exit != nil {
 		s.t.Fatalf("watcher exit: %v\n%s", s.exit, s.log.String())
 	}
 }
 
 func (s *scenario) cleanup() {
+	if err := writeProcessDiagnostics(s.records); err != nil {
+		s.t.Errorf("process diagnostics: %v", err)
+	}
 	if s.cmd != nil && s.cmd.Process != nil {
 		select {
 		case <-s.done:
@@ -240,8 +253,14 @@ func (s *scenario) cleanup() {
 			select {
 			case <-s.done:
 			case <-time.After(3 * time.Second):
-				_ = forceStop(s.cmd)
-				<-s.done
+				if err := forceStop(s.cmd); err != nil {
+					s.t.Errorf("force-stop watcher: %v", err)
+				}
+				select {
+				case <-s.done:
+				case <-time.After(3 * time.Second):
+					s.t.Error("watcher remains after forced cleanup")
+				}
 			}
 		}
 	}

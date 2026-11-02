@@ -8,13 +8,12 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 func terminateProcess(cmd *exec.Cmd) error {
-	pid := cmd.Process.Pid
-	// https://stackoverflow.com/a/44551450
-	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(pid))
-	return kill.Run()
+	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
 }
 
 func cleanupProcessTree(cmd *exec.Cmd, deadline time.Time) {

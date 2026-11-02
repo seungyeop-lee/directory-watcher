@@ -125,60 +125,6 @@ func assertLineProcessesGone(s *scenario) {
 	s.t.Logf("slow hook process observations: started=%d alive-after-stop=0", len(pids))
 }
 
-func TestStartHookShutdownModes(t *testing.T) {
-	for _, noWait := range []bool{false, true} {
-		for _, interruptible := range []bool{false, true} {
-			t.Run(fmt.Sprintf("noWait=%t/interruptible=%t", noWait, interruptible), func(t *testing.T) {
-				s := newScenario(t)
-				s.start(fmt.Sprintf(`watchTargets:
-  - path: '%s'
-    lifeCycle:
-      onStartWatch:
-        - '%s --file=%s --depth=2'
-      onChange:
-        - '%s --file=%s --depth=2'
-    option:
-      noWait: %t
-      interruptible: %t
-      waitMillisecond: 10
-      watchEvent: C
-      excludeSuffix: [.probe]
-`, s.watch, hookrecBin, s.records, hookrecBin, s.records, noWait, interruptible))
-				s.await("startup process tree ready", 10*time.Second, func() bool {
-					for _, r := range processRecords(s.records) {
-						if r.depth == 2 && r.state == "ready" {
-							return true
-						}
-					}
-					return false
-				})
-				s.write(filepath.Join(s.watch, "during-start.txt"), nil)
-				if interruptible {
-					s.await("replacement tree ready", 10*time.Second, func() bool {
-						count := 0
-						for _, r := range processRecords(s.records) {
-							if r.depth == 2 && r.state == "ready" {
-								count++
-							}
-						}
-						return count >= 2
-					})
-				}
-				s.stop()
-				records := processRecords(s.records)
-				s.await("startup/replacement descendants disappear", 5*time.Second, func() bool { return recordsGone(records) })
-				if !interruptible {
-					for _, r := range records {
-						if r.depth == 2 && r.state == "start" && r.run != records[0].run {
-							t.Fatal("sequential startup was replaced")
-						}
-					}
-				}
-			})
-		}
-	}
-}
-
 func TestTargetsRunIndependently(t *testing.T) {
 	s := newScenario(t)
 	other := filepath.Join(s.work, "other")
