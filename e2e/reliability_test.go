@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func TestFastInflowSlowHook(t *testing.T) {
@@ -45,39 +47,16 @@ func TestFastInflowSlowHook(t *testing.T) {
 					s.write(filepath.Join(s.watch, "excluded.swp"), []byte(fmt.Sprint(n)))
 					time.Sleep(10 * time.Millisecond)
 				}
+				elapsed := time.Since(started)
+				deadline := time.Now().Add(30 * time.Second)
+				inflowPaths := append([]string{initial, shared}, paths...)
+				s.awaitChangesComplete("DONE:", inflowPaths, fsnotify.Create|fsnotify.Write, noWait && !interruptible, time.Until(deadline))
 				last := filepath.Join(s.watch, "last.txt")
 				s.write(last, []byte("last"))
-				s.write(filepath.Join(s.watch, "excluded.swp"), []byte("after last valid event"))
-				elapsed := time.Since(started)
-				s.await("last valid change completes after inflow", 30*time.Second, func() bool {
-					for _, line := range readLinesLenient(s.records) {
-						if line == "DONE:"+last {
-							return true
-						}
-					}
-					return false
+				s.write(filepath.Join(s.watch, "excluded.swp"), []byte("after isolated valid event"))
+				s.await("isolated valid change completes after inflow", time.Until(deadline), func() bool {
+					return countRecord(readLinesLenient(s.records), "DONE:"+last) > 0
 				})
-				if noWait && !interruptible {
-					quietSince := time.Now()
-					lastCount := 0
-					s.await("all queued noWait work drains", 30*time.Second, func() bool {
-						records := readLinesLenient(s.records)
-						if len(records) != lastCount {
-							lastCount = len(records)
-							quietSince = time.Now()
-						}
-						begins, completed := 0, 0
-						for _, line := range records {
-							if strings.HasPrefix(line, "BEGIN|") {
-								begins++
-							}
-							if strings.HasPrefix(line, "DONE:") {
-								completed++
-							}
-						}
-						return begins == completed && time.Since(quietSince) >= 120*time.Millisecond
-					})
-				}
 				lines := readLinesLenient(s.records)
 				if noWait && !interruptible {
 					for _, path := range paths {

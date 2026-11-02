@@ -6,10 +6,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 var watcherBin, hookrecBin string
@@ -129,6 +132,75 @@ func (s *scenario) await(label string, timeout time.Duration, condition func() b
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func receivedChanges(log string, paths map[string]bool, operations fsnotify.Op) []string {
+	var received []string
+	for _, line := range strings.Split(log, "\n") {
+		_, event, ok := strings.Cut(line, "event: ")
+		if !ok {
+			continue
+		}
+		quote := strings.IndexByte(event, '"')
+		if quote < 0 {
+			continue
+		}
+		path, err := strconv.Unquote(event[quote:])
+		if err != nil || !paths[path] {
+			continue
+		}
+		op := strings.TrimSpace(event[:quote])
+		if operations.Has(fsnotify.Create) && strings.Contains(op, "CREATE") ||
+			operations.Has(fsnotify.Write) && strings.Contains(op, "WRITE") {
+			received = append(received, path)
+		}
+	}
+	return received
+}
+
+func changesCompleted(received, records []string, prefix string, sequential bool) bool {
+	if len(received) == 0 {
+		return false
+	}
+	begins, completed, cancelled := 0, 0, 0
+	last := ""
+	for _, line := range records {
+		switch {
+		case strings.HasPrefix(line, "BEGIN|"):
+			begins++
+		case strings.HasPrefix(line, "CANCEL|"):
+			cancelled++
+		case strings.HasPrefix(line, prefix):
+			completed++
+			last = strings.TrimPrefix(line, prefix)
+		}
+	}
+	return last == received[len(received)-1] &&
+		(begins == 0 || begins == completed+cancelled) &&
+		(!sequential || completed == len(received))
+}
+
+func (s *scenario) awaitChangesComplete(prefix string, paths []string, operations fsnotify.Op, sequential bool, timeout time.Duration) {
+	s.t.Helper()
+	allowed := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		allowed[path] = true
+	}
+	quietSince := time.Now()
+	previous := ""
+	var received, records []string
+	s.await("received inflow completes and settles", timeout, func() bool {
+		log := s.log.String()
+		received = receivedChanges(log, allowed, operations)
+		records = readLinesLenient(s.records)
+		snapshot := log + strings.Join(records, "\n")
+		if snapshot != previous {
+			previous = snapshot
+			quietSince = time.Now()
+		}
+		return changesCompleted(received, records, prefix, sequential) && time.Since(quietSince) >= 120*time.Millisecond
+	})
+	s.t.Logf("inflow settled: received=%d records=%d last-received=%s", len(received), len(records), received[len(received)-1])
 }
 
 func (s *scenario) waitLines(count int) {

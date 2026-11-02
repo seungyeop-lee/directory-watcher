@@ -249,12 +249,17 @@ watchTargets:
       watchEvent: C
       excludeSuffix: [.probe]
 `, hookrecBin, s.records, s.watch, hookrecBin, s.records, hookrecBin, s.records, noWait))
+			var paths []string
 			for n := range 20 {
-				s.write(filepath.Join(s.watch, fmt.Sprintf("normal-%02d.txt", n)), nil)
+				path := filepath.Join(s.watch, fmt.Sprintf("normal-%02d.txt", n))
+				paths = append(paths, path)
+				s.write(path, nil)
 			}
+			deadline := time.Now().Add(10 * time.Second)
+			s.awaitChangesComplete("CHANGE:", paths, fsnotify.Create, noWait, time.Until(deadline))
 			last := filepath.Join(s.watch, "last.txt")
 			s.write(last, nil)
-			s.await("last normal/debounced event completes", 10*time.Second, func() bool {
+			s.await("isolated normal/debounced event completes", time.Until(deadline), func() bool {
 				return countRecord(readLinesLenient(s.records), "CHANGE:"+last) > 0
 			})
 			s.stop()
