@@ -1,8 +1,11 @@
 package service
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
@@ -35,7 +38,21 @@ func (r *runner) Run() {
 		go func(target *watchTargetRunner) {
 			defer targets.Done()
 			if err := target.Run(); err != nil {
-				r.errorOnce.Do(func() { r.errors <- err })
+				r.errorOnce.Do(func() {
+					for _, target := range r.watchTargets {
+						target.stopAccepting()
+					}
+					if errors.Is(err, fsnotify.ErrEventOverflow) {
+						loggerMessage := fmt.Sprintf("%v; possible event loss (count unknown)", err)
+						r.global.logger.Error(loggerMessage)
+					} else {
+						r.global.logger.Error(err.Error())
+					}
+					r.errors <- err
+					if errors.Is(err, fsnotify.ErrEventOverflow) {
+						r.global.CallOnError(err)
+					}
+				})
 			}
 		}(t)
 	}

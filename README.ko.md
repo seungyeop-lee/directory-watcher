@@ -106,6 +106,8 @@ global:
       [ global onStartWatch hook의 사양과 동일 ]
     onFinishWatch: # global onFinishWatch hook
       [ global onStartWatch hook의 사양과 동일 ]
+    onError: # 선택적인 전역 이벤트 유실 알림
+      [ global onStartWatch hook의 사양과 동일 ]
 watchTargets:
   - path: [ 감시대상 폴더 path ]
     lifeCycle:
@@ -131,7 +133,7 @@ watchTargets:
 
 다음은 각 hook에 대한 커맨드 실행 위치를 설명합니다.
 
-| dir | global onStartWatch, global onFinishWatch | 그외 hook    |
+| dir | global onStartWatch, global onFinishWatch, global onError | 그외 hook |
 |-----|-------------------------------------------|------------|
 | O   | dir 설정 위치                                 | dir 설정 위치  |
 | X   | 프로그램 실행 위치                                | path 설정 위치 |
@@ -147,6 +149,24 @@ watchTargets:
 | {{.DirPath}}    | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로   | test/dir2                                        |
 | {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
 | {{.Event}}      | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
+
+### 이벤트 유실 알림
+
+`global.lifeCycle.onError`는 선택 항목이며 다른 hook과 같은 명령 목록 및 구조화된 `dir`/`cmd` 형식을 사용합니다. runner별 최대 한 번, 최초 치명적 오류가 `errors.Is(err, fsnotify.ErrEventOverflow)`를 만족할 때만 실행합니다. 전달 대기열 포화와 OS가 보고한 overflow가 여기에 해당합니다. 다른 치명적 오류, 정상 종료, debounce에 의한 대체는 알림을 실행하지 않습니다.
+
+오류 정보는 명령 템플릿에 삽입하지 않고 환경 변수로 전달합니다.
+
+| 환경 변수 | 값 |
+|-----------|----|
+| `DW_ERROR_TARGET` | 치명적 오류가 발생한 감시 대상 |
+| `DW_ERROR_KIND` | `event_loss` |
+| `DW_ERROR_CAUSE` | 원래 원인 문자열 |
+| `DW_ERROR_MESSAGE` | `FatalError.Error()`의 전체 메시지 |
+| `DW_ERROR_POSSIBLE_LOSS` | `true` (유실 가능성이며 유실 개수가 아님) |
+
+알림 실행 파일에서 환경 변수를 직접 읽으세요. 명령 문자열 자체는 셸 확장이나 리다이렉션을 수행하지 않습니다. 실행 가능한 셸 스크립트를 사용한다면 그 안에서 `printf '%s\n' "$DW_ERROR_MESSAGE"`처럼 확장을 따옴표로 감싸세요. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다. 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
+
+최초 치명적 오류가 발생하면 모든 대상에서 새로운 일반 hook 실행 승인을 즉시 중단합니다. 알림은 일반 hook 취소와 독립적으로 고정 5초 실행 제한을 적용하고, 취소 정리에 최대 20초를 더 사용합니다(총 최대 25초). 알림 실패나 시간 초과는 로그에 남기며 원래 치명적 오류를 대체하지 않습니다. CLI는 원래 오류로 비정상 종료합니다. 취소 후에도 정상 종료 hook은 기존 규칙대로 실행합니다.
 
 ## 주의사항
 

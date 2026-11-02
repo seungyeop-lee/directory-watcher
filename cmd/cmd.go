@@ -69,7 +69,6 @@ var rootCmd = &cobra.Command{
 		var fatal error
 		select {
 		case fatal = <-r.Errors():
-			logger.Error(fatal.Error())
 		case <-sigs:
 		}
 		r.Stop()
@@ -77,7 +76,6 @@ var rootCmd = &cobra.Command{
 		if fatal == nil {
 			select {
 			case fatal = <-r.Errors():
-				logger.Error(fatal.Error())
 			default:
 			}
 		}

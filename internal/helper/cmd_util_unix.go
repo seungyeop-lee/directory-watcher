@@ -3,8 +3,10 @@
 package helper
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 func terminateProcess(cmd *exec.Cmd) error {
@@ -24,6 +26,24 @@ func terminateProcess(cmd *exec.Cmd) error {
 	}
 
 	return nil
+}
+
+func cleanupProcessTree(cmd *exec.Cmd, deadline time.Time) {
+	// SetupForOs gives the command a group that outlives an exited group leader.
+	pgid := -cmd.Process.Pid
+	if err := syscall.Kill(pgid, syscall.SIGTERM); err != nil {
+		return
+	}
+	for {
+		if errors.Is(syscall.Kill(pgid, 0), syscall.ESRCH) {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			_ = syscall.Kill(pgid, syscall.SIGKILL)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func SetupForOs(cmd *exec.Cmd) {

@@ -124,6 +124,10 @@
           "$ref": "#/definitions/hookCommands",
           "description": "Commands to execute after a change occurs."
         },
+        "onError": {
+          "$ref": "#/definitions/hookCommands",
+          "description": "Commands to notify once when the first fatal error wraps fsnotify.ErrEventOverflow. Error context is passed in DW_ERROR_* environment variables."
+        },
         "onFinishWatch": {
           "$ref": "#/definitions/hookCommands",
           "description": "Commands to execute when stopping the monitoring process."

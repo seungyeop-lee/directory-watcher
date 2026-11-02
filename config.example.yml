@@ -8,6 +8,9 @@ global:
       - echo 'global onAfterChange'
     onFinishWatch:
       - echo 'global onFinishWatch'
+    # Optional event-loss notification; error context is environment data, not a template.
+    # onError:
+    #   - cmd: 'printenv DW_ERROR_MESSAGE'
 watchTargets:
   - path: 'test/dir1'
     lifeCycle:

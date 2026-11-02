@@ -14,6 +14,7 @@ type GlobalLifeCycle struct {
 	OnBeforeChange Cmd
 	OnAfterChange  Cmd
 	OnFinishWatch  Cmd
+	OnError        Cmd
 }
 
 type WatchTargetsCommandSets []WatchTargetsCommandSet

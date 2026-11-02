@@ -106,6 +106,8 @@ global:
       [ Same specification as global onStartWatch hook ]
     onFinishWatch: # global onFinishWatch hook
       [ Same specification as global onStartWatch hook ]
+    onError: # optional global event-loss notification
+      [ Same specification as global onStartWatch hook ]
 watchTargets:
   - path: [ path of the directory to monitor ]
     lifeCycle:
@@ -131,7 +133,7 @@ watchTargets:
 
 The following describes the command execution location for each hook:
 
-| dir | global onStartWatch, global onFinishWatch | Other hooks             |
+| dir | global onStartWatch, global onFinishWatch, global onError | Other hooks |
 |-----|-------------------------------------------|-------------------------|
 | O   | Specified dir location                    | Specified dir location  |
 | X   | Program execution location                | Specified path location |
@@ -147,6 +149,24 @@ The following describes the command execution location for each hook:
 | {{.DirPath}}    | Relative path of the directory where the event occurred | test/dir2                                                    |
 | {{.DirAbsPath}} | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
 | {{.Event}}      | Event type (C: create, U: update, D: delete)            | C                                                            |
+
+### Event-loss notification
+
+`global.lifeCycle.onError` is optional and uses the same command list and structured `dir`/`cmd` format as other hooks. It runs at most once per runner, only when the first fatal error satisfies `errors.Is(err, fsnotify.ErrEventOverflow)`. This includes dispatch queue saturation and OS-reported overflow. Other fatal errors, normal termination, and debounce replacement do not notify.
+
+Error context is passed as environment variables, never interpolated into command templates:
+
+| Environment variable | Value |
+|----------------------|-------|
+| `DW_ERROR_TARGET` | Watched target associated with the fatal error |
+| `DW_ERROR_KIND` | `event_loss` |
+| `DW_ERROR_CAUSE` | Original cause string |
+| `DW_ERROR_MESSAGE` | Complete `FatalError.Error()` message |
+| `DW_ERROR_POSSIBLE_LOSS` | `true` (possible loss, not a lost-event count) |
+
+Have the notification executable read these environment variables directly; command strings do not perform shell expansion or redirection. If you use an executable shell script, quote expansions inside it, for example `printf '%s\n' "$DW_ERROR_MESSAGE"`. File-event template variables are not available for this hook. A structured `dir` selects its working directory; without it, the command uses the program execution directory.
+
+The first fatal error immediately prevents new normal-hook approvals across all targets. The notification has an independent, fixed 5-second execution timeout, followed by up to 20 seconds of cancellation cleanup (at most 25 seconds total), regardless of normal-hook cancellation. A notification failure or timeout is logged and never replaces the original fatal error; the CLI still exits nonzero for that original error. Normal finish hooks still run after cancellation, with their existing behavior.
 
 ## Caution
 

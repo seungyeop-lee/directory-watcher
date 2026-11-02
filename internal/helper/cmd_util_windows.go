@@ -3,9 +3,11 @@
 package helper
 
 import (
+	"context"
 	"os/exec"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 func terminateProcess(cmd *exec.Cmd) error {
@@ -13,6 +15,12 @@ func terminateProcess(cmd *exec.Cmd) error {
 	// https://stackoverflow.com/a/44551450
 	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(pid))
 	return kill.Run()
+}
+
+func cleanupProcessTree(cmd *exec.Cmd, deadline time.Time) {
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	_ = exec.CommandContext(ctx, "TASKKILL", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
 }
 
 func SetupForOs(cmd *exec.Cmd) error {

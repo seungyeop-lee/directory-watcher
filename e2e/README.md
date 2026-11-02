@@ -97,9 +97,32 @@ go test -race ./...
 
 제어된 내부 테스트는 OS 알림 개수와 무관하게 noWait의 정확한 순서, debounce의 마지막 유효 이벤트, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다. 대상별 대기 상한은 256개이며 실행은 한 세대, debounce 타이머는 하나입니다. 대기열이 가득 차면 버퍼를 무한 확장하거나 무한 대기하지 않고 유실 오류로 종료합니다. 종료는 대기열을 처리 완료하는 동작이 아니라 취소·정리하는 동작입니다.
 
+### 이벤트 유실 알림 시나리오
+
+```sh
+go test -count=1 -v -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify' ./e2e
+go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify'
+```
+
+`TestEventLossNotificationCLI`는 실제 전달 대기열 포화로 CLI의 `global.lifeCycle.onError`를 실행합니다. 환경 변수·한 번 실행·hook 생략·실패·시간 초과에서도 원래 치명적 오류와 비정상 종료가 보존되는지 검사합니다. `TestNormalChangesDoNotNotify`는 일반 noWait 변경과 debounce에서 알림을 실행하지 않는지 검사합니다. 이 테스트의 포화는 애플리케이션 대기열 유실이며 OS overflow 관찰 증거가 아닙니다.
+
+내부 YAML 설정 테스트 `go test -count=1 -run '^TestDecoded' ./internal/config/yaml`은 디코딩된 구조화 명령을 실제로 실행하여 환경 변수의 원문 전달과 `dir` 작업 디렉토리, 기존 설정 호환성을 검사합니다. 알림의 환경 변수 및 고정 5초 실행 제한·최대 20초 취소 정리 계약은 [이벤트 유실 알림](../README.ko.md#이벤트-유실-알림)을 따릅니다.
+
+macOS·Linux 알림 실패·시간 초과 시나리오는 부모가 먼저 실패한 뒤 남은 자손까지 정리되는지 검사합니다. 알림의 프로세스 그룹에는 TERM 후 필요 시 KILL을 적용하며, 5초 실행·20초 정리 상한을 공유합니다. 이 추가 프로세스 정리 시나리오는 Windows에서 실행하지 않습니다.
+
 ### 유실 검증의 구분
 
 - 실제 파일시스템 부하 테스트는 OS 알림의 중복·병합을 허용합니다. 파일 조작 횟수와 hook 횟수를 같다고 단정하지 않습니다.
-- CLI까지의 오류 전달은 검증 전용 소스 overlay로 fsnotify 유실 오류를 주입해 별도 검사할 수 있습니다. 배포 바이너리에는 주입 옵션이 없습니다. 주입 성공은 실제 OS overflow 관찰 증거가 아닙니다.
+- CLI까지의 오류 전달은 검증 전용 소스 overlay로 fsnotify 유실 오류를 주입해 별도 검사할 수 있습니다. noWait·interruptible 네 조합에서 최초 치명적 오류 보존, 알림 한 번 실행, 다른 대상의 새 일반 hook 차단을 확인합니다. overlay 실행 명령과 결과는 이슈 보고서에 남기며 배포 바이너리에는 주입 옵션이 없습니다. 주입 성공은 실제 OS overflow 관찰 증거가 아닙니다.
 - 실제 Linux overflow 실험은 fsnotify 수신을 잠시 멈추고 현재 `max_queued_events`보다 많은 파일을 생성한 뒤 `ErrEventOverflow`를 관찰합니다. 호스트·공유 커널 설정은 변경하지 않습니다. macOS kqueue는 이 sentinel을 보고하지 않으므로 같은 보장을 주장하지 않습니다.
 - fsnotify v1.7.0의 [이벤트·오류 계약](https://github.com/fsnotify/fsnotify/blob/v1.7.0/backend_inotify.go)과 [공통 오류](https://github.com/fsnotify/fsnotify/blob/v1.7.0/fsnotify.go)를 기준으로 합니다. 모든 OS 유실의 감지, 무제한 입력의 무손실 처리, 자동 복구는 보장하지 않습니다. 임의의 종료 hook에는 별도 제한 시간이 없으며, 프로세스 트리 검증은 SIGTERM을 처리하고 자손을 기다리는 보조 프로그램을 대상으로 합니다.
+
+이슈 보고서의 주입 스모크는 아래 명령으로 재현합니다. `<이슈 보고서 디렉토리>`는 `smoke.sh`와 overlay 테스트 파일이 있는 경로로 바꿉니다.
+
+```sh
+sh <이슈 보고서 디렉토리>/smoke.sh macos
+sh <이슈 보고서 디렉토리>/smoke.sh linux
+```
+
+`TestControlledLossNotificationSmoke`는 네 옵션 조합과 유실이 아닌 치명적 오류의 알림 제외를 검사합니다. 스크립트는 Go overlay와 임시 생성자 주입을 사용하며 저장소 소스를 수정하지 않습니다.
+

@@ -105,7 +105,8 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 	helper.GlobalLogger = newMockLogger()
 	r := NewRunner(testCommandSet(t.TempDir(), t.TempDir()), newMockLogger())
 	_, firstErrors := controlledSource(r.watchTargets[0])
-	_, secondErrors := controlledSource(r.watchTargets[1])
+	secondErrors := make(chan error, 1)
+	r.watchTargets[1].watchErrors = secondErrors
 	go r.Run()
 	firstErrors <- fsnotify.ErrEventOverflow
 	first := <-r.Errors()

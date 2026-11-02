@@ -88,18 +88,7 @@ func (s *scenario) write(path string, data []byte) {
 
 func (s *scenario) start(config string) {
 	s.t.Helper()
-	path := filepath.Join(s.work, "config.yml")
-	s.write(path, []byte(config))
-	s.cmd = exec.Command(watcherBin, "-c", path, "--log-level=DEBUG")
-	s.cmd.Dir = s.work
-	setupProcGroup(s.cmd)
-	s.cmd.Stdout, s.cmd.Stderr = &s.log, &s.log
-	s.cmd.WaitDelay = time.Second
-	if err := s.cmd.Start(); err != nil {
-		s.t.Fatal(err)
-	}
-	s.done = make(chan struct{})
-	go func() { s.exit = s.cmd.Wait(); close(s.done) }()
+	s.launch(watcherBin, config, "--log-level=DEBUG")
 	s.await("real filesystem readiness", 10*time.Second, func() bool {
 		select {
 		case <-s.done:
@@ -110,6 +99,22 @@ func (s *scenario) start(config string) {
 		s.write(probe, []byte(fmt.Sprint(time.Now().UnixNano())))
 		return strings.Contains(s.log.String(), "event:") && strings.Contains(s.log.String(), "readiness.probe")
 	})
+}
+
+func (s *scenario) launch(binary, config string, arguments ...string) {
+	s.t.Helper()
+	path := filepath.Join(s.work, "config.yml")
+	s.write(path, []byte(config))
+	s.cmd = exec.Command(binary, append([]string{"-c", path}, arguments...)...)
+	s.cmd.Dir = s.work
+	setupProcGroup(s.cmd)
+	s.cmd.Stdout, s.cmd.Stderr = &s.log, &s.log
+	s.cmd.WaitDelay = time.Second
+	if err := s.cmd.Start(); err != nil {
+		s.t.Fatal(err)
+	}
+	s.done = make(chan struct{})
+	go func() { s.exit = s.cmd.Wait(); close(s.done) }()
 }
 
 func (s *scenario) await(label string, timeout time.Duration, condition func() bool) {

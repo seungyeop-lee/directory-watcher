@@ -276,13 +276,17 @@ func (r *watchTargetRunner) printEventLog(ev fsnotify.Event) {
 	}
 }
 
+func (r *watchTargetRunner) stopAccepting() {
+	r.stopOnce.Do(func() { close(r.stop) })
+	if r.cancelHook != nil {
+		r.cancelHook()
+	}
+}
+
 func (r *watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	defer wg.Done()
-	r.stopOnce.Do(func() { close(r.stop) })
+	r.stopAccepting()
 	r.finishOnce.Do(func() {
-		if r.cancelHook != nil {
-			r.cancelHook()
-		}
 		<-r.done
 		<-r.handlerDone
 		r.runFinishHook()

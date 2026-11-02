@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -18,6 +19,8 @@ func main() {
 	depth := flag.Int("depth", -1, "long-running process descendant depth")
 	run := flag.String("run", "", "process generation identifier")
 	delay := flag.Duration("delay", 0, "delay before completing a line record")
+	errorContext := flag.Bool("error-context", false, "record error notification environment and working directory")
+	exitCode := flag.Int("exit-code", 0, "exit status after recording")
 	flag.Parse()
 	if *file == "" {
 		fmt.Fprintln(os.Stderr, "hookrec: --file is required")
@@ -35,6 +38,23 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if *errorContext {
+		context := make(map[string]string)
+		for _, key := range []string{"DW_ERROR_TARGET", "DW_ERROR_KIND", "DW_ERROR_CAUSE", "DW_ERROR_MESSAGE", "DW_ERROR_POSSIBLE_LOSS"} {
+			context[key] = os.Getenv(key)
+		}
+		context["workdir"], err = os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		data, err := json.Marshal(context)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		appendLine("ERROR|" + string(data))
+	}
 	if *depth < 0 {
 		if *delay > 0 {
 			signals := make(chan os.Signal, 1)
@@ -49,6 +69,10 @@ func main() {
 			}
 		}
 		appendLine(*line)
+		if *exitCode != 0 {
+			_ = f.Close()
+			os.Exit(*exitCode)
+		}
 		return
 	}
 	signals := make(chan os.Signal, 1)
@@ -86,6 +110,10 @@ func main() {
 		}
 	}
 	record("ready")
+	if *exitCode != 0 {
+		_ = f.Close()
+		os.Exit(*exitCode)
+	}
 	<-signals
 	record("signal")
 	time.Sleep(150 * time.Millisecond)

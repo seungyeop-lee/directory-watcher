@@ -44,6 +44,7 @@ type GlobalLifeCycleConfig struct {
 	OnBeforeChange config.CmdInfo `yaml:"onBeforeChange"`
 	OnAfterChange  config.CmdInfo `yaml:"onAfterChange"`
 	OnFinishWatch  config.CmdInfo `yaml:"onFinishWatch"`
+	OnError        config.CmdInfo `yaml:"onError"`
 }
 
 func (c GlobalLifeCycleConfig) BuildLifeCycle() domain.GlobalLifeCycle {
@@ -52,6 +53,7 @@ func (c GlobalLifeCycleConfig) BuildLifeCycle() domain.GlobalLifeCycle {
 		OnBeforeChange: converter.NewCmdInfoConverter(c.OnBeforeChange).Convert(),
 		OnAfterChange:  converter.NewCmdInfoConverter(c.OnAfterChange).Convert(),
 		OnFinishWatch:  converter.NewCmdInfoConverter(c.OnFinishWatch).Convert(),
+		OnError:        converter.NewCmdInfoConverter(c.OnError).Convert(),
 	}
 }
 

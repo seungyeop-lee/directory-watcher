@@ -32,7 +32,7 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 	ctx.ApplyGracefulShutdown(cmds)
 
 	for _, cmd := range cmds {
-		if err := cmd.Run(); err != nil {
+		if err := ctx.RunCommand(cmd); err != nil {
 			return err
 		}
 	}
