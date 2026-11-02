@@ -116,7 +116,7 @@ func assertCompletedBeforeRestart(t *testing.T, records []processRecord, oldRun 
 		if r.run == oldRun && r.state == "complete" {
 			complete[r.depth] = true
 		}
-		if r.run != oldRun && r.state == "ready" {
+		if r.run != oldRun && r.state == "start" {
 			if len(complete) != 3 {
 				t.Fatalf("new run started before parent/child/grandchild completion: %v", records)
 			}
