@@ -8,3 +8,14 @@
 
 - Windows 동작을 확인해야 하면, Windows 환경이 없다고 판단하기 전에 `/Applications/UTM.app/Contents/MacOS/utmctl list`로 UTM VM을 찾는다. VM이 있으면 [UTM Windows VM에서 E2E 실행](e2e/docs/windows-utm.ko.md)을 읽고 `make e2e-windows-all ARGS="-vm=<VM 이름>"`으로 게스트에서 테스트를 실행한다. `./e2e/scenarios` 밖의 패키지를 함께 실행하는 방법과 이 VM으로 대신할 수 없는 Windows 검증도 그 문서에 있다.
 - 심볼릭 링크를 만드는 테스트는 링크를 만들 수 없으면 SKIP한다. Windows 실행 출력에서 해당 테스트가 `--- SKIP` 없이 `--- PASS`인지 확인한다.
+
+# CHANGELOG와 릴리스
+
+- `CHANGELOG.md`는 `versionup` skill로 버전업할 때만 고친다. 기능을 추가하거나 버그를 고치는 커밋에서는 CHANGELOG에 항목을 적지 않고, 버전업할 때 지난 릴리스 tag 이후의 커밋을 모아 새 version 절에 한 번에 쓴다. `## [Unreleased]` 절이 남아 있으면 skill이 그 절을 새 version 절의 초안으로 쓴다.
+- 릴리스할 때는 [릴리스](docs/release.md) 문서를 읽는다.
+
+# 프로젝트 skill
+
+- 프로젝트 skill은 `.claude/skills/<이름>/SKILL.md`에 둔다. 저장소 루트의 `.agents/skills`는 `../.claude/skills`를 가리키는 심볼릭 링크라서, Claude Code와 Codex가 같은 skill을 읽는다.
+- skill 본문에는 특정 에이전트의 도구 이름을 쓰지 않고, 호출 방법은 Claude Code(`/<이름>`)와 Codex(`$<이름>`)를 함께 적는다.
+- 사용자가 직접 불러야 하는 skill은 frontmatter에 `disable-model-invocation: true`를 두고, Codex용으로 skill 폴더의 `agents/openai.yaml`에 `policy.allow_implicit_invocation: false`를 둔다.
