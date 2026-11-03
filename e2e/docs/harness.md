@@ -63,6 +63,16 @@ func TestCreateAnotherFile(t *testing.T) {
 }
 ```
 
+테스트를 작성한 뒤 시나리오 문서를 만들고 시나리오 목록을 갱신합니다.
+
+5. `docs/scenarios/<이름>.md`에 시나리오 문서를 만듭니다. 파일 이름은 테스트 이름에서 `Test`를 뺀 kebab-case입니다(`TestBoundedOverloadCLI` → `bounded-overload-cli.md`). [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md) 문서처럼 제목을 `` `<테스트 이름>`: <확인하는 동작> ``으로 쓰고, 한 문장 요약 뒤에 `확인 내용과 성공 조건`, `설정`, `진행 순서`(Mermaid `sequenceDiagram`), `실행`, `관련 코드` 절을 둡니다. 하위 테스트가 있으면 [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md)처럼 `하위 테스트` 절을 추가합니다. `실행` 절에는 로컬·Linux Docker·UTM Windows VM 명령을, `관련 코드` 절에는 테스트 파일과 사용하는 `harness` 함수를 적습니다.
+6. 이 문서의 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응) 표에 행을 추가하고 시나리오 이름을 새 문서로 연결합니다. [`README.md`](../README.md)의 `세부 문서` 표에 있는 `시나리오별 문서` 행에도 같은 문서 링크를 추가합니다.
+7. 시나리오가 아래 조건에 해당하면 해당 위치의 `-run` 정규식과 시나리오 목록에도 추가합니다.
+   - **경합·과부하 검증**: [경합과 과부하 검증](reliability.md#경합과-과부하-검증)의 두 반복 명령과 그 아래 문서 링크. Windows CI에서 이름으로 따로 실행하지 않는다면 [CI 결과 확인](windows.md#ci-결과-확인)에서 `go test -count=1 -race ./...` 단계의 확인 대상에도 추가합니다.
+   - **유실 알림 검증**: [이벤트 유실 알림 검증](reliability.md#이벤트-유실-알림-검증)의 두 명령과 그 아래 문서 링크.
+   - **Windows CI의 정상 종료 반복**: 저장소 루트의 `.github/workflows/ci.yml`에 있는 `Repeat Windows graceful lifecycle without test cache` 단계, Windows 문서의 [실행 명령](windows.md#실행-명령)·[CI 단계](windows.md#ci-단계)·[CI 결과 확인](windows.md#ci-결과-확인) 절, UTM 문서의 [테스트 선택·반복·시간 제한](windows-utm.md#테스트-선택반복시간-제한)에 있는 첫 번째 예시 명령.
+   - **Windows CI의 알림 프로세스 트리 검증**: 같은 `ci.yml`의 `Verify Windows error notification process trees` 단계, Windows 문서의 [CI 단계](windows.md#ci-단계)·[CI 결과 확인](windows.md#ci-결과-확인) 절.
+
 ## `hookrec` 프로세스 트리와 지연 hook
 
 장시간 프로세스는 `s.Hook("--depth=2")`를 시작·변경 hook에 넣습니다. 부모는 자식, 자식은 손자를 실제로 실행합니다. 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다. 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `AwaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다. 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다. 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다.
