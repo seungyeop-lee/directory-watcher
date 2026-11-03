@@ -290,7 +290,7 @@ func assertLossExit(s *scenario, cause string) {
 		s.t.Fatalf("fatal exit = %v, want status 1\n%s", s.exit, s.log.String())
 	}
 	log := s.log.String()
-	if !strings.Contains(log, s.watch) || !strings.Contains(log, cause) {
+	if !strings.Contains(log, fmt.Sprintf("watch target %q: %s", s.watch, cause)) {
 		s.t.Fatalf("original fatal target/cause missing at default ERROR level: %s", log)
 	}
 	if strings.Contains(log, "event:") {
