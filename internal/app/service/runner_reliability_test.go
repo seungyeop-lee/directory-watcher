@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,9 +32,9 @@ func TestStopDiscardsPendingEvents(t *testing.T) {
 		}
 	}
 	go r.Run()
-	events <- fsnotify.Event{Name: "first", Op: fsnotify.Create}
+	events <- fsnotify.Event{Name: filepath.Join(r.path.String(), "first"), Op: fsnotify.Create}
 	<-entered
-	events <- fsnotify.Event{Name: "queued", Op: fsnotify.Create}
+	events <- fsnotify.Event{Name: filepath.Join(r.path.String(), "queued"), Op: fsnotify.Create}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	stopped := make(chan struct{})
@@ -72,7 +73,7 @@ func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
 	r.runFinishHook = func() {}
 	r.runChangeHook = func(domain.Event) { close(entered); <-release }
 	go func() { r.Run(); close(done) }()
-	events <- fsnotify.Event{Name: "first", Op: fsnotify.Create}
+	events <- fsnotify.Event{Name: filepath.Join(r.path.String(), "first"), Op: fsnotify.Create}
 	<-entered
 	watchErrors <- fsnotify.ErrEventOverflow
 	select {
@@ -137,12 +138,12 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 	r.runChangeHook = func(domain.Event) { close(entered); <-release }
 	baseline := runtime.NumGoroutine()
 	go func() { result <- r.Run() }()
-	events <- fsnotify.Event{Name: "first", Op: fsnotify.Create}
+	events <- fsnotify.Event{Name: filepath.Join(r.path.String(), "first"), Op: fsnotify.Create}
 	<-entered
 	started := time.Now()
 	peak := runtime.NumGoroutine()
 	for n := range dispatchCapacity + 1 {
-		events <- fsnotify.Event{Name: fmt.Sprint(n), Op: fsnotify.Create}
+		events <- fsnotify.Event{Name: filepath.Join(r.path.String(), fmt.Sprint(n)), Op: fsnotify.Create}
 		if current := runtime.NumGoroutine(); current > peak {
 			peak = current
 		}

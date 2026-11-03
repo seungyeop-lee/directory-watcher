@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -67,8 +68,8 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 		target.watchErrors = sources[n]
 	}
 	go r.Run()
-	for _, stream := range events {
-		stream <- fsnotify.Event{Name: "first", Op: fsnotify.Create}
+	for n, stream := range events {
+		stream <- fsnotify.Event{Name: filepath.Join(r.watchTargets[n].path.String(), "first"), Op: fsnotify.Create}
 	}
 	for range 2 {
 		select {
@@ -78,7 +79,7 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 		}
 	}
 	for n, stream := range events {
-		stream <- fsnotify.Event{Name: "queued", Op: fsnotify.Create}
+		stream <- fsnotify.Event{Name: filepath.Join(r.watchTargets[n].path.String(), "queued"), Op: fsnotify.Create}
 		sources[n] <- fsnotify.ErrEventOverflow
 	}
 	first := <-r.Errors()

@@ -17,7 +17,8 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 	cases := []struct {
 		name       string
 		dirs       []string // 감시 대상 안에 만들 폴더
-		link       string   // 감시 대상 밖 폴더를 가리키는 링크의 이름
+		absLink    string   // 감시 대상 밖 폴더를 절대 경로로 가리키는 링크의 이름
+		relLink    string   // 감시 대상 밖 폴더를 상대 경로로 가리키는 링크의 이름
 		excludeDir []string
 		probe      string // 내용을 쓸 파일
 		want       bool   // probe의 변경으로 hook이 실행되어야 하는지
@@ -27,7 +28,9 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 		{name: "default-excluded nested folder", dirs: []string{"plain/_tmp"}, probe: "plain/_tmp/a.txt", want: false},
 		{name: "excludeDir sibling with same prefix", dirs: []string{"dir1", "dir10"}, excludeDir: []string{"dir1"}, probe: "dir10/a.txt", want: true},
 		{name: "excludeDir subfolder", dirs: []string{"parent/sub/deep"}, excludeDir: []string{"parent/sub"}, probe: "parent/sub/deep/a.txt", want: false},
-		{name: "symlink to folder", link: "link", probe: "link/a.txt", want: false},
+		{name: "absolute symlink to folder", absLink: "link", probe: "link/a.txt", want: false},
+		{name: "relative symlink to folder", relLink: "link", probe: "link/a.txt", want: false},
+		{name: "absolute and relative symlinks to folder", absLink: "abs", relLink: "rel", probe: "abs/a.txt", want: false},
 	}
 	timings := []struct {
 		name string
@@ -55,11 +58,22 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					if tc.link != "" {
-						if err := os.Symlink(outside, filepath.Join(root, tc.link)); err != nil {
+					for _, link := range []struct{ name, dest string }{
+						{tc.absLink, outside},
+						{tc.relLink, filepath.Join("..", "outside")},
+					} {
+						if link.name == "" {
+							continue
+						}
+						if err := os.Symlink(link.dest, filepath.Join(root, link.name)); err != nil {
 							t.Skipf("symlink not available: %v", err)
 						}
 					}
+				}
+				if tc.relLink != "" {
+					// fsnotify의 kqueue 구현(macOS)은 상대 경로 링크를 작업 디렉터리 기준으로 풀어, 그 위치에
+					// 폴더가 있을 때만 따라간다. 링크가 가리키는 폴더와 같은 폴더로 풀리도록 작업 디렉터리를 옮긴다.
+					chdir(t, target)
 				}
 				if timing.start {
 					build(target)
@@ -107,15 +121,13 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 					for !seen[rel] {
 						select {
 						case got := <-changed:
-							gotRel, err := filepath.Rel(target, got.String())
+							gotAbs, err := filepath.Abs(got.String())
 							if err != nil {
 								t.Fatal(err)
 							}
-							// fsnotify의 kqueue 구현(macOS)은 감시 목록과 관계없이 감시 중인 폴더 안의 링크를
-							// 스스로 따라가, 링크가 가리키는 감시 대상 밖 경로로 이벤트를 알린다. 이 이벤트는
-							// 감시 목록 규칙의 결과가 아니므로 비교에서 뺀다.
-							if gotRel == ".." || strings.HasPrefix(gotRel, ".."+string(filepath.Separator)) {
-								continue
+							gotRel, err := filepath.Rel(target, gotAbs)
+							if got == "" || err != nil || gotRel == ".." || strings.HasPrefix(gotRel, ".."+string(filepath.Separator)) {
+								t.Fatalf("event outside the watch target ran the hook: %q", got)
 							}
 							seen[filepath.ToSlash(gotRel)] = true
 						case err := <-result:

@@ -131,6 +131,12 @@ func (r *watchTargetRunner) Run() error {
 				return &FatalError{Path: r.path, Cause: errors.New("watcher event channel closed unexpectedly")}
 			}
 			r.printEventLog(ev)
+			// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
+			// 대상 밖 경로나 빈 경로로 이벤트를 알린다. 폴더 링크는 따라가지 않으므로 hook 실행과 감시 목록
+			// 반영 전에 버린다.
+			if ev.Name == "" || !domain.Path(r.watchRoot).Contains(domain.Path(ev.Name)) {
+				continue
+			}
 			if ev.Op.Has(fsnotify.Create) {
 				if domain.Path(ev.Name).IsDefaultExcludeFile() {
 					continue

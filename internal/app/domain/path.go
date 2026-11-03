@@ -45,10 +45,12 @@ func (p Path) IsSubDir(input Path) bool {
 		return false
 	}
 
-	return p.isSubDirLogical(input)
+	return p.Contains(input)
 }
 
-func (p Path) isSubDirLogical(input Path) bool {
+// Contains는 input이 p와 같거나 p 아래에 있는지를 디스크를 보지 않고 경로만으로 판단한다.
+// 상대 경로와 빈 경로는 작업 디렉터리 기준으로 푼다.
+func (p Path) Contains(input Path) bool {
 	_, ok := p.relOf(input)
 	return ok
 }

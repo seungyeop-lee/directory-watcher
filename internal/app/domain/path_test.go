@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestPath_IsSubDirLogical(t *testing.T) {
+func TestPath_Contains(t *testing.T) {
 	type args struct {
 		input Path
 	}
@@ -66,8 +66,8 @@ func TestPath_IsSubDirLogical(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.p.isSubDirLogical(tt.args.input); got != tt.want {
-				t.Errorf("IsSubDir() = %v, want %v", got, tt.want)
+			if got := tt.p.Contains(tt.args.input); got != tt.want {
+				t.Errorf("Contains() = %v, want %v", got, tt.want)
 			}
 		})
 	}
