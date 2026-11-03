@@ -23,7 +23,8 @@ rund: example-watch-dirs
 smoke-example: example-watch-dirs
 	sh scripts/smoke-example.sh $(EXAMPLE_WATCH_DIRS)
 
-# goreleaser는 publish를 건너뛰어도 scoops의 private_key 템플릿을 적용하므로, 비밀값이 없는 로컬에서는 빈 값을 넘긴다.
+# goreleaser는 publish를 건너뛰어도 homebrew_casks와 scoops의 private_key 템플릿을 적용하므로, 비밀값이 없는 로컬에서는 빈 값을 넘긴다.
+release-test-snapshot release-test: export TAP_SSH_KEY ?=
 release-test-snapshot release-test: export SCOOP_BUCKET_SSH_KEY ?=
 
 .PHONY: release-test-snapshot

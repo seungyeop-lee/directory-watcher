@@ -46,5 +46,5 @@ jobs:
           args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAP_SSH_KEY: ${{ secrets.TAP_SSH_KEY }}
           SCOOP_BUCKET_SSH_KEY: ${{ secrets.SCOOP_BUCKET_SSH_KEY }}

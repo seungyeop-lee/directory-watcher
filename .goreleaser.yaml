@@ -38,11 +38,16 @@ snapshot:
 # 릴리스 노트는 tag workflow가 CHANGELOG.md의 version 절을 --release-notes로 넘긴다.
 # changelog.disable을 켜면 --release-notes 파일도 읽지 않으므로 changelog 설정은 두지 않는다.
 
+# homebrew-tap과 scoop-bucket에는 각 저장소에만 쓰기 권한이 있는 SSH deploy key로 push한다.
+# GitHub는 deploy key 하나를 여러 저장소에 등록할 수 없으므로 저장소마다 키가 따로 있고,
+# 개인키는 tag workflow가 저장소 비밀값 TAP_SSH_KEY와 SCOOP_BUCKET_SSH_KEY에서 넘긴다.
 homebrew_casks:
   - repository:
       owner: seungyeop-lee
       name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+      git:
+        url: "git@github.com:seungyeop-lee/homebrew-tap.git"
+        private_key: "{{ .Env.TAP_SSH_KEY }}"
     homepage: "https://github.com/seungyeop-lee/directory-watcher"
     description: "Watch directories and run commands when files change"
     hooks:
@@ -53,8 +58,6 @@ homebrew_casks:
             run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/directory-watcher"]
           end
 
-# scoop-bucket에는 TAP_GITHUB_TOKEN이 아니라, 그 저장소에만 쓰기 권한이 있는 SSH deploy key로 push한다.
-# 개인키는 tag workflow가 저장소 비밀값 SCOOP_BUCKET_SSH_KEY에서 넘긴다.
 scoops:
   - repository:
       owner: seungyeop-lee
