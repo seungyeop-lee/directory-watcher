@@ -22,7 +22,7 @@ func newMockLogger() helper.Logger {
 	return &mockLogger{}
 }
 
-// newTestEvent는 테스트용으로 단순화한 NewEvent다.
+// newTestEvent는 domain.NewEventByFsnotify와 같은 Event를 만들되, fsnotify.Event 대신 경로와 연산을 따로 받는다.
 func newTestEvent(path domain.Path, op fsnotify.Op) domain.Event {
 	return domain.Event{
 		Path:      path,
