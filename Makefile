@@ -27,13 +27,27 @@ release-test-snapshot:
 release-test:
 	goreleaser release --skip publish --clean
 
-DOCKER_VERSION ?= latest
+# rund-docker는 지금 코드로 이미지를 빌드해 실행한다. 빌드 컨텍스트에는 goreleaser처럼
+# Docker가 실행되는 아키텍처의 linux 바이너리와 entrypoint.sh만 담는다.
+RUND_DOCKER_CONTEXT := dist/rund-docker
+RUND_DOCKER_IMAGE := directory-watcher:rund-docker
+# config.example.yml 훅의 dir 목록. 이미지는 작업 폴더가 /라서 상대 경로 dir이 /<dir>로 풀리므로,
+# 각 폴더를 /<dir>에 마운트해 로컬 실행과 같은 폴더에서 훅이 돌게 한다.
+# 목록은 `- dir: "..."` 줄에서 읽는다(큰따옴표, 같은 줄 주석 없음).
+EXAMPLE_HOOK_DIRS := $(sort $(shell sed -n 's/^ *- dir: "\(.*\)"/\1/p' config.example.yml))
+
 .PHONY: rund-docker
 rund-docker: example-watch-dirs
+	mkdir -p $(RUND_DOCKER_CONTEXT)
+	CGO_ENABLED=0 GOOS=linux GOARCH=$$(docker version --format '{{.Server.Arch}}') \
+	go build -o $(RUND_DOCKER_CONTEXT)/directory-watcher .
+	cp entrypoint.sh $(RUND_DOCKER_CONTEXT)/
+	docker build -f Dockerfile -t $(RUND_DOCKER_IMAGE) $(RUND_DOCKER_CONTEXT)
 	docker run --rm \
 	-v $(PWD)/config.example.yml:/config.yml \
 	-v $(PWD)/test:/test \
-	ghcr.io/seungyeop-lee/directory-watcher:$(DOCKER_VERSION) -c /config.yml -l DEBUG
+	$(foreach dir,$(EXAMPLE_HOOK_DIRS),-v $(PWD)/$(dir):/$(dir)) \
+	$(RUND_DOCKER_IMAGE) -c /config.yml -l DEBUG
 
 .PHONY: e2e-local
 e2e-local:
