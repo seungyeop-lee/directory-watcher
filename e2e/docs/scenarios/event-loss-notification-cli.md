@@ -14,7 +14,7 @@ Every mode checks the following.
 - The default ERROR-level log contains `watch target "<watch folder>": dispatch queue full (capacity 256): fsnotify: queue or buffer overflow` and `possible event loss`, and contains no `event:` lines from the DEBUG log.
 - There are none of the normal hook records `CHANGE`, `OTHER:CHANGE`, `BEFORE`, and `START`. `START` is a 30-second delayed start hook, so it must be cancelled before it completes, and the change hook of the other target must not be admitted after the fatal error either.
 - Each of the finish hook records `TARGET:FINISH`, `OTHER:FINISH`, and `GLOBAL:FINISH` appears exactly once.
-- The delayed start hook process and the recorded notification processes are each gone within 5 seconds.
+- The delayed start hook process and the recorded notification processes are each gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 
 In the modes that run the notification (`success`, `failure`, `timeout`, `success-tree`), there is exactly one `ERROR|<JSON>` notification record, and the JSON must contain only the 6 entries below.
 
@@ -49,7 +49,7 @@ In `failure`, `timeout`, and `success-tree`, the notification creates a real par
 - Right after the absence of the delayed start hook is confirmed, a check with no extra wait must find every process of the notification tree already gone. Processes removed by the forced termination in the test cleanup step do not count as a successful cleanup by the product.
 - Every process of the protected tree must be alive.
 
-Liveness records are left in `notification-before.log` and `notification-after.log` in the run folder, and in `protected-before.log` and `protected-after.log` in the protected tree's run folder. Each file holds the time of recording and, for each process, the generation, depth, PID, and whether it is alive. On Windows, it also holds the creation time queried through the process handle opened when each PID was first checked, and any errors from opening, querying, or waiting on the handle. The run folder is kept only on failure or with `DW_E2E_KEEP=1`.
+Liveness records are left in `notification-before.log` and `notification-after.log` in the run folder, and in `protected-before.log` and `protected-after.log` in the protected tree's run folder. Each file holds the time of recording and, for each process, the generation, depth, PID, and whether it is alive. On Windows, it also holds the creation time and program queried through the process handle opened when each PID was first checked, the program that holds the PID now, and any errors from opening, querying, or waiting on the handle. The run folder is kept only on failure or with `DW_E2E_KEEP=1`.
 
 ## Configuration
 

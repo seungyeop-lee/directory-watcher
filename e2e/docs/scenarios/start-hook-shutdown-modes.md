@@ -9,7 +9,7 @@ While the start hook runs a real parent, child, and grandchild process tree, a c
 - The start hook's generation becomes ready, and its processes are alive.
 - With `interruptible: true`, the change event replaces the start hook and a second generation becomes ready.
 - Right before shutdown, the processes of the last recorded generation, that is the running generation, are alive.
-- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`, and every recorded process is gone within 5 seconds.
+- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`, and every recorded process is gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 - With `interruptible: false`, there must be no parent (depth 2) `start` record other than the first generation. The start hook does not finish until it receives the shutdown signal, and shutdown discards pending changes, so the change hook must never run.
 
 ## Configuration

@@ -16,10 +16,11 @@
 | `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 시나리오가 소유하는 `processObserver` |
 | `harness/hook_records_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
 | `harness/cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증. 같은 `Run`을 거치는 하네스 패키지의 `TestMain` 포함 |
+| `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 이미 쓰고 있는 기록된 PID를 사라진 것으로 보는지, 기록된 hook이 실행 중이면 지연 hook 부재 대기가 여전히 실패하는지 검증 |
 | `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램 |
 | `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
 
-바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다. 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다. Windows의 `processObserver`는 기록된 PID를 처음 관찰할 때 연 handle을 해당 시나리오의 정리가 끝날 때까지 유지하고, 강제 정리는 그 시나리오의 기록에 있는 `hookrec` handle만 종료합니다. 따라서 다른 시나리오나 다른 워크트리의 보호 트리는 정리 대상이 아닙니다.
+바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다. 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다. Windows의 `processObserver`는 기록된 PID를 처음 관찰할 때 연 handle을 해당 시나리오의 정리가 끝날 때까지 유지하고, 강제 정리는 그 시나리오의 기록에 있는 `hookrec` handle만 종료합니다. 기록된 프로세스는 모두 `hookrec`이므로, 처음 관찰할 때 이미 이번 실행의 `hookrec`이 아닌 프로그램이 그 PID를 쓰고 있으면 기록된 프로세스는 끝났고 PID가 재사용된 것으로 보고 사라졌다고 판정합니다. 프로그램을 확인하지 못하면 handle을 유지하고 그 handle로 생존을 판정합니다. 따라서 다른 시나리오나 다른 워크트리의 보호 트리는 정리 대상이 아닙니다.
 
 ## 시나리오와 지원 코드의 대응
 
@@ -34,6 +35,8 @@
 | [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md) | `scenarios/error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `Launch`, `StartProcess`, `DelayedHookBegun`, `AwaitReadyGenerations`, `SnapshotProcesses`, `ProcessesGone`, `Alive`, `AwaitDelayedHooksGone` |
 | [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.ko.md) | `scenarios/error_notification_test.go` | 일반 변경·debounce에서 알림 미실행 | `AwaitChangesComplete`, `AwaitLine` |
 | `TestCleanupReportsLockedResources` | `harness/cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |
+| `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram` | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 쓰는 기록된 PID의 부재 판정 | `NewScenario`, `AwaitDelayedHooksGone` |
+| `TestDelayedHooksGoneFailsWhileHookRuns` | `harness/process_observer_windows_test.go` | Windows에서 실행 중인 기록된 hook이 있을 때 지연 hook 부재 대기의 실패 | `NewScenario`, `Await`, `DelayedHookBegun`, `AwaitDelayedHooksGone` |
 
 시나리오 이름의 링크는 확인 내용과 성공 조건, 진행 순서 다이어그램, 하위 테스트, 실행 명령을 설명하는 시나리오 문서로 이어집니다. 여러 시나리오에 걸친 수신 경계 판정과 유실 검증의 한계는 [경합·과부하·유실 검증](reliability.ko.md)에, Windows 시나리오의 실행과 CI 확인은 [Windows E2E 실행과 CI 결과 확인](windows.ko.md)에 있습니다.
 

@@ -14,7 +14,7 @@
 - 기본 ERROR 수준 로그에 `watch target "<감시 폴더>": dispatch queue full (capacity 256): fsnotify: queue or buffer overflow`와 `possible event loss`가 있고, DEBUG 로그의 `event:` 줄은 없습니다.
 - 일반 hook 기록 `CHANGE`, `OTHER:CHANGE`, `BEFORE`, `START`가 하나도 없습니다. `START`는 30초 지연 시작 hook이므로 완료 전에 취소되어야 하고, 다른 대상의 변경 hook도 치명적 오류 뒤에는 승인되지 않아야 합니다.
 - 종료 hook 기록 `TARGET:FINISH`, `OTHER:FINISH`, `GLOBAL:FINISH`가 각각 정확히 한 번 있습니다.
-- 지연 시작 hook 프로세스와 기록된 알림 프로세스가 각각 5초 안에 사라집니다.
+- 지연 시작 hook 프로세스와 기록된 알림 프로세스가 각각 5초 안에 사라집니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
 
 알림을 실행하는 모드(`success`, `failure`, `timeout`, `success-tree`)에서는 `ERROR|<JSON>` 알림 기록이 정확히 한 개이고, JSON에 아래 6개 항목만 있어야 합니다.
 
@@ -49,7 +49,7 @@
 - 지연 시작 hook의 부재를 확인한 직후, 추가 대기 없이 확인했을 때 알림 트리의 모든 프로세스가 이미 사라져 있어야 합니다. 테스트 정리 단계의 강제 종료로 사라진 것은 제품의 정리 성공으로 세지 않습니다.
 - 보호 트리의 프로세스는 모두 살아 있어야 합니다.
 
-생존 기록은 실행 폴더의 `notification-before.log`·`notification-after.log`와 보호 트리 실행 폴더의 `protected-before.log`·`protected-after.log`에 남습니다. 각 파일에는 기록 시각과 프로세스마다 세대·깊이·PID·생존 여부가 남고, Windows에서는 각 PID를 처음 확인할 때 연 프로세스 handle로 조회한 생성 시각과 handle 열기·조회·대기 오류도 함께 남습니다. 실패하거나 `DW_E2E_KEEP=1`일 때만 실행 폴더가 보존됩니다.
+생존 기록은 실행 폴더의 `notification-before.log`·`notification-after.log`와 보호 트리 실행 폴더의 `protected-before.log`·`protected-after.log`에 남습니다. 각 파일에는 기록 시각과 프로세스마다 세대·깊이·PID·생존 여부가 남고, Windows에서는 각 PID를 처음 확인할 때 연 프로세스 handle로 조회한 생성 시각과 프로그램, 지금 그 PID를 쓰는 프로그램, handle 열기·조회·대기 오류도 함께 남습니다. 실패하거나 `DW_E2E_KEEP=1`일 때만 실행 폴더가 보존됩니다.
 
 ## 설정
 

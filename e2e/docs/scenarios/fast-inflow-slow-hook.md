@@ -10,7 +10,7 @@ While a change hook that takes 80ms is running, file changes pour in at 10ms int
 - **Sequential processing without interruption**: With `noWait=true/interruptible=false`, the number of `DONE:` records must equal the number of valid events received, and each of `00.txt`–`23.txt` must have at least one `DONE:` record. The baseline is the observed number of receipts, not the number of file operations.
 - **Isolated change**: The `DONE:` record for `last.txt`, written after the batch settles, must appear. This wait and the batch completion wait share one 30-second limit.
 - **Excluded files**: Records up to shutdown must contain no line with `excluded.swp` or `readiness.probe`.
-- **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be no `BEGIN|` record after the last `FINISH` record. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds.
+- **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be no `BEGIN|` record after the last `FINISH` record. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 
 ## Configuration
 

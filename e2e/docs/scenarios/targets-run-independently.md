@@ -8,7 +8,7 @@ While a hook of one watch target runs for 800ms, checks that a hook of another w
 
 - After the slow target's hook records `BEGIN`, creating a file in the other target makes the other target's `FAST` record appear within 500ms.
 - When `FAST` appears, there must be no `SLOW` record yet. If `SLOW` is already there, the fast target is considered to have waited for the slow target, and the test fails.
-- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and the slow hook process is gone within 5 seconds.
+- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and the slow hook process is gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 
 ## Configuration
 

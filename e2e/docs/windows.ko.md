@@ -32,7 +32,7 @@ GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)
 
 ## 실패 분석
 
-Windows 실패 시 먼저 `records.log.processes`의 **정리 전** 세대·깊이·PID·생존·생성 시각·프로세스 접근 오류와 `records.log`의 마지막 `signal`·`complete`를 비교합니다. `cleanup.log`는 **정리 후** 상태이며 정상 종료 판정을 대신하지 않습니다. `GenerateConsoleCtrlEvent`·`AllocConsole` 오류는 콘솔 연결과 동일 콘솔의 프로세스 그룹을 확인합니다. 접근 거부·대기 API 오류는 생존으로 취급하여 실패시키며, PID 재사용 혼동을 막기 위해 준비 시 연 프로세스 handle을 정리 후까지 유지합니다. 실패 정리는 기록된 해당 실행의 보조 바이너리 handle만 종료하며, watcher가 아직 살아 있으면 해당 watcher의 트리에만 `TASKKILL /T /F`를 적용합니다.
+Windows 실패 시 먼저 **정리 전**에 기록한 `records.log.processes`와 `records.log`의 마지막 `signal`·`complete`를 비교합니다. 이 파일에는 프로세스 트리의 프로세스(`run=`, 세대·깊이 포함)와 지연 hook(`delayed=`, 기록 포함)마다 한 줄씩, PID·생존·처음 관찰한 시각·생성 시각·프로세스 접근 오류·대기 결과와 함께 처음 관찰할 때 연 handle의 프로그램(`held-image`)과 지금 그 PID를 쓰는 프로그램(`current-image`)이 남습니다. `cleanup.log`는 **정리 후** 상태이며 정상 종료 판정을 대신하지 않습니다. `GenerateConsoleCtrlEvent`·`AllocConsole` 오류는 콘솔 연결과 동일 콘솔의 프로세스 그룹을 확인합니다. 접근 거부·대기 API 오류는 생존으로 취급하여 실패시킵니다. PID 재사용 혼동을 막기 위해 처음 관찰할 때 연 프로세스 handle을 정리 후까지 유지하며, 그때 이미 `hookrec`이 아닌 프로그램이 쓰고 있던 PID는 `open-error=PID reused by another program: <프로그램 경로>`로 남기고 사라진 것으로 판정합니다. 실패 정리는 기록된 해당 실행의 보조 바이너리 handle만 종료하며, watcher가 아직 살아 있으면 해당 watcher의 트리에만 `TASKKILL /T /F`를 적용합니다.
 
 정리 경로를 일부러 검사하려면 아래 명령을 실행합니다.
 

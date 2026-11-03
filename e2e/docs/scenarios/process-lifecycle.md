@@ -11,7 +11,7 @@ In interruptible mode (`interruptible: true`), when a hook made of real parent, 
 - The first `start` of another generation is recorded only after the depth 0, 1, and 2 processes of the first generation have all recorded `complete`. All first-generation processes are gone within 5 seconds.
 - The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`.
 - The last two lines of `records.log` are `TARGET:onFinishWatch` and `GLOBAL:onFinishWatch`, in that order. Process records go to the same file, so this condition means the finish hooks ran after the current generation's `complete`.
-- The processes of every generation are gone within 5 seconds. This absence check happens in the test body, so it comes before the forced termination in the scenario cleanup step.
+- The processes of every generation are gone within 5 seconds. This absence check happens in the test body, so it comes before the forced termination in the scenario cleanup step. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 
 ## Configuration
 

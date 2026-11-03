@@ -8,7 +8,7 @@ While the start hook is running and the change hook therefore cannot run, the te
 
 - After 300 files are created, the watcher must exit on its own within 10 seconds, and the exit result must be an error. A graceful exit (exit code 0) is a failure.
 - The watcher log must contain `dispatch queue full (capacity 256)` together with the quoted watch folder path.
-- The parent, child, and grandchild processes of the start hook must all be gone within 5 seconds. This scenario does not check graceful completion judged by `complete` after `signal`.
+- The parent, child, and grandchild processes of the start hook must all be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)). This scenario does not check graceful completion judged by `complete` after `signal`.
 
 This saturation is a saturation of the application queue. How it differs from an OS overflow is in [Kinds of loss verification](../reliability.md#kinds-of-loss-verification).
 
