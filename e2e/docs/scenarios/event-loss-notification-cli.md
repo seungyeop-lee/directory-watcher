@@ -36,7 +36,7 @@
 | `timeout` | 구조화 `dir`, 문자열 `cmd` | 부모·자식·손자가 신호를 받을 때까지 실행 | 작업 디렉터리는 `notification-workdir`, 로그에 `onError notification failed`, 소요 시간 5초 이상 27초 이하, `NOTIFY` 0회 |
 | `success-tree` | 구조화 `dir`, 목록 `cmd` | 부모·자식·손자 준비 뒤 해제 파일을 보면 부모만 exit 0 | 작업 디렉터리는 `notification-workdir`, 로그에 `onError notification failed` 없음 |
 
-`absent`·`missing-command`를 뺀 모드의 알림 명령은 `hookrec --error-context --line=NOTIFY`입니다. `failure`·`success-tree`는 `--depth=2 --release-file=<실행 폴더>/release-notification`을, `failure`는 `--exit-code=7`을, `timeout`은 `--depth=2`를 더합니다. 소요 시간은 생성 시작부터 잽니다.
+`absent`를 뺀 모드는 `onError`에 항목 하나짜리 명령 목록을 설정하며, 표의 설정 형식은 그 항목의 형식입니다. `absent`·`missing-command`를 뺀 모드의 알림 명령은 `hookrec --error-context --line=NOTIFY`입니다. `failure`·`success-tree`는 `--depth=2 --release-file=<실행 폴더>/release-notification`을, `failure`는 `--exit-code=7`을, `timeout`은 `--depth=2`를 더합니다. 소요 시간은 생성 시작부터 잽니다.
 
 ### 트리 모드의 추가 확인
 
@@ -47,7 +47,7 @@
 - 지연 시작 hook의 부재를 확인한 직후, 추가 대기 없이 확인했을 때 알림 트리의 모든 프로세스가 이미 사라져 있어야 합니다. 테스트 정리 단계의 강제 종료로 사라진 것은 제품의 정리 성공으로 세지 않습니다.
 - 보호 트리의 프로세스는 모두 살아 있어야 합니다.
 
-생존 기록은 실행 폴더의 `notification-before.log`·`notification-after.log`와 보호 트리 실행 폴더의 `protected-before.log`·`protected-after.log`에 남습니다. 실패하거나 `DW_E2E_KEEP=1`일 때만 실행 폴더가 보존됩니다.
+생존 기록은 실행 폴더의 `notification-before.log`·`notification-after.log`와 보호 트리 실행 폴더의 `protected-before.log`·`protected-after.log`에 남습니다. 각 파일에는 기록 시각과 프로세스마다 세대·깊이·PID·생존 여부가 남고, Windows에서는 각 PID를 처음 확인할 때 연 프로세스 handle로 조회한 생성 시각과 handle 열기·조회·대기 오류도 함께 남습니다. 실패하거나 `DW_E2E_KEEP=1`일 때만 실행 폴더가 보존됩니다.
 
 ## 설정
 

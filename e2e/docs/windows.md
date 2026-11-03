@@ -10,7 +10,7 @@ go test -count=3 -v -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|Test
 if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 ```
 
-`TestGoldenPath`는 대상·전역 `onFinishWatch`의 순서와 watcher 종료 코드 0을 검사합니다. `TestProcessLifecycle`는 실제 세 프로세스의 준비·생존을 확인한 뒤 파일을 생성하고, 이전 세대 전체의 `signal`·`complete`가 새 세대의 `start`보다 앞서는지 검사합니다. watcher 종료 때 현재 세대도 정상 완료해야 하며, 두 종료 hook은 마지막에 기록되어야 합니다. 이전 세대와 전체 세대의 PID 부재는 강제 정리 전에 검사합니다. `TestStartHookShutdownModes`는 `noWait`·`interruptible` 네 조합을 같은 보조 프로세스로 검사합니다.
+각 테스트가 확인하는 내용은 [`TestGoldenPath`](scenarios/golden-path.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) 문서에 있습니다.
 
 ## 정상 종료 방식
 
@@ -20,9 +20,9 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 `.github/workflows/ci.yml`의 `test (windows-latest)`는 `go test -count=1 -race ./...` 뒤 오류 알림 프로세스 검증과 위 세 테스트의 `-count=3` 반복을 실행합니다. 이어 `DW_E2E_FAULT=failure`, `timeout`의 의도적인 실패·시간 초과, 진단 파일과 세 PID 정리를 검사하고 별도로 실행한 Go 부모·자식·손자 트리가 살아 있는지 확인합니다. Windows 전용 단계는 앞 단계가 실패해도 job이 취소되지 않았다면 실행합니다. 앞 단계의 실패는 그대로 남아 최종 job도 실패하며, 진단 업로드 단계는 항상 실행됩니다. Go 빌드 캐시와 별개로 테스트 **결과 캐시는 재사용하지 않습니다**.
 
-`Verify Windows error notification process trees`는 `TestEventLossNotificationCLI`를 실행합니다. `failure`는 준비된 부모를 exit 7로, `success-tree`는 exit 0으로 먼저 종료시키고 자식·손자를 남깁니다. 두 모드는 테스트가 세 PID의 생존과 handle을 확인한 뒤 부모 종료를 허용합니다. `timeout`은 준비된 트리에 5초 알림 제한을 적용합니다. `notification-before.log`와 `notification-after.log`에는 시간·PID·생존·handle 조회 결과가, 별도 실행의 `protected-before.log`·`protected-after.log`에는 보호 트리의 생존이 기록됩니다. `notification.log`는 알림 1회·최초 오류·소요 시간의 검사 결과를 담고, 실행별 `watcher.log`는 실제 오류 진단을 보존합니다. 문자열 명령 항목, 구조화 `dir`/문자열 `cmd`, 구조화 `dir`/목록 `cmd`를 같은 알림 경로로 실행합니다. 최상위 `onError` 자체는 명령 목록이어야 합니다.
+`Verify Windows error notification process trees` 단계는 `TestEventLossNotificationCLI`를 실행하고 테스트 출력을 `notification.log`에 저장합니다. `notification.log`에는 알림 1회·최초 오류·소요 시간의 검사 결과가 남고, 이 단계는 `DW_E2E_KEEP=1`로 실행 폴더를 보존하므로 실행별 `watcher.log`에 실제 오류 진단이 남습니다. 모드별 확인 내용과 실행 폴더에 남는 생존 기록 파일은 [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) 문서에 있습니다.
 
-Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 검증은 CLI 종료 직후 자손 부재를 검사하며 테스트 자체의 rescue 정리 결과를 제품의 정리 성공으로 세지 않습니다.
+Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 이 정리를 검사하는 조건은 [트리 모드의 추가 확인](scenarios/event-loss-notification-cli.md#트리-모드의-추가-확인)에 있습니다.
 
 ## CI 결과 확인
 
