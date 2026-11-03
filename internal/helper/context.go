@@ -37,13 +37,19 @@ func (w *WatcherContext) Cancel()                  { w.cancel() }
 func (w *WatcherContext) Context() context.Context { return w.ctx }
 
 func (w *WatcherContext) RunCommand(cmd *exec.Cmd) error {
+	markStarted := holdEarlyCancel(cmd)
 	if !w.cleanupTree {
-		return cmd.Run()
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		markStarted()
+		return cmd.Wait()
 	}
 	tree, err := startProcessTree(cmd)
 	if err != nil {
 		return err
 	}
+	markStarted()
 	err = cmd.Wait()
 	deadline := time.Now().Add(20 * time.Second)
 	if limit, ok := w.ctx.Deadline(); ok && limit.Add(20*time.Second).Before(deadline) {

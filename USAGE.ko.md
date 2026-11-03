@@ -202,6 +202,7 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
 - 중단 모드는 이전 세대를 취소하고 완료를 기다린 뒤 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리기를 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
 - Windows에서 watcher는 실행 중인 명령을 멈출 때 그 명령의 프로세스 그룹에 CTRL+BREAK를 보냅니다. Windows E2E(UTM VM의 Windows 11 ARM64, 2026-11-03 실행)는 Git Bash 없이 watcher를 실행해, `interruptible: true`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 그 그룹에 남아 신호를 받고 끝나는 경우 모두 종료되는 것을 확인합니다([`TestProcessLifecycle`](e2e/docs/scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](e2e/docs/scenarios/start-hook-shutdown-modes.ko.md)). 자기만의 콘솔이나 프로세스 그룹을 만들거나 신호를 무시하는 자손 프로세스는 계속 실행될 수 있습니다.
+- Windows에서 명령이 시작된 지 100ms가 지나기 전에 취소되면, watcher는 시작 후 100ms가 될 때까지 기다렸다가 CTRL+BREAK를 보냅니다. Go 런타임이 시작되는 중에 CTRL+BREAK를 받은 Go 프로그램은 신호를 처리하지 못하고 종료 코드 0xC0000005로 끝나기 때문에, 명령이 시작된 직후의 교체와 종료는 최대 100ms 늦어집니다. 100ms는 명령을 실행하는 셸이 시작된 때부터 세므로, 셸이 시작되고 100ms가 지난 뒤에 셸이 시작하는 Go 프로그램은 이 대기로 보호되지 않습니다.
 - 경로 판별 중 연 파일은 디렉터리 정보 조회 실패를 포함해 함수가 반환하기 전에 닫습니다. 이 handle의 반납은 가비지 컬렉션에 의존하지 않습니다.
 - 파일 조작과 OS 알림은 일대일이 아닙니다. fsnotify v1.7.0의 inotify는 `ErrEventOverflow`를 보고하지만 macOS kqueue는 이 오류를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. [E2E 시나리오와 한계](e2e/docs/reliability.ko.md#경합과-과부하-검증)를 확인하세요.
 

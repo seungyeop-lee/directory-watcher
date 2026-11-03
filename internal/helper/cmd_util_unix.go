@@ -28,6 +28,9 @@ func terminateProcess(cmd *exec.Cmd) error {
 	return nil
 }
 
+// holdEarlyCancel은 Unix에서 cmd.Cancel을 그대로 둔다. 시작 직후에도 SIGTERM을 바로 보낸다.
+func holdEarlyCancel(*exec.Cmd) (markStarted func()) { return func() {} }
+
 type processTree struct{}
 
 func startProcessTree(cmd *exec.Cmd) (processTree, error) {

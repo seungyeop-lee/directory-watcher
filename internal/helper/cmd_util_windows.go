@@ -6,12 +6,43 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+// minRunBeforeBreak는 hook 프로세스가 시작된 뒤 CTRL+BREAK를 보내기까지 기다리는 최소 시간이다.
+// Go 런타임은 콘솔 제어 처리기를 등록한 뒤 그 처리기가 쓸 스레드를 준비하는데, 그 사이에 CTRL+BREAK를
+// 받은 Go 프로그램은 0xC0000005로 끝난다. UTM의 Windows 11 ARM64 VM에서 cmd.exe로 Go 프로그램을 시작해
+// 재어 보니, 충돌은 cmd.exe가 시작된 뒤 15–36ms에 보낸 신호에서 나왔고 80ms까지는 신호가 Go 프로그램에
+// 닿지 않고 사라지기도 했다. 100ms 이후에 보낸 370번에서는 둘 다 나오지 않았다.
+const minRunBeforeBreak = 100 * time.Millisecond
+
+// holdEarlyCancel은 cmd.Cancel이 hook 프로세스가 시작된 뒤 minRunBeforeBreak가 지나야 신호를 보내게
+// 감싼다. 프로세스를 시작한 직후 돌려받은 함수를 불러 시작 시각을 알려야 한다. 그 전에 취소되면
+// 취소된 때부터 minRunBeforeBreak를 기다린다.
+func holdEarlyCancel(cmd *exec.Cmd) (markStarted func()) {
+	cancel := cmd.Cancel
+	if cancel == nil {
+		return func() {}
+	}
+	var started atomic.Pointer[time.Time]
+	cmd.Cancel = func() error {
+		wait := minRunBeforeBreak
+		if at := started.Load(); at != nil {
+			wait -= time.Since(*at)
+		}
+		time.Sleep(wait)
+		return cancel()
+	}
+	return func() {
+		now := time.Now()
+		started.Store(&now)
+	}
+}
 
 func terminateProcess(cmd *exec.Cmd) error {
 	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
