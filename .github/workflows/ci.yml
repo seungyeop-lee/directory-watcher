@@ -31,6 +31,15 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test -count=1 -race ./...
+      - name: Verify Windows error notification process trees
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          DW_E2E_KEEP: '1'
+        run: |
+          New-Item -ItemType Directory -Force $env:DW_E2E_DIAGNOSTICS | Out-Null
+          go test -count=1 -race -v -timeout=4m -run '^TestEventLossNotificationCLI$' ./e2e 2>&1 | Tee-Object -FilePath (Join-Path $env:DW_E2E_DIAGNOSTICS 'notification.log')
+          if ($LASTEXITCODE -ne 0) { throw "Windows error notification acceptance failed: $LASTEXITCODE" }
       - name: Repeat Windows graceful lifecycle without test cache
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh

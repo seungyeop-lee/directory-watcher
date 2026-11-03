@@ -21,6 +21,7 @@ func main() {
 	delay := flag.Duration("delay", 0, "delay before completing a line record")
 	errorContext := flag.Bool("error-context", false, "record error notification environment and working directory")
 	exitCode := flag.Int("exit-code", 0, "exit status after recording")
+	releaseFile := flag.String("release-file", "", "exit parent when this file appears, leaving descendants running")
 	flag.Parse()
 	if *file == "" {
 		fmt.Fprintln(os.Stderr, "hookrec: --file is required")
@@ -110,11 +111,31 @@ func main() {
 		}
 	}
 	record("ready")
-	if *exitCode != 0 {
-		_ = f.Close()
-		os.Exit(*exitCode)
+	if *releaseFile != "" {
+		released := func() bool {
+			for {
+				if _, err := os.Stat(*releaseFile); err == nil {
+					return true
+				}
+				select {
+				case <-signals:
+					return false
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+		}()
+		if released {
+			record("parent-exit")
+			_ = f.Close()
+			os.Exit(*exitCode)
+		}
+	} else {
+		if *exitCode != 0 {
+			_ = f.Close()
+			os.Exit(*exitCode)
+		}
+		<-signals
 	}
-	<-signals
 	record("signal")
 	time.Sleep(150 * time.Millisecond)
 	if child != nil {

@@ -1,5 +1,3 @@
-//go:build !windows
-
 package e2e
 
 import (
@@ -17,10 +15,24 @@ import (
 )
 
 func TestEventLossNotificationCLI(t *testing.T) {
-	for _, mode := range []string{"success", "absent", "missing-command", "failure", "timeout"} {
+	for _, mode := range []string{"success", "absent", "missing-command", "failure", "timeout", "success-tree"} {
 		t.Run(mode, func(t *testing.T) {
 			s := newScenario(t)
 			notifyDir := filepath.Join(s.work, "notification-workdir")
+			treeMode := mode == "failure" || mode == "timeout" || mode == "success-tree"
+			var guard *scenario
+			if treeMode {
+				guard = newScenario(t)
+				guard.cmd = exec.Command(hookrecBin, "--file="+guard.records, "--depth=2")
+				setupProcGroup(guard.cmd)
+				if err := guard.cmd.Start(); err != nil {
+					t.Fatal(err)
+				}
+				guard.done = make(chan struct{})
+				go func() { guard.exit = guard.cmd.Wait(); close(guard.done) }()
+				awaitNotificationTree(guard)
+				recordNotificationProcesses(guard, "protected-before")
+			}
 			other := filepath.Join(s.work, "other")
 			for _, dir := range []string{notifyDir, other} {
 				if err := os.Mkdir(dir, 0755); err != nil {
@@ -86,6 +98,13 @@ watchTargets:
 				s.await("one notification starts despite normal-hook cancellation", 10*time.Second, func() bool {
 					return len(errorContexts(t, s.records)) > 0
 				})
+				if treeMode {
+					awaitNotificationTree(s)
+					recordNotificationProcesses(s, "notification-before")
+					if mode != "timeout" {
+						s.write(filepath.Join(s.work, "release-notification"), nil)
+					}
+				}
 				for n := range 20 {
 					s.write(filepath.Join(other, fmt.Sprintf("after-fatal-%02d.txt", n)), nil)
 				}
@@ -117,7 +136,11 @@ watchTargets:
 				if len(contexts) != 1 {
 					t.Fatalf("notification count = %d, want 1", len(contexts))
 				}
-				assertErrorContext(t, contexts[0], s.watch, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error(), notifyDir)
+				expectedDir := notifyDir
+				if mode == "success" || mode == "failure" {
+					expectedDir = s.work
+				}
+				assertErrorContext(t, contexts[0], s.watch, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error(), expectedDir)
 			}
 			lines := readLinesLenient(s.records)
 			for _, forbidden := range []string{"CHANGE", "OTHER:CHANGE", "BEFORE", "START"} {
@@ -142,11 +165,20 @@ watchTargets:
 			}
 			assertLineProcessesGone(s)
 			tree := processRecords(s.records)
-			s.await("notification descendants disappear even when parent fails", 5*time.Second, func() bool { return recordsGone(tree) })
-			if (mode == "failure" || mode == "timeout") && len(tree) == 0 {
-				t.Fatal("notification process tree was not exercised")
+			if treeMode {
+				recordNotificationProcesses(s, "notification-after")
+			}
+			if treeMode {
+				for _, record := range processRecords(guard.records) {
+					if record.state == "start" && !processAlive(record.pid) {
+						t.Errorf("notification cleanup killed protected process: %+v", record)
+					}
+				}
+				recordNotificationProcesses(guard, "protected-after")
 			}
 			t.Logf("ACTUAL application dispatch saturation, not OS overflow: mode=%s duration=%s exit=1 notifications=%d normal-hook-PIDs-alive=0", mode, time.Since(started), len(contexts))
+			t.Logf("original fatal cause preserved: dispatch queue full (capacity 256): %s", fsnotify.ErrEventOverflow)
+			s.await("notification descendants disappear even when parent fails", 5*time.Second, func() bool { return recordsGone(tree) })
 		})
 	}
 }
@@ -159,13 +191,61 @@ func notificationConfig(s *scenario, dir, mode string) string {
 		return fmt.Sprintf("    onError:\n      - '%s'\n", filepath.Join(s.work, "missing-notification-executable"))
 	}
 	extra := ""
-	if mode == "failure" {
-		extra = " --depth=2 --exit-code=7"
+	if mode == "failure" || mode == "success-tree" {
+		extra = " --depth=2 --release-file=" + filepath.Join(s.work, "release-notification")
+		if mode == "failure" {
+			extra += " --exit-code=7"
+		}
 	}
 	if mode == "timeout" {
 		extra = " --depth=2"
 	}
-	return fmt.Sprintf("    onError:\n      - dir: %q\n        cmd: '%s --file=%s --error-context --line=NOTIFY%s'\n", dir, hookrecBin, s.records, extra)
+	command := fmt.Sprintf("%s --file=%s --error-context --line=NOTIFY%s", hookrecBin, s.records, extra)
+	switch mode {
+	case "success", "failure":
+		return fmt.Sprintf("    onError:\n      - '%s'\n", command)
+	case "success-tree":
+		return fmt.Sprintf("    onError:\n      - dir: %q\n        cmd:\n          - '%s'\n", dir, command)
+	default:
+		return fmt.Sprintf("    onError:\n      - dir: %q\n        cmd: '%s'\n", dir, command)
+	}
+}
+
+func awaitNotificationTree(s *scenario) {
+	s.t.Helper()
+	s.await("notification parent, child and grandchild ready", 10*time.Second, func() bool {
+		ready := 0
+		for _, record := range processRecords(s.records) {
+			if record.state == "ready" {
+				ready++
+			}
+		}
+		return ready == 3
+	})
+	for _, record := range processRecords(s.records) {
+		if record.state == "start" && !processAlive(record.pid) {
+			s.t.Fatalf("notification process not running before cleanup: %+v", record)
+		}
+	}
+}
+
+func recordNotificationProcesses(s *scenario, phase string) {
+	s.t.Helper()
+	var snapshot strings.Builder
+	fmt.Fprintf(&snapshot, "time=%s phase=%s\n", time.Now().UTC().Format(time.RFC3339Nano), phase)
+	for _, record := range processRecords(s.records) {
+		if record.state == "start" {
+			fmt.Fprintf(&snapshot, "run=%s depth=%d pid=%d alive=%t\n", record.run, record.depth, record.pid, processAlive(record.pid))
+		}
+	}
+	if err := writeProcessDiagnostics(s.records); err != nil {
+		s.t.Fatal(err)
+	}
+	if detailed, err := os.ReadFile(s.records + ".processes"); err == nil {
+		snapshot.Write(detailed)
+	}
+	s.write(filepath.Join(s.work, phase+".log"), []byte(snapshot.String()))
+	s.t.Log(snapshot.String())
 }
 
 func errorContexts(t *testing.T, file string) []map[string]string {
