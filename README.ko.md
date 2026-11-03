@@ -155,7 +155,7 @@ flowchart TD
     shutdownSignal(("SIGINT 또는 SIGTERM"))
     fatalError(("대상의 치명적 오류:<br>대기열 포화, OS overflow,<br>watcher 오류, 없는 경로"))
     stopTargets["모든 대상: 새 명령 시작을 멈추고<br>실행 중인 명령 취소"]
-    targetFinish["대상마다: 대기 중인 변경을 버리고<br>실행 중인 명령이 끝나기를 기다린 뒤<br>대상 onFinishWatch 실행"]
+    targetFinish["대상마다: 대기 중인 변경을 버리고<br>실행 중인 명령이 끝나기를 기다린 뒤<br>감시를 시작한 대상이면 onFinishWatch 실행"]
     lossCheck{"이벤트 유실 가능성?<br>대기열 포화 또는 OS overflow"}
     errorHook["전역 onError 한 번<br>5초 실행 제한, 이어서 최대 20초 정리"]
     globalFinish["전역 onFinishWatch"]

@@ -102,6 +102,12 @@ Watching still starts after a global `onStartWatch` failure. A global `onFinishW
 | O   | Specified dir location                    | Specified dir location  |
 | X   | Program execution location                | Specified path location |
 
+Just before a command runs, its working directory is checked. If the working directory does not exist or is not a directory, the command does not run and the remaining commands of that hook are skipped, as for any other failed command. The failure log then carries the working directory in place of `<error>`, in the form below. In the failure log of global `onError`, `onError notification failed: ` is followed by `command <command>: ` and this text.
+
+```text
+working directory <working directory>: <cause>
+```
+
 ### Variables in commands
 
 | Variable        | Description                                             | Example (when `test/dir2` is set as the monitored directory) |
@@ -146,6 +152,7 @@ After each error-notification command completes, fails, or times out, its remain
 
 - Each target admits at most 256 pending events and one active hook generation. `noWait: true` preserves received-event order; it does not become latest-only under load. Debounce retains the last received valid event, and excluded suffixes neither execute nor reset its timer. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the debounce result.
 - A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
+- A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
 - Interruptible replacement cancels and waits for the previous generation before starting another. A shutdown signal cancels active startup/change commands, discards pending changes, joins event handlers, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
 - On Windows, the watcher stops a running command by sending CTRL+BREAK to that command's process group. The Windows E2E (Windows 11 ARM64 on a UTM VM, run on 2026-11-03) runs the watcher without Git Bash and confirms, for `interruptible: true` replacement and for shutdown, that a hook's parent, child, and grandchild processes terminate when they stay in that group and exit on the signal ([`TestProcessLifecycle`](e2e/docs/scenarios/process-lifecycle.md), [`TestStartHookShutdownModes`](e2e/docs/scenarios/start-hook-shutdown-modes.md)). A descendant that creates its own console or process group, or ignores the signal, may keep running.
 - Path checks close any files they open before returning, including when directory metadata lookup fails. Releasing these handles does not depend on garbage collection.

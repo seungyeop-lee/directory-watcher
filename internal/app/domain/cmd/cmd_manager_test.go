@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
 	command "github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 )
@@ -228,4 +229,33 @@ func openFileCount() int {
 		return 0
 	}
 	return len(entries)
+}
+
+func TestCommandIsNotStartedWhenWorkingDirectoryIsMissing(t *testing.T) {
+	missingDir := filepath.Join(t.TempDir(), "missing-dir")
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]struct {
+		builder command.ExecCmdBuilder
+		runDir  string
+		wantDir string
+	}{
+		"missing run directory":   {outputCommand(t, "print", 1), missingDir, missingDir},
+		"missing structured dir":  {command.StructuredCmd{Cmd: outputCommand(t, "print", 1), Dir: domain.Path(missingDir)}, ".", missingDir},
+		"run directory is a file": {outputCommand(t, "print", 1), file, file},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctx, output := capturedContext(t)
+			err := command.NewManager(tc.builder).Run(ctx, domain.Path(tc.runDir), nil)
+			if err == nil || !strings.Contains(err.Error(), "working directory "+tc.wantDir) {
+				t.Fatalf("error does not name the working directory %q: %v", tc.wantDir, err)
+			}
+			if got := output(); got != "" {
+				t.Fatalf("command ran in a missing working directory: %q", got)
+			}
+		})
+	}
 }

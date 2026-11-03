@@ -117,3 +117,25 @@ func TestInterruptedRunIsNotLoggedAsFailure(t *testing.T) {
 		t.Fatalf("interrupted run was logged as failure: %q", got)
 	}
 }
+
+func TestTargetHookFailureNamesMissingWorkingDirectory(t *testing.T) {
+	missingDir := filepath.Join(t.TempDir(), "missing-dir")
+	noop := command.SingleCmd(os.Args[0] + " -test.run=^$")
+	cases := map[string]struct {
+		finish     domain.Cmd
+		targetPath domain.Path
+	}{
+		"missing target path":    {command.NewManager(noop), domain.Path(missingDir)},
+		"missing structured dir": {command.NewManager(command.StructuredCmd{Cmd: noop, Dir: domain.Path(missingDir)}), "."},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			logger := &errorLog{}
+			info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: fakeCmd(succeed), OnAfterChange: fakeCmd(succeed), OnFinishWatch: tc.finish}
+			domain.Interruptible(false).BuildHookFuncBuilder("[target-alias]", info, logger)(tc.targetPath).RunFinishHook()
+			if got := logger.String(); !strings.Contains(got, "[target-alias]") || !strings.Contains(got, "working directory "+missingDir) {
+				t.Fatalf("failure log lacks alias or working directory: %q", got)
+			}
+		})
+	}
+}

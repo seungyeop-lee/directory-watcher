@@ -32,6 +32,8 @@ type watchTargetRunner struct {
 	path domain.Path
 	// watchRoot는 감시 목록에 넣는 감시 대상 폴더의 경로다. path가 폴더 링크이면 링크를 푼 경로다.
 	watchRoot string
+	// watching은 감시를 시작했는지를 나타낸다. Run이 done을 닫기 전에만 쓰므로 Stop은 done을 기다린 뒤 읽는다.
+	watching bool
 
 	runStartHook  func()
 	runChangeHook func(event domain.Event)
@@ -106,6 +108,7 @@ func (r *watchTargetRunner) Run() error {
 		close(r.handlerDone)
 		return &FatalError{Path: r.path, Cause: err}
 	}
+	r.watching = true
 	r.logger.Info("watch start: " + r.path.String())
 	events := make(chan domain.Event, dispatchCapacity)
 	defer func() {
@@ -334,6 +337,9 @@ func (r *watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	r.finishOnce.Do(func() {
 		<-r.done
 		<-r.handlerDone
-		r.runFinishHook()
+		// 감시를 시작하지 못한 대상은 onStartWatch를 실행하지 않았으므로 그 짝인 onFinishWatch도 실행하지 않는다.
+		if r.watching {
+			r.runFinishHook()
+		}
 	})
 }

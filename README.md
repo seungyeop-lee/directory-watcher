@@ -155,7 +155,7 @@ flowchart TD
     shutdownSignal(("SIGINT or SIGTERM"))
     fatalError(("Fatal error in a target:<br>queue full, OS overflow,<br>watcher error, missing path"))
     stopTargets["All targets: stop starting new commands<br>and cancel running ones"]
-    targetFinish["Each target: discard pending changes,<br>wait for running commands to exit,<br>then run target onFinishWatch"]
+    targetFinish["Each target: discard pending changes,<br>wait for running commands to exit,<br>then run target onFinishWatch if watching started"]
     lossCheck{"Possible event loss?<br>queue full or OS overflow"}
     errorHook["global onError, once<br>5 s limit, then up to 20 s of cleanup"]
     globalFinish["global onFinishWatch"]

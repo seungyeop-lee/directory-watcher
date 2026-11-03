@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -41,11 +42,33 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 
 	out := hookOutput(ctx.Context())
 	for _, cmd := range cmds {
-		if err := runPrintingOutput(ctx, cmd, out); err != nil {
+		err := checkWorkingDir(cmd.Dir)
+		if err == nil {
+			err = runPrintingOutput(ctx, cmd, out)
+		}
+		if err != nil {
 			return fmt.Errorf("command %s: %w", cmd, err)
 		}
 	}
 
+	return nil
+}
+
+// checkWorkingDir는 명령을 실행하기 전에 작업 폴더가 있는지 확인한다. hook 명령은 SetupForOs가
+// SysProcAttr를 설정하므로 os.StartProcess가 작업 폴더를 미리 확인하지 않고, 폴더가 없으면
+// "fork/exec <실행 파일>: no such file or directory"처럼 실행 파일이 없다고 읽히는 오류를 낸다.
+// 앞 명령이 만든 폴더에서 다음 명령을 실행할 수 있도록, 명령마다 실행 직전에 확인한다.
+func checkWorkingDir(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("working directory %s: %w", dir, err.(*fs.PathError).Err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("working directory %s: not a directory", dir)
+	}
 	return nil
 }
 
