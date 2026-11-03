@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
 // 폴더가 감시 시작 전에 있었는지, 감시 중에 만들어졌는지, 감시 중에 통째로 옮겨 왔는지와

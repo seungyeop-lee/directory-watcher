@@ -14,7 +14,7 @@ builds:
       - windows
       - darwin
     ldflags:
-      - -s -w -X github.com/seungyeop-lee/directory-watcher/v2/cmd.version=v{{.Version}}
+      - -s -w -X github.com/seungyeop-lee/directory-watcher/v3/cmd.version=v{{.Version}}
 
 archives:
   - format: tar.gz

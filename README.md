@@ -53,7 +53,7 @@ brew install seungyeop-lee/tap/directory-watcher
 ### `go install`
 
 ```shell
-go install github.com/seungyeop-lee/directory-watcher/v2@latest
+go install github.com/seungyeop-lee/directory-watcher/v3@latest
 ```
 
 ### Run with Docker

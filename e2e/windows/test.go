@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/windows/guestrun"
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/worktree"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/windows/guestrun"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/worktree"
 )
 
 // test는 up이 준비한 VM에서 시나리오를 실행한다. UTM을 열거나 VM을 시작하지는

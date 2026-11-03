@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 type hookCommand func(*helper.WatcherContext, *Event) error

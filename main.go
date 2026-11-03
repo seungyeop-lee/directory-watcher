@@ -1,6 +1,6 @@
 package main
 
-import "github.com/seungyeop-lee/directory-watcher/v2/cmd"
+import "github.com/seungyeop-lee/directory-watcher/v3/cmd"
 
 func main() {
 	cmd.Execute()

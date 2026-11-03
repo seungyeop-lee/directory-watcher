@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/worktree"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/worktree"
 )
 
 func main() { os.Exit(run()) }

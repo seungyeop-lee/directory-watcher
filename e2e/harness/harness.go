@@ -15,7 +15,7 @@ import (
 // Run은 테스트 패키지 디렉터리 기준 상대 경로 대신 이 import 경로로 빌드하므로,
 // 모듈 안의 어느 테스트 패키지에서든 Run을 호출할 수 있다.
 const (
-	watcherPackage = "github.com/seungyeop-lee/directory-watcher/v2"
+	watcherPackage = "github.com/seungyeop-lee/directory-watcher/v3"
 	hookrecPackage = watcherPackage + "/e2e/hookrec"
 )
 

@@ -1,8 +1,8 @@
 package converter
 
 import (
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/config"
 )
 
 type ShellConverter struct {

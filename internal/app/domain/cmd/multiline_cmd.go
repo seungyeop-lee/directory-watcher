@@ -3,8 +3,8 @@ package cmd
 import (
 	"context"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 type MultiLineCmd struct {

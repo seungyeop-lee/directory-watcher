@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/harness"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
 func TestProcessLifecycle(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
-	command "github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
 )
 
 // 셸 테스트는 이 OS에서 쓸 수 있는 셸만 실행한다. sh는 macOS와 Linux에서, cmd와 powershell은

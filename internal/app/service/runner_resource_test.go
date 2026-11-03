@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
 func TestNativeWatcherStopReleasesDirectory(t *testing.T) {

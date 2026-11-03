@@ -9,8 +9,8 @@ import (
 
 	"github.com/moby/term"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 // SingleCmd는 설정 파일에 적힌 hook 명령 문자열 하나를 Shell로 실행한다.

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
-	command "github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 type errorLog struct {

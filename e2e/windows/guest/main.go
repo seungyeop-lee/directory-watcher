@@ -20,7 +20,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/windows/guestrun"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/windows/guestrun"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )

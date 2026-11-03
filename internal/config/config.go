@@ -1,6 +1,6 @@
 package config
 
-import "github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+import "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 
 type Config interface {
 	BuildCommandSet() (domain.CommandSet, error)

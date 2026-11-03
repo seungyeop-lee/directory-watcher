@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
-	command "github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 // 훅 출력 테스트가 출력을 내는 실제 프로세스로 쓰려고 이 테스트 바이너리를 다시 실행한다.

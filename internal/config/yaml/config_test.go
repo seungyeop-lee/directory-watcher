@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
-	configyaml "github.com/seungyeop-lee/directory-watcher/v2/internal/config/yaml"
-	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	configyaml "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 func TestDecodedOnErrorRunsStructuredCommand(t *testing.T) {

@@ -1,4 +1,4 @@
-module github.com/seungyeop-lee/directory-watcher/v2
+module github.com/seungyeop-lee/directory-watcher/v3
 
 go 1.23
 

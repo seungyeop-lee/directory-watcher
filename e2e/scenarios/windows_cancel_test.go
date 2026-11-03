@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/harness"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
 // windowsBreakGrace는 watcher가 취소된 hook에 첫 CTRL+BREAK를 보낸 뒤 프로세스 트리를 강제로 끝내기까지

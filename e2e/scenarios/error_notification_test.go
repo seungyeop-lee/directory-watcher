@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/seungyeop-lee/directory-watcher/v2/e2e/harness"
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
 func TestEventLossNotificationCLI(t *testing.T) {
