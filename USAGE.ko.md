@@ -69,7 +69,13 @@ watchTargets:
       interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
 ```
 
-변경이 생길 때마다 전역 `onBeforeChange`, 대상의 `onChange`, 전역 `onAfterChange`가 이 순서로 실행됩니다. hook 안의 명령은 차례대로 실행됩니다. 명령 하나가 실패하면 같은 변경에서 뒤에 남은 hook을 포함해 그 실행의 나머지 명령을 건너뜁니다.
+변경이 생길 때마다 전역 `onBeforeChange`, 대상의 `onChange`, 전역 `onAfterChange`가 이 순서로 실행됩니다. hook 안의 명령은 차례대로 실행됩니다. 명령 하나가 실패하면 같은 변경에서 뒤에 남은 hook을 포함해 그 실행의 나머지 명령을 건너뜁니다. 이 실패는 `[ERROR]` 로그로 남으므로 기본 로그 수준에서도 다음 형태로 출력됩니다.
+
+```text
+<대상> hook command failed, skipping remaining commands: command <명령>: <오류>
+```
+
+`<대상>`은 감시 대상 `path`의 마지막 경로 요소입니다. 새 변경이 실행을 취소했거나(`interruptible: true`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
 
 ### 명령 실행 위치
 

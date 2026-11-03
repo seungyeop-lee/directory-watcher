@@ -133,7 +133,7 @@ flowchart TD
 ```
 
 - With `interruptible: false`, events that arrive while target `onStartWatch` or a change is running wait in the queue until it finishes. With `interruptible: true`, the next change cancels a running target `onStartWatch` too.
-- The commands of one run execute one after another, and the run stops at the first command that fails.
+- The commands of one run execute one after another, and the run stops at the first command that fails. The failure is logged as an `[ERROR]` line; see [`config.yml`](USAGE.md#configyml) in the usage guide.
 
 A shutdown signal and a fatal error both stop every target before the finish commands run:
 

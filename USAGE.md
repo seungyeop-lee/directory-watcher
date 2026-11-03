@@ -69,7 +69,13 @@ watchTargets:
       interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
 
-For each change, global `onBeforeChange`, the target's `onChange`, and global `onAfterChange` run in that order. The commands of a hook run one after another. If a command fails, the remaining commands of that run are skipped, including the later hooks of the same change.
+For each change, global `onBeforeChange`, the target's `onChange`, and global `onAfterChange` run in that order. The commands of a hook run one after another. If a command fails, the remaining commands of that run are skipped, including the later hooks of the same change. The failure is logged as an `[ERROR]` line, which the default log level shows:
+
+```text
+<target> hook command failed, skipping remaining commands: command <command>: <error>
+```
+
+`<target>` is the last element of the target's `path`. A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
 
 ### Command execution location
 
