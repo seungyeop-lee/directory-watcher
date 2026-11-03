@@ -31,6 +31,9 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test -count=1 -race ./...
+      - name: Smoke test config.example.yml
+        if: ${{ runner.os == 'Linux' }}
+        run: make smoke-example
       - name: Verify Windows error notification process trees
         if: ${{ !cancelled() && runner.os == 'Windows' }}
         shell: pwsh

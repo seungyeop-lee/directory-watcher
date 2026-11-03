@@ -19,6 +19,10 @@ runi: example-watch-dirs
 rund: example-watch-dirs
 	go run main.go -c config.example.yml --log-level=DEBUG
 
+.PHONY: smoke-example
+smoke-example: example-watch-dirs
+	sh scripts/smoke-example.sh $(EXAMPLE_WATCH_DIRS)
+
 .PHONY: release-test-snapshot
 release-test-snapshot:
 	goreleaser release --skip publish --clean --snapshot
