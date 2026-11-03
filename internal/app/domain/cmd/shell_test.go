@@ -168,6 +168,48 @@ func TestTemplateVariablesAreReplacedWithTheirValues(t *testing.T) {
 	}
 }
 
+// 셸이 따옴표로 감싼 인자가 \로 끝나면, 프로그램은 \"를 따옴표 글자로 읽는다. 드라이브나 공유 폴더 바로
+// 아래 파일의 {{.DirPath}}가 C:\이나 \\server\share\처럼 \로 끝난다.
+func TestTemplateValueEndingInBackslashIsOneArgument(t *testing.T) {
+	values := []string{`C:\`, `C:\My Dir\`, `\\server\my share\`, `C:\a\\`}
+	for _, shell := range testedShells(t) {
+		for _, value := range values {
+			t.Run(shell.String()+"/"+value, func(t *testing.T) {
+				ctx, output := capturedContext(t)
+				event := &domain.Event{Path: domain.Path(value), Operation: domain.Operation(fsnotify.Create)}
+				cmd := command.NewManager(argsCommand(t, shell, `{{.Path}} end`))
+				if err := cmd.Run(ctx, domain.Path(t.TempDir()), event); err != nil {
+					t.Fatal(err)
+				}
+				if got, want := receivedArgs(t, output()), []string{value, "end"}; !equalLines(got, want) {
+					t.Fatalf("program received %q, want %q", got, want)
+				}
+			})
+		}
+	}
+}
+
+// 확장자가 없는 파일의 {{.ExtName}}처럼 빈 값도 빈 인자 하나로 넘어가야 한다. Windows PowerShell 5.1은
+// 빈 문자열 인자를 프로그램에 넘기지 않으므로 powershell은 확인하지 않는다(USAGE에 적은 제약).
+func TestEmptyTemplateValueIsOneEmptyArgument(t *testing.T) {
+	event := &domain.Event{Path: domain.Path(filepath.Join("dir", "noext")), Operation: domain.Operation(fsnotify.Create)}
+	for _, shell := range testedShells(t) {
+		if shell.String() == "powershell" {
+			continue
+		}
+		t.Run(shell.String(), func(t *testing.T) {
+			ctx, output := capturedContext(t)
+			cmd := command.NewManager(argsCommand(t, shell, `{{.ExtName}} end`))
+			if err := cmd.Run(ctx, domain.Path(t.TempDir()), event); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := receivedArgs(t, output()), []string{"", "end"}; !equalLines(got, want) {
+				t.Fatalf("program received %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestCommandListSkipsRestAfterFailureInEveryShell(t *testing.T) {
 	for _, shell := range testedShells(t) {
 		t.Run(shell.String(), func(t *testing.T) {

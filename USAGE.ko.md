@@ -103,8 +103,8 @@ command <명령>: <오류>
 | `shell` | 실행 방식 | 쓸 수 있는 OS | `{{.Path}}`가 바뀌는 참조 |
 |---|---|---|---|
 | `sh` | `sh -c <명령>` | 모든 OS. Windows에서는 PATH에 `sh`가 있어야 합니다. | `"$DW_PATH"` |
-| `cmd` | `cmd.exe /d /v:on /s /c "<명령>"` | Windows | `"!DW_PATH!"` |
-| `powershell` | `powershell.exe -NoProfile -NonInteractive -Command <명령>` (Windows PowerShell) | Windows | `${env:DW_PATH}` |
+| `cmd` | `cmd.exe /d /v:on /s /c "<명령>"` | Windows | `!DW_PATH_ARG!` |
+| `powershell` | `powershell.exe -NoProfile -NonInteractive -Command <명령>` (Windows PowerShell) | Windows | `${env:DW_PATH_ARG}` |
 
 `shell`을 생략하면 Unix에서는 `sh`, Windows에서는 `cmd`를 씁니다. 목록에 없는 값을 쓰거나 Unix에서 `cmd`나 `powershell`을 고르면, watcher는 hook을 하나도 실행하지 않고 `Error: unknown shell "bash": must be one of sh, cmd, powershell`이나 `Error: shell "cmd" runs only on Windows`를 출력한 뒤 종료 코드 1로 끝납니다.
 
@@ -155,7 +155,13 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 
 - `sh`에서 `'{{.Path}}'`처럼 작은따옴표 안에 쓰면 값 대신 `"$DW_PATH"`라는 글자가 그대로 전달됩니다.
 - `sh`와 `cmd`에서 `"{{.Path}}"`처럼 큰따옴표 안에 쓰면 참조가 따옴표 밖에 놓이므로, 값이 공백에서 여러 인자로 나뉠 수 있습니다.
-- `powershell`은 `"changed: {{.Path}}"`처럼 큰따옴표 안에서도 값을 펼치고, 작은따옴표 안에서는 `${env:DW_PATH}`라는 글자를 그대로 둡니다.
+- `powershell`은 `"changed: {{.Path}}"`처럼 큰따옴표 안에서도 값을 펼치고, 작은따옴표 안에서는 `${env:DW_PATH_ARG}`라는 글자를 그대로 둡니다.
+
+`cmd`와 `powershell`의 참조는 `DW_PATH_ARG`처럼 이름 뒤에 `_ARG`를 붙인 환경 변수를 읽습니다. 이 변수에는 프로그램이 명령줄에서 원래 값을 그대로 읽도록 바꾼 값이 들어가고, 원래 값은 `DW_PATH` 같은 환경 변수에 그대로 있습니다. `C:\`처럼 `\`로 끝나는 값을 큰따옴표로 감싸면 프로그램이 닫는 따옴표를 글자로 읽으므로, 끝의 `\`를 두 번 씁니다.
+
+- `cmd`는 값을 큰따옴표로 감싸고 끝의 `\`를 두 번 씁니다. `echo` 같은 `cmd` 내부 명령에는 이 따옴표와 `\`가 그대로 보입니다.
+- `powershell`은 값에 공백이 있어 Windows PowerShell 5.1이 인자를 큰따옴표로 감쌀 때만 끝의 `\`를 두 번 씁니다. 공백이 있고 `\`로 끝나는 값을 cmdlet이나 문자열에 쓰면 끝에 `\`가 하나 더 보입니다.
+- Windows PowerShell 5.1은 빈 문자열 인자를 프로그램에 넘기지 않습니다. `powershell`에서 확장자가 없는 파일의 `{{.ExtName}}`처럼 빈 값을 따옴표 밖에 쓰면 프로그램이 받는 인자가 하나 줄어듭니다.
 
 `path`가 폴더를 가리키는 링크이면 링크가 가리키는 폴더를 감시합니다. 이때 위 변수에는 `path` 대신 링크를 모두 푼 경로를 기준으로 한 경로가 들어갑니다. `excludeDir`를 링크 경로 아래로 적으면 링크가 가리키는 폴더의 같은 위치를 제외합니다.
 

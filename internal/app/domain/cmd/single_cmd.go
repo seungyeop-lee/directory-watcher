@@ -48,7 +48,7 @@ func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.
 
 	cmd := c.Shell.command(ctx, script)
 	if event != nil {
-		cmd.Env = append(os.Environ(), eventEnvironment(event)...)
+		cmd.Env = append(os.Environ(), c.eventEnvironment(event)...)
 	}
 	cmd.Dir = runDir.String()
 	cmd.Stdin, _, _ = term.StdStreams()
@@ -72,7 +72,7 @@ func (c SingleCmd) replaceTemplates(event *domain.Event) (string, error) {
 
 	refs := map[string]string{}
 	for _, v := range eventVariables {
-		refs[v.template] = c.Shell.templateRef(v.env)
+		refs[v.template] = c.Shell.templateRef(c.refEnv(v.env))
 	}
 	b := strings.Builder{}
 	if err := t.Execute(&b, refs); err != nil {
@@ -82,10 +82,22 @@ func (c SingleCmd) replaceTemplates(event *domain.Event) (string, error) {
 	return b.String(), nil
 }
 
-func eventEnvironment(event *domain.Event) []string {
+// refEnv는 템플릿 참조가 읽는 환경 변수 이름이다.
+func (c SingleCmd) refEnv(env string) string {
+	if c.Shell.argValue == nil {
+		return env
+	}
+	return env + argEnvSuffix
+}
+
+func (c SingleCmd) eventEnvironment(event *domain.Event) []string {
 	var env []string
 	for _, v := range eventVariables {
-		env = append(env, v.env+"="+v.value(event))
+		value := v.value(event)
+		env = append(env, v.env+"="+value)
+		if c.Shell.argValue != nil {
+			env = append(env, c.refEnv(v.env)+"="+c.Shell.argValue(value))
+		}
 	}
 	return env
 }
