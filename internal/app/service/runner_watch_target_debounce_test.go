@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Mock Logger for testing
+// mockLogger는 테스트용 모의 Logger다.
 type mockLogger struct{}
 
 func (m *mockLogger) Info(msg string)  {}
@@ -22,7 +22,7 @@ func newMockLogger() helper.Logger {
 	return &mockLogger{}
 }
 
-// Simplified NewEvent for testing
+// newTestEvent는 테스트용으로 단순화한 NewEvent다.
 func newTestEvent(path domain.Path, op fsnotify.Op) domain.Event {
 	return domain.Event{
 		Path:      path,
@@ -31,10 +31,10 @@ func newTestEvent(path domain.Path, op fsnotify.Op) domain.Event {
 }
 
 func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
-	// Given
+	// 준비
 	var changeHookCallCount int32
 
-	// Mock runChangeHook
+	// 모의 runChangeHook
 	mockRunChangeHook := func(event domain.Event) {
 		atomic.AddInt32(&changeHookCallCount, 1)
 	}
@@ -52,7 +52,7 @@ func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
 	go func() { runner.selectEventHandler()(eventChan); close(done) }()
 	defer func() { close(eventChan); <-done }()
 
-	// When
+	// 실행
 	// 1. 유효한 이벤트를 보냄
 	eventChan <- newTestEvent(domain.Path("/test/test.go"), fsnotify.Write)
 
@@ -62,6 +62,6 @@ func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond) // 디바운스 시간보다 길게 대기하여 모든 호출이 발생하도록 함
 
-	// Then
+	// 검증
 	assert.Equal(t, int32(1), atomic.LoadInt32(&changeHookCallCount), "runChangeHook should be called only once")
 }

@@ -35,7 +35,7 @@ func startProcessTree(cmd *exec.Cmd) (processTree, error) {
 }
 
 func cleanupProcessTree(cmd *exec.Cmd, _ processTree, deadline time.Time) error {
-	// SetupForOs gives the command a group that outlives an exited group leader.
+	// SetupForOs가 명령에 프로세스 그룹을 만들어 주며, 이 그룹은 그룹 리더가 끝난 뒤에도 남는다.
 	pgid := -cmd.Process.Pid
 	if err := syscall.Kill(pgid, syscall.SIGTERM); err != nil {
 		return nil

@@ -19,7 +19,7 @@ type watchTargetRunners []*watchTargetRunner
 
 const dispatchCapacity = 256
 
-// FatalError preserves the watched target and cause of a failure requiring shutdown.
+// FatalError는 종료가 필요한 실패가 일어난 감시 대상과 그 원인을 보존한다.
 type FatalError struct {
 	Path  domain.Path
 	Cause error
