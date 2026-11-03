@@ -33,16 +33,22 @@ func Execute() {
 	}
 	rootCmd.Version = version
 
-	rootCmd.Flags().StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
-	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
-
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
+func init() {
+	rootCmd.Flags().StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
+	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
+}
+
 var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// 플래그 해석이 끝난 뒤에 켜야 잘못된 플래그에는 사용법이 그대로 나오고,
+		// 실행 중 오류에는 Error: 줄만 나온다.
+		cmd.SilenceUsage = true
+
 		logger, err := getLogger(cmd)
 		if err != nil {
 			return err
