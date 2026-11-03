@@ -46,7 +46,13 @@ Directory Watcher runs the commands you define when files are created, modified,
 
 ### Homebrew
 
-On macOS and Linux:
+This works on macOS and Linux and needs Homebrew 5.1.14 or later. With an older Homebrew, installing the cask fails with `Unexpected method 'postflight_steps'`. Check the version with `brew --version`, and if it is older, update Homebrew first:
+
+```shell
+brew update
+```
+
+Then install the cask:
 
 ```shell
 brew install --cask seungyeop-lee/tap/directory-watcher

@@ -46,7 +46,13 @@ Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·�
 
 ### Homebrew
 
-macOS와 Linux에서 설치합니다.
+macOS와 Linux에서 설치합니다. cask를 설치하려면 Homebrew 5.1.14 이상이 필요하고, 그보다 낮은 버전에서는 `Unexpected method 'postflight_steps'` 오류로 설치가 실패합니다. `brew --version`으로 버전을 확인하고, 5.1.14보다 낮으면 먼저 Homebrew를 업데이트합니다.
+
+```shell
+brew update
+```
+
+그다음 cask를 설치합니다.
 
 ```shell
 brew install --cask seungyeop-lee/tap/directory-watcher
