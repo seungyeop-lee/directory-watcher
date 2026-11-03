@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -279,6 +280,30 @@ func TestLookupShellRejectsUnknownName(t *testing.T) {
 	_, err := command.LookupShell("bash")
 	if err == nil || !strings.Contains(err.Error(), `"bash"`) || !strings.Contains(err.Error(), "sh, cmd, powershell") {
 		t.Fatalf("error does not name the value and the choices: %v", err)
+	}
+}
+
+// schema의 shell.enum은 코드의 셸 목록을 손으로 옮겨 적은 것이라, 셸을 추가하거나 바꿀 때 함께 고쳐야 한다.
+func TestSchemaListsSameShellsAsCode(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "directory-watcher.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties struct {
+			Shell struct {
+				Enum []string `json:"enum"`
+			} `json:"shell"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	got, want := schema.Properties.Shell.Enum, command.ShellNames()
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("schema shell.enum = %q, want %q", got, want)
 	}
 }
 

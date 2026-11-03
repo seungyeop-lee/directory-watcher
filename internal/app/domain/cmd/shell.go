@@ -65,19 +65,26 @@ func doubleTrailingBackslashes(value string) string {
 
 func (s Shell) String() string { return s.name }
 
-// LookupShell은 설정 파일의 shell 값에 해당하는 셸을 돌려준다. 목록에 없거나 이 OS에서 쓸 수 없는 셸이면 오류를 낸다.
-func LookupShell(name string) (Shell, error) {
+// ShellNames는 설정 파일의 shell에 쓸 수 있는 이름을 모두 돌려준다. 이 OS에서 쓸 수 없는 셸의 이름도 들어 있다.
+func ShellNames() []string {
 	names := make([]string, len(shells))
 	for i, shell := range shells {
+		names[i] = shell.name
+	}
+	return names
+}
+
+// LookupShell은 설정 파일의 shell 값에 해당하는 셸을 돌려준다. 목록에 없거나 이 OS에서 쓸 수 없는 셸이면 오류를 낸다.
+func LookupShell(name string) (Shell, error) {
+	for _, shell := range shells {
 		if shell.name == name {
 			if shell.command == nil {
 				return Shell{}, fmt.Errorf("shell %q runs only on Windows", name)
 			}
 			return shell, nil
 		}
-		names[i] = shell.name
 	}
-	return Shell{}, fmt.Errorf("unknown shell %q: must be one of %s", name, strings.Join(names, ", "))
+	return Shell{}, fmt.Errorf("unknown shell %q: must be one of %s", name, strings.Join(ShellNames(), ", "))
 }
 
 // DefaultShell은 설정 파일에 shell이 없을 때 쓰는 셸이다. Windows에서는 cmd, 그 밖의 OS에서는 sh다.
