@@ -17,7 +17,7 @@ builds:
       - -s -w -X github.com/seungyeop-lee/directory-watcher/v3/cmd.version=v{{.Version}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     # this name template makes the OS and Arch compatible with the results of uname.
     name_template: >-
       {{ .ProjectName }}_
@@ -29,65 +29,47 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 checksum:
   name_template: 'checksums.txt'
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^style:'
-      - '^comment:'
-      - '^docs:'
-      - '^chore:'
-      - '^test:'
 
-brews:
+# 릴리스 노트는 tag workflow가 CHANGELOG.md의 version 절을 --release-notes로 넘긴다.
+# changelog.disable을 켜면 --release-notes 파일도 읽지 않으므로 changelog 설정은 두지 않는다.
+
+homebrew_casks:
   - repository:
       owner: seungyeop-lee
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/seungyeop-lee/directory-watcher"
+    description: "Watch directories and run commands when files change"
+    hooks:
+      post:
+        # 바이너리를 서명·공증하지 않으므로, macOS Gatekeeper가 실행을 막지 않도록 quarantine 속성을 지운다.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/directory-watcher"]
+          end
 
-dockers:
-  - image_templates:
-      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-amd64"
-    dockerfile: Dockerfile
-    use: buildx
-    build_flag_templates:
+# Dockerfile은 goreleaser가 빌드 컨텍스트의 <TARGETPLATFORM>/ 아래에 둔 바이너리를 복사한다.
+dockers_v2:
+  - images:
+      - "ghcr.io/seungyeop-lee/directory-watcher"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+    flags:
       - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/amd64"
-    goarch: amd64
     extra_files:
       - entrypoint.sh
-  - image_templates:
-      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-arm64"
-    dockerfile: Dockerfile
-    use: buildx
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/arm64"
-    goarch: arm64
-    extra_files:
-      - entrypoint.sh
-
-docker_manifests:
-  - name_template: "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-amd64"
-      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/seungyeop-lee/directory-watcher:latest"
-    image_templates:
-      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-amd64"
-      - "ghcr.io/seungyeop-lee/directory-watcher:{{ .Version }}-arm64"

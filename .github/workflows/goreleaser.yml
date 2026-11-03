@@ -17,24 +17,33 @@ jobs:
         with:
           fetch-depth: 0
       - run: git fetch --force --tags
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v6
         with:
           go-version: '>=1.23.0'
           cache: true # go.sum 파일이 필수
+      # 게시는 마지막 goreleaser 단계에서만 일어나므로, 아래 검사 중 하나라도 실패하면 아무것도 게시하지 않는다.
+      - run: go vet ./...
+      - run: go test ./...
+      # CHANGELOG.md에 tag의 version 절이 없거나, 본문이 비었거나, 제목이 날짜로 끝나지 않으면 여기서 실패한다.
+      - name: Read release notes from CHANGELOG.md
+        run: |
+          go run ./scripts/releasenotes "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md"
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: ghcr-login
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: goreleaser/goreleaser-action@v6
+      # .goreleaser.yaml은 이 version의 goreleaser check를 통과한 설정이다. version을 올리면 새 version의 check부터 통과시킨다.
+      - uses: goreleaser/goreleaser-action@v7
         with:
-          version: '~> v2'
-          args: release --clean
+          version: 'v2.19.0'
+          args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

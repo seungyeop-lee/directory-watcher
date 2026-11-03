@@ -32,7 +32,7 @@ release-test:
 	goreleaser release --skip publish --clean
 
 # rund-docker는 지금 코드로 이미지를 빌드해 실행한다. 빌드 컨텍스트에는 goreleaser처럼
-# Docker가 실행되는 아키텍처의 linux 바이너리와 entrypoint.sh만 담는다.
+# Docker가 실행되는 아키텍처의 linux 바이너리를 linux/<아키텍처>/ 아래에 두고, entrypoint.sh와 함께 담는다.
 RUND_DOCKER_CONTEXT := dist/rund-docker
 RUND_DOCKER_IMAGE := directory-watcher:rund-docker
 # config.example.yml 훅의 dir 목록. 이미지는 작업 폴더가 /라서 상대 경로 dir이 /<dir>로 풀리므로,
@@ -42,9 +42,9 @@ EXAMPLE_HOOK_DIRS := $(sort $(shell sed -n 's/^ *- dir: "\(.*\)"/\1/p' config.ex
 
 .PHONY: rund-docker
 rund-docker: example-watch-dirs
-	mkdir -p $(RUND_DOCKER_CONTEXT)
-	CGO_ENABLED=0 GOOS=linux GOARCH=$$(docker version --format '{{.Server.Arch}}') \
-	go build -o $(RUND_DOCKER_CONTEXT)/directory-watcher .
+	arch=$$(docker version --format '{{.Server.Arch}}') && \
+	CGO_ENABLED=0 GOOS=linux GOARCH=$$arch \
+	go build -o $(RUND_DOCKER_CONTEXT)/linux/$$arch/directory-watcher .
 	cp entrypoint.sh $(RUND_DOCKER_CONTEXT)/
 	docker build -f Dockerfile -t $(RUND_DOCKER_IMAGE) $(RUND_DOCKER_CONTEXT)
 	docker run --rm \
