@@ -2,6 +2,7 @@ package helper
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"time"
 
@@ -36,15 +37,23 @@ func (w *WatcherContext) Cancel()                  { w.cancel() }
 func (w *WatcherContext) Context() context.Context { return w.ctx }
 
 func (w *WatcherContext) RunCommand(cmd *exec.Cmd) error {
-	err := cmd.Run()
-	if w.cleanupTree && cmd.Process != nil {
-		deadline := time.Now().Add(20 * time.Second)
-		if limit, ok := w.ctx.Deadline(); ok && limit.Add(20*time.Second).Before(deadline) {
-			deadline = limit.Add(20 * time.Second)
-		}
-		cleanupProcessTree(cmd, deadline)
+	if !w.cleanupTree {
+		return cmd.Run()
 	}
-	return err
+	tree, err := startProcessTree(cmd)
+	if err != nil {
+		return err
+	}
+	err = cmd.Wait()
+	deadline := time.Now().Add(20 * time.Second)
+	if limit, ok := w.ctx.Deadline(); ok && limit.Add(20*time.Second).Before(deadline) {
+		deadline = limit.Add(20 * time.Second)
+	}
+	cleanupErr := cleanupProcessTree(cmd, tree, deadline)
+	if cleanupErr == nil {
+		return err
+	}
+	return errors.Join(err, cleanupErr)
 }
 
 func (w *WatcherContext) ApplyGracefulShutdown(cmds []*exec.Cmd) {

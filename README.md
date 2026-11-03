@@ -168,6 +168,8 @@ Have the notification executable read these environment variables directly; comm
 
 The first fatal error immediately prevents new normal-hook approvals across all targets. The notification has an independent, fixed 5-second execution timeout, followed by up to 20 seconds of cancellation cleanup (at most 25 seconds total), regardless of normal-hook cancellation. A notification failure or timeout is logged and never replaces the original fatal error; the CLI still exits nonzero for that original error. Normal finish hooks still run after cancellation, with their existing behavior.
 
+After each error-notification command completes, fails, or times out, its remaining descendants are terminated within the same cleanup budget. On Windows, each notification command is assigned to a private Job Object before its suspended parent is allowed to run; cleanup does not depend on that parent's PID still being alive. Failure to establish that job prevents the notification command from running. Normal hooks and other executions are not assigned to this notification job.
+
 ## Caution
 
 ### waitMillisecond and noWait

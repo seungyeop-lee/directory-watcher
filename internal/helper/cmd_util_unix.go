@@ -28,19 +28,25 @@ func terminateProcess(cmd *exec.Cmd) error {
 	return nil
 }
 
-func cleanupProcessTree(cmd *exec.Cmd, deadline time.Time) {
+type processTree struct{}
+
+func startProcessTree(cmd *exec.Cmd) (processTree, error) {
+	return processTree{}, cmd.Start()
+}
+
+func cleanupProcessTree(cmd *exec.Cmd, _ processTree, deadline time.Time) error {
 	// SetupForOs gives the command a group that outlives an exited group leader.
 	pgid := -cmd.Process.Pid
 	if err := syscall.Kill(pgid, syscall.SIGTERM); err != nil {
-		return
+		return nil
 	}
 	for {
 		if errors.Is(syscall.Kill(pgid, 0), syscall.ESRCH) {
-			return
+			return nil
 		}
 		if !time.Now().Before(deadline) {
 			_ = syscall.Kill(pgid, syscall.SIGKILL)
-			return
+			return nil
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

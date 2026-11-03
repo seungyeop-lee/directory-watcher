@@ -4,10 +4,11 @@ package helper
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
-	"strconv"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -16,10 +17,100 @@ func terminateProcess(cmd *exec.Cmd) error {
 	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
 }
 
-func cleanupProcessTree(cmd *exec.Cmd, deadline time.Time) {
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
-	defer cancel()
-	_ = exec.CommandContext(ctx, "TASKKILL", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
+type processTree windows.Handle
+
+func startProcessTree(cmd *exec.Cmd) (processTree, error) {
+	job, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		return 0, fmt.Errorf("create notification job: %w", err)
+	}
+	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
+	limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
+		_ = windows.CloseHandle(job)
+		return 0, fmt.Errorf("configure notification job: %w", err)
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	// The suspended parent cannot create descendants before it belongs to the job.
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
+	if err := cmd.Start(); err != nil {
+		_ = windows.CloseHandle(job)
+		return 0, err
+	}
+	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
+	if err == nil {
+		err = windows.AssignProcessToJobObject(job, process)
+		_ = windows.CloseHandle(process)
+	}
+	if err == nil {
+		err = resumeProcess(cmd.Process.Pid)
+	}
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = windows.CloseHandle(job)
+		return 0, fmt.Errorf("start notification job: %w", err)
+	}
+	return processTree(job), nil
+}
+
+func resumeProcess(pid int) error {
+	// os/exec closes the primary thread handle; find it while the process is suspended.
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(snapshot)
+	entry := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
+	for err = windows.Thread32First(snapshot, &entry); err == nil; err = windows.Thread32Next(snapshot, &entry) {
+		if entry.OwnerProcessID != uint32(pid) {
+			continue
+		}
+		thread, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
+		if err != nil {
+			return err
+		}
+		count, err := windows.ResumeThread(thread)
+		_ = windows.CloseHandle(thread)
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return fmt.Errorf("primary thread suspend count = %d, want 1", count)
+		}
+		return nil
+	}
+	return fmt.Errorf("find suspended primary thread: %w", err)
+}
+
+type jobAccounting struct {
+	totalUserTime, totalKernelTime                     int64
+	thisPeriodTotalUserTime, thisPeriodTotalKernelTime int64
+	totalPageFaultCount, totalProcesses                uint32
+	activeProcesses, totalTerminatedProcesses          uint32
+}
+
+func cleanupProcessTree(_ *exec.Cmd, tree processTree, deadline time.Time) error {
+	job := windows.Handle(tree)
+	defer windows.CloseHandle(job)
+	if err := windows.TerminateJobObject(job, 1); err != nil {
+		return fmt.Errorf("terminate notification job: %w", err)
+	}
+	for {
+		var accounting jobAccounting
+		if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&accounting)), uint32(unsafe.Sizeof(accounting)), nil); err != nil {
+			return fmt.Errorf("query notification job: %w", err)
+		}
+		if accounting.activeProcesses == 0 {
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("wait for notification job cleanup: %w", context.DeadlineExceeded)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func SetupForOs(cmd *exec.Cmd) error {

@@ -127,6 +127,12 @@ watchTargets:
 			if (mode == "missing-command" || mode == "failure" || mode == "timeout") && !strings.Contains(s.log.String(), "onError notification failed") {
 				t.Fatalf("notification failure diagnostic missing for %s: %s", mode, s.log.String())
 			}
+			if mode == "failure" && !strings.Contains(s.log.String(), "exit status 7") {
+				t.Errorf("parent exit 7 was not preserved: %s", s.log.String())
+			}
+			if mode == "success-tree" && strings.Contains(s.log.String(), "onError notification failed") {
+				t.Errorf("successful parent reported notification failure: %s", s.log.String())
+			}
 			contexts := errorContexts(t, s.records)
 			if !recordsNotification {
 				if len(contexts) != 0 {
@@ -167,6 +173,9 @@ watchTargets:
 			tree := processRecords(s.records)
 			if treeMode {
 				recordNotificationProcesses(s, "notification-after")
+				if !recordsGone(tree) {
+					t.Error("notification descendants alive after CLI cleanup completed")
+				}
 			}
 			if treeMode {
 				for _, record := range processRecords(guard.records) {
@@ -271,7 +280,7 @@ func assertErrorContext(t *testing.T, context map[string]string, target, cause, 
 		"DW_ERROR_CAUSE":         cause,
 		"DW_ERROR_MESSAGE":       fmt.Sprintf("watch target %q: %s", target, cause),
 		"DW_ERROR_POSSIBLE_LOSS": "true",
-		"workdir":                workdir,
+		"workdir":                filepath.Clean(workdir),
 	}
 	if len(context) != len(want) {
 		t.Errorf("unexpected error context fields: %v", context)
