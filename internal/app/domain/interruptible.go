@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
@@ -25,7 +26,7 @@ type HookFunc struct {
 
 type HookFuncBuilder func(path Path) *HookFunc
 
-func (i Interruptible) BuildHookFuncBuilder(alias string, info HookInfo) HookFuncBuilder {
+func (i Interruptible) BuildHookFuncBuilder(alias string, info HookInfo, logger helper.Logger) HookFuncBuilder {
 	return func(path Path) *HookFunc {
 		base := helper.NewWatcherContext(alias)
 		startCommands := []Cmd{info.OnStartWatch}
@@ -34,6 +35,14 @@ func (i Interruptible) BuildHookFuncBuilder(alias string, info HookInfo) HookFun
 		var active *helper.WatcherContext
 		var done chan struct{}
 		stopped := false
+		runCommand := func(ctx *helper.WatcherContext, command Cmd, event *Event) error {
+			err := command.Run(ctx, path, event)
+			// 새 변경이나 감시 종료로 실행을 취소하면 명령도 오류로 끝나는데, 이는 실패가 아니므로 기록하지 않는다.
+			if err != nil && ctx.Context().Err() == nil {
+				logger.Error(fmt.Sprintf("%s hook command failed, skipping remaining commands: %v", alias, err))
+			}
+			return err
+		}
 		cancel := func() {
 			mu.Lock()
 			stopped = true
@@ -72,7 +81,7 @@ func (i Interruptible) BuildHookFuncBuilder(alias string, info HookInfo) HookFun
 					if ctx.Context().Err() != nil {
 						return
 					}
-					if err := command.Run(ctx, path, event); err != nil {
+					if err := runCommand(ctx, command, event); err != nil {
 						return
 					}
 				}
@@ -98,7 +107,7 @@ func (i Interruptible) BuildHookFuncBuilder(alias string, info HookInfo) HookFun
 				finish := base.NewRun()
 				defer base.Cancel()
 				defer finish.Cancel()
-				_ = info.OnFinishWatch.Run(finish, path, nil)
+				_ = runCommand(finish, info.OnFinishWatch, nil)
 			},
 		}
 	}

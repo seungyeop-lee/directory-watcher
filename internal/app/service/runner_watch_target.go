@@ -62,7 +62,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		OnChange:       commandSet.LifeCycle.OnChange,
 		OnAfterChange:  globalCommandSet.LifeCycle.OnAfterChange,
 		OnFinishWatch:  commandSet.LifeCycle.OnFinishWatch,
-	})
+	}, logger)
 	hookFunc := hookFuncBuilder(commandSet.Path)
 
 	result := &watchTargetRunner{

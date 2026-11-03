@@ -34,7 +34,7 @@ func TestReplacementWaitsForCanceledGeneration(t *testing.T) {
 		close(completed)
 		return original.Err()
 	})
-	hooks := Interruptible(true).BuildHookFuncBuilder("test", HookInfo{hookCommand(emptyHook), command, hookCommand(emptyHook), hookCommand(emptyHook), hookCommand(emptyHook)})(".")
+	hooks := Interruptible(true).BuildHookFuncBuilder("test", HookInfo{hookCommand(emptyHook), command, hookCommand(emptyHook), hookCommand(emptyHook), hookCommand(emptyHook)}, helper.GlobalLogger)(".")
 	// The first command occupies onBeforeChange; a replacement must join it.
 	hooks.RunChangeHook(Event{})
 	<-started
@@ -71,7 +71,7 @@ func TestShutdownDuringReplacementPreventsNewGeneration(t *testing.T) {
 		return ctx.Context().Err()
 	})
 	empty := hookCommand(emptyHook)
-	hooks := Interruptible(true).BuildHookFuncBuilder("test", HookInfo{OnStartWatch: empty, OnBeforeChange: command, OnChange: empty, OnAfterChange: empty, OnFinishWatch: empty})(".")
+	hooks := Interruptible(true).BuildHookFuncBuilder("test", HookInfo{OnStartWatch: empty, OnBeforeChange: command, OnChange: empty, OnAfterChange: empty, OnFinishWatch: empty}, helper.GlobalLogger)(".")
 	hooks.RunChangeHook(Event{})
 	<-started
 	replaced := make(chan struct{})

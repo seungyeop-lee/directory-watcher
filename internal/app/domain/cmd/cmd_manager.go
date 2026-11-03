@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
@@ -33,7 +34,7 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 
 	for _, cmd := range cmds {
 		if err := ctx.RunCommand(cmd); err != nil {
-			return err
+			return fmt.Errorf("command %s: %w", cmd, err)
 		}
 	}
 

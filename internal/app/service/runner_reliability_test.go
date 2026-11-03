@@ -206,7 +206,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 					}
 				})
 				empty := emptyCommand()
-				hooks := domain.Interruptible(interruptible).BuildHookFuncBuilder("test", domain.HookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: command, OnAfterChange: empty, OnFinishWatch: empty})(".")
+				hooks := domain.Interruptible(interruptible).BuildHookFuncBuilder("test", domain.HookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: command, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger())(".")
 				r := &watchTargetRunner{noWait: noWait, waitMillisecond: 20, excludeSuffix: domain.PathSuffixes{".swp"}, stop: make(chan struct{}), runChangeHook: hooks.RunChangeHook}
 				input, done := make(chan domain.Event, 64), make(chan struct{})
 				go func() { r.selectEventHandler()(input); close(done) }()
