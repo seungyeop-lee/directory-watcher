@@ -339,7 +339,8 @@ func (g guestTest) removeGuestDir() error {
 		case "kept":
 			if time.Now().After(deadline) {
 				return fmt.Errorf("guest run directory %s is still there after %d rmdir attempts in %s; "+
-					"stop the guest processes that use it, then remove it with %s", g.dir, attempt, removeLimit, g.removeCommand())
+					"stop the guest processes that use it as e2e/docs/windows-utm.md describes, then remove it with this command:\n    %s",
+					g.dir, attempt, removeLimit, g.removeCommand())
 			}
 			if attempt == 1 {
 				fmt.Fprintf(g.log, "guest run directory is still there after rmdir; retrying for up to %s\n", removeLimit)
@@ -347,7 +348,8 @@ func (g guestTest) removeGuestDir() error {
 			time.Sleep(time.Second)
 		default:
 			return fmt.Errorf("could not confirm that guest run directory %s was removed: rmdir attempt %d reported nothing within %s; "+
-				"if it is still there, remove it with %s", g.dir, attempt, removeLimit, g.removeCommand())
+				"if it is still there (see e2e/docs/windows-utm.md), remove it with this command:\n    %s",
+				g.dir, attempt, removeLimit, g.removeCommand())
 		}
 	}
 }
@@ -375,7 +377,8 @@ func (g guestTest) deleteRemovalMarkers() {
 	}
 }
 
-// removeCommand는 남은 실행 디렉터리를 Mac의 셸에서 지우는 명령이다.
+// removeCommand는 남은 실행 디렉터리를 Mac의 셸에서 지우는 명령이다. 사용자가 경고의
+// 마지막 줄을 그대로 복사해 실행하므로, 셸에 그대로 넘길 수 있는 명령만 담는다.
 func (g guestTest) removeCommand() string {
-	return fmt.Sprintf("%s exec %s --cmd cmd.exe /d /c rmdir /s /q '%s' (see e2e/docs/windows-utm.md)", g.utm.ctl, g.vm, g.dir)
+	return fmt.Sprintf("'%s' exec %s --cmd cmd.exe /d /c rmdir /s /q '%s'", g.utm.ctl, g.vm, g.dir)
 }

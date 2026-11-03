@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -86,16 +87,32 @@ func TestRemoveGuestDirRetriesWithoutReadingInsideTheRunDirectory(t *testing.T) 
 
 func TestRemoveGuestDirReportsADirectoryThatStays(t *testing.T) {
 	shortRemoveLimit(t)
-	g, _ := fakeGuest(t, 1000, true)
+	g, state := fakeGuest(t, 1000, true)
 	err := g.removeGuestDir()
-	if err == nil || !strings.Contains(err.Error(), fakeRunDir+" is still there") || !strings.Contains(err.Error(), "rmdir /s /q '"+fakeRunDir+"'") {
-		t.Fatalf("removeGuestDir = %v; want the remaining directory and the command that removes it", err)
+	if err == nil || !strings.Contains(err.Error(), fakeRunDir+" is still there") {
+		t.Fatalf("removeGuestDir = %v; want the remaining directory", err)
+	}
+	runRemoveCommand(t, g, err, state)
+}
+
+// runRemoveCommand는 경고의 마지막 줄을 그대로 복사해 Mac의 zsh에서 실행하고, utmctl이
+// 남은 실행 디렉터리를 지우는 요청을 받았는지 확인한다.
+func runRemoveCommand(t *testing.T, g guestTest, err error, state string) {
+	t.Helper()
+	lines := strings.Split(err.Error(), "\n")
+	command := lines[len(lines)-1]
+	if out, runErr := exec.Command("/bin/zsh", "-c", command).CombinedOutput(); runErr != nil {
+		t.Fatalf("zsh could not run the last line of %q: %v\n%s", err, runErr, out)
+	}
+	got := requests(t, state)
+	if want := "exec " + g.vm + " --cmd cmd.exe /d /c rmdir /s /q " + fakeRunDir; got[len(got)-1] != want {
+		t.Fatalf("utmctl received %q from the last line of %q; want %q", got[len(got)-1], err, want)
 	}
 }
 
 func TestRemoveGuestDirReportsAnUnansweredRemoval(t *testing.T) {
 	shortRemoveLimit(t)
-	g, _ := fakeGuest(t, 0, false)
+	g, state := fakeGuest(t, 0, false)
 	began := time.Now()
 	err := g.removeGuestDir()
 	if err == nil || !strings.Contains(err.Error(), "could not confirm") || !strings.Contains(err.Error(), fakeRunDir) {
@@ -104,6 +121,7 @@ func TestRemoveGuestDirReportsAnUnansweredRemoval(t *testing.T) {
 	if elapsed := time.Since(began); elapsed > removeLimit+3*time.Second {
 		t.Fatalf("removeGuestDir returned after %s", elapsed)
 	}
+	runRemoveCommand(t, g, err, state)
 }
 
 func TestReportKeepsACleanupFailureOutOfTheTestResult(t *testing.T) {

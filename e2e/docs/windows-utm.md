@@ -134,7 +134,7 @@ If a new `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips` appears after the
 
 ### Guest run directory is left behind
 
-`Windows E2E cleanup: guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute. The cause is a guest process that keeps a file in the directory open or uses a directory inside it as its current directory. On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`. `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below.
+`Windows E2E cleanup: guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute. The cause is a guest process that keeps a file in the directory open or uses a directory inside it as its current directory. On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`. `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below. The last line of either warning holds only the command that removes the directory.
 
 The output and exit code that `utmctl exec` returns may not be those of the guest command, so the commands below write their results to a file in the guest and read it with `utmctl file pull`. `C:\dw-e2e` in the commands is the default `-guest-dir`.
 
@@ -153,7 +153,7 @@ The output and exit code that `utmctl exec` returns may not be those of the gues
 
 The directories of other tests running on the same VM at the same time are also under `C:\dw-e2e`. Remove only the path shown in the warning.
 
-3. Run the command shown in the warning to remove the directory.
+3. Copy the last line of the warning as it is and run it in the Mac shell to remove the directory.
 4. If the run ID from the warning is not in the listing of `C:\dw-e2e`, the directory has been removed.
 
    ```sh

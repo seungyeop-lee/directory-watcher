@@ -134,7 +134,7 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
 
 ### 게스트 실행 디렉터리가 남음
 
-`Windows E2E cleanup: guest run directory <경로> is still there after ...`는 실행기가 1분 동안 `rmdir`를 되풀이해도 디렉터리가 남은 경우입니다. 디렉터리 안의 파일을 열어 두었거나 그 안을 현재 디렉터리로 쓰는 게스트 프로세스가 원인입니다. 2026-11-03에는 테스트가 끝난 뒤에도 실행 중이던 `hookrec.exe`가 `src\e2e\scenarios`를 붙잡고 있었습니다. `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다.
+`Windows E2E cleanup: guest run directory <경로> is still there after ...`는 실행기가 1분 동안 `rmdir`를 되풀이해도 디렉터리가 남은 경우입니다. 디렉터리 안의 파일을 열어 두었거나 그 안을 현재 디렉터리로 쓰는 게스트 프로세스가 원인입니다. 2026-11-03에는 테스트가 끝난 뒤에도 실행 중이던 `hookrec.exe`가 `src\e2e\scenarios`를 붙잡고 있었습니다. `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다. 두 경고 모두 마지막 줄에는 디렉터리를 지우는 명령만 있습니다.
 
 `utmctl exec`가 돌려주는 출력과 종료 코드는 게스트 명령의 결과가 아닐 수 있으므로, 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다. 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
 
@@ -153,7 +153,7 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
 
 같은 VM에서 동시에 실행 중인 다른 테스트의 디렉터리도 `C:\dw-e2e` 아래에 있습니다. 경고에 나온 경로만 지웁니다.
 
-3. 경고에 나온 명령을 실행해 디렉터리를 지웁니다.
+3. 경고의 마지막 줄을 그대로 복사해 Mac의 셸에서 실행하여 디렉터리를 지웁니다.
 4. `C:\dw-e2e`의 목록에 경고의 실행 ID가 없으면 지워진 것입니다.
 
    ```sh
