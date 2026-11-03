@@ -1,9 +1,7 @@
 package main
 
 import (
-	"archive/tar"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/seungyeop-lee/directory-watcher/v2/e2e/worktree"
 )
 
 func main() { os.Exit(run()) }
@@ -25,12 +25,11 @@ func run() (code int) {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	rootOut, err := exec.Command("git", "-C", root, "rev-parse", "--show-toplevel").Output()
+	root, err = worktree.Root(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	root = strings.TrimSpace(string(rootOut))
 	logs, err := os.MkdirTemp("", "dw-e2e-linux-*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -85,7 +84,7 @@ func run() (code int) {
 			code = 1
 		}
 	}()
-	files, err := exec.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
+	files, err := worktree.Files(root)
 	if err != nil {
 		fmt.Fprintln(output, err)
 		return 1
@@ -93,7 +92,7 @@ func run() (code int) {
 	reader, writer := io.Pipe()
 	snapshotDone := make(chan error, 1)
 	go func() {
-		err := snapshot(writer, root, strings.Split(string(files), "\x00"))
+		err := worktree.Archive(writer, root, files)
 		_ = writer.CloseWithError(err)
 		snapshotDone <- err
 	}()
@@ -118,51 +117,4 @@ func command(ctx context.Context, out io.Writer, name string, args ...string) er
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout, cmd.Stderr = out, out
 	return cmd.Run()
-}
-
-func snapshot(out io.Writer, root string, files []string) error {
-	archive := tar.NewWriter(out)
-	for _, name := range files {
-		if name == "" {
-			continue
-		}
-		path := filepath.Join(root, name)
-		info, err := os.Lstat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		link := ""
-		if info.Mode()&os.ModeSymlink != 0 {
-			link, err = os.Readlink(path)
-			if err != nil {
-				return err
-			}
-		}
-		header, err := tar.FileInfoHeader(info, link)
-		if err != nil {
-			return err
-		}
-		header.Name = "src/" + filepath.ToSlash(name)
-		if err := archive.WriteHeader(header); err != nil {
-			return err
-		}
-		if info.Mode().IsRegular() {
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			_, copyErr := io.Copy(archive, file)
-			closeErr := file.Close()
-			if copyErr != nil {
-				return copyErr
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-		}
-	}
-	return archive.Close()
 }

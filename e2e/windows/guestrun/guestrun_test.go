@@ -1,0 +1,89 @@
+package guestrun
+
+import (
+	"archive/tar"
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestCheckAcceptsOnlyThePassedResultOfTheRun(t *testing.T) {
+	encode := func(r Result) []byte {
+		data, err := json.Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	passed := Result{RunID: "run-a"}
+	if _, err := Check(encode(passed), "run-a"); err != nil {
+		t.Fatalf("passed result rejected: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		data []byte
+		want string
+	}{
+		"missing":       {nil, "missing"},
+		"truncated":     {[]byte(`{"RunID":"run-a"`), "unreadable"},
+		"other run":     {encode(Result{RunID: "run-b"}), `belongs to run "run-b"`},
+		"guest failure": {encode(Result{RunID: "run-a", ExitCode: -1, Error: "source checksum mismatch"}), "source checksum mismatch"},
+		"timeout":       {encode(Result{RunID: "run-a", ExitCode: -1, TimedOut: true}), "deadline"},
+		"test failure":  {encode(Result{RunID: "run-a", ExitCode: 1}), "exited with 1"},
+		"leftovers":     {encode(Result{RunID: "run-a", Leftovers: []string{"pid=7 watcher.exe"}}), "pid=7 watcher.exe"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Check(tc.data, "run-a")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Check error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestArchiveDirRoundTripsThroughExtract(t *testing.T) {
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, "run", "nested"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{"top.log": "한글 로그", filepath.Join("run", "nested", "records.log"): "start|1"}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(src, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var data bytes.Buffer
+	if err := ArchiveDir(&data, src); err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	if err := Extract(&data, dst); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		got, err := os.ReadFile(filepath.Join(dst, name))
+		if err != nil || string(got) != content {
+			t.Fatalf("%s = %q, %v; want %q", name, got, err, content)
+		}
+	}
+}
+
+func TestExtractRejectsPathsLeavingTheTarget(t *testing.T) {
+	var data bytes.Buffer
+	archive := tar.NewWriter(&data)
+	if err := archive.WriteHeader(&tar.Header{Name: "../escape", Mode: 0644, Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := Extract(&data, filepath.Join(dir, "target")); err == nil {
+		t.Fatal("Extract accepted ../escape")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "escape")); !os.IsNotExist(err) {
+		t.Fatalf("escape file exists: %v", err)
+	}
+}

@@ -1,4 +1,4 @@
-package main
+package worktree
 
 import (
 	"archive/tar"
@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestSnapshotUsesWorkingFilesAndOmitsDeletedFiles(t *testing.T) {
+func TestArchiveUsesWorkingFilesAndOmitsDeletedFiles(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "tracked.go"), []byte("dirty tracked source"), 0644); err != nil {
 		t.Fatal(err)
@@ -18,7 +18,7 @@ func TestSnapshotUsesWorkingFilesAndOmitsDeletedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	var data bytes.Buffer
-	if err := snapshot(&data, root, []string{"tracked.go", "new.go", "deleted.go", ""}); err != nil {
+	if err := Archive(&data, root, []string{"tracked.go", "new.go", "deleted.go", ""}); err != nil {
 		t.Fatal(err)
 	}
 	reader := tar.NewReader(&data)

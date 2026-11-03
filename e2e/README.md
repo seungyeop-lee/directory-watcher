@@ -11,6 +11,12 @@ make e2e
 make e2e-linux
 ```
 
+Mac에서 UTM Windows VM으로 실행하려면 [UTM Windows VM에서 E2E 실행](docs/windows-utm.md)의 사전 준비를 마친 뒤 다음 명령을 사용합니다.
+
+```sh
+DW_E2E_UTM_VM=Windows-E2E make e2e-windows-all
+```
+
 성공하면 각 테스트에 `PASS`가 표시되고 명령이 0으로 종료합니다. 실패·시간 초과는 0이 아닌 종료 코드로 전달합니다. Linux 기본 이미지는 `golang:1.23-bookworm`이며, 다른 Go 이미지는 `go run ./e2e/linux -image=<이미지>`로 지정합니다.
 
 ### 특정 시나리오 선택·반복
@@ -29,6 +35,7 @@ go run ./e2e/linux -- -count=3 -run '^TestProcessLifecycle$'
 | 문서 | 내용 |
 |---|---|
 | [하네스 구조와 시나리오 추가](docs/harness.md) | 책임별 코드 위치, 시나리오와 지원 코드의 대응, 새 시나리오 작성 절차와 예시, `hookrec` 프로세스 트리·지연 hook |
+| [UTM Windows VM에서 E2E 실행](docs/windows-utm.md) | Mac의 UTM Windows VM 사전 준비와 E2E 전용 VM, `make e2e-windows-up`·`e2e-windows`·`e2e-windows-down`·`e2e-windows-all`, 결과 위치, 종료 동작, 문제 해결 |
 | [Windows 실행과 CI 결과 확인](docs/windows.md) | Windows 실행 명령, CTRL+BREAK 정상 종료 방식, CI 단계와 artifact 확인, Windows 실패 분석 |
 | [실패·시간 초과 진단과 격리](docs/diagnostics.md) | 진단 파일 위치, `DW_E2E_FAULT` 의도적 실패·시간 초과, Linux 진단, 워크트리 병렬 실행과 컨테이너 정리 |
 | [경합·과부하·유실 검증](docs/reliability.md) | 경합·과부하 시나리오의 검증 내용, 이벤트 유실 알림 시나리오, 유실 검증의 구분과 주입 스모크 |
