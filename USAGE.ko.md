@@ -77,6 +77,14 @@ watchTargets:
 
 `<대상>`은 감시 대상 `path`의 마지막 경로 요소입니다. 새 변경이 실행을 취소했거나(`interruptible: true`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
 
+전역 `onStartWatch`나 전역 `onFinishWatch`의 명령이 실패하면 그 hook의 나머지 명령을 건너뜁니다. 이 실패는 대상이나 hook 이름 없이 다음 형태의 `[ERROR]` 로그로 남습니다.
+
+```text
+command <명령>: <오류>
+```
+
+전역 `onStartWatch`가 실패해도 감시는 시작됩니다. 전역 `onFinishWatch`가 실패해도 종료 코드는 바뀌지 않으므로, 종료 신호로 끝나면 0이고 치명적 오류로 끝나면 1입니다.
+
 ### 명령 실행 위치
 
 | dir | global onStartWatch, global onFinishWatch, global onError | 그외 hook |

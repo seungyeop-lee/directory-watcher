@@ -77,6 +77,14 @@ For each change, global `onBeforeChange`, the target's `onChange`, and global `o
 
 `<target>` is the last element of the target's `path`. A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
 
+If a command of global `onStartWatch` or global `onFinishWatch` fails, the remaining commands of that hook are skipped. The failure is logged as an `[ERROR]` line without the target or hook name:
+
+```text
+command <command>: <error>
+```
+
+Watching still starts after a global `onStartWatch` failure. A global `onFinishWatch` failure does not change the exit code: it stays 0 after a shutdown signal and 1 after a fatal error.
+
 ### Command execution location
 
 | dir | global onStartWatch, global onFinishWatch, global onError | Other hooks |
