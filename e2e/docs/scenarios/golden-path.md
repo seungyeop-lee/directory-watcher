@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](golden-path.ko.md)
 
-Creates, updates, and deletes one file, and checks that the global and target hooks each run once in the defined order and receive the correct values for the 7 event variables.
+Creates, updates, and deletes one file whose name contains characters that shells interpret, and checks that the global and target hooks each run once in the defined order, receive the correct values for the 7 event variables, and never run the file name as a command.
 
 ## What it checks and success criteria
 
@@ -14,14 +14,16 @@ After the watcher shuts down gracefully, the full set of lines in `records.log` 
 4. `TARGET:onFinishWatch`
 5. `GLOBAL:onFinishWatch`
 
-`<variables>` is `{{.Path}}|{{.AbsPath}}|{{.FileName}}|{{.ExtName}}|{{.DirPath}}|{{.DirAbsPath}}|{{.Event}}`. The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of `foo.txt`, and `{{.DirPath}}` and `{{.DirAbsPath}}` are both the absolute path of the watch folder. `{{.FileName}}` is `foo.txt`, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
+`<variables>` is `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`. The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of the test file, and `{{.DirPath}}` and `{{.DirAbsPath}}` are both the absolute path of the watch folder. `{{.FileName}}` is the test file name, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
+
+The test file name is `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`. It contains the syntax that sh, cmd, and powershell use to chain or substitute commands, so a shell that reads the value as a command creates a folder whose name starts with `pwned`, and cmd changes `%OS%` if it expands the value again. After shutdown, neither the run folder nor the watch folder may contain an entry whose name starts with `pwned`.
 
 The watcher must exit with exit code 0 within 10 seconds of receiving the shutdown signal.
 
 ## Configuration
 
 - All of the global hooks `onStartWatch`, `onBeforeChange`, `onAfterChange`, and `onFinishWatch` and the target hooks `onStartWatch`, `onChange`, and `onFinishWatch` are configured.
-- Each hook records its own label, such as `GLOBAL:onBeforeChange`, with `hookrec --line=<label>`. Change hooks append `:<variables>` after the label.
+- Each hook records its own label, such as `GLOBAL:onBeforeChange`, with `hookrec --line=<label>`. Change hooks append `:<variables>` after the label. The variables are written outside quotes so that each value is passed as one argument even with spaces, and they are separated by commas, which sh and cmd do not interpret.
 - The target options are `waitMillisecond: 100`, `watchEvent: CDU`, and `excludeSuffix: [.probe]`.
 
 ## Sequence
@@ -39,7 +41,7 @@ sequenceDiagram
     hookRec->>recordFile: record GLOBAL and TARGET onStartWatch
     testCode->>recordFile: wait for TARGET:onStartWatch (up to 10s)
     loop once each for create C, update U, delete D
-        testCode->>watchDir: create, update, or delete foo.txt
+        testCode->>watchDir: create, update, or delete the test file
         watchDir-->>watcherProc: file event
         watcherProc->>hookRec: onBeforeChange, onChange, onAfterChange
         hookRec->>recordFile: three lines of label and 7 variables
@@ -52,7 +54,7 @@ sequenceDiagram
     testCode->>recordFile: compare all lines with the expected order
 ```
 
-- Create opens `foo.txt` with no content using `O_CREATE|O_EXCL|O_RDONLY` and closes it, and update writes `hello`.
+- Create opens the test file with no content using `O_CREATE|O_EXCL|O_RDONLY` and closes it, and update writes `hello`.
 - Each step moves on to the next only after the `GLOBAL:onAfterChange:<variables>` record for that event appears.
 - The shutdown signal is SIGTERM on Unix and CTRL+BREAK on Windows.
 

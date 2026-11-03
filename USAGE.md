@@ -40,6 +40,7 @@ docker run --rm \
 The `config.yml` file defines the directories to watch and the commands to run for changes in each directory. You can also define commands to run when watching starts or stops. For a practical example, see [`config.example.yml`](config.example.yml). [`directory-watcher.schema.json`](directory-watcher.schema.json) describes the same format as a JSON schema. Running `make run` from the repository root first creates the folders this example watches and then starts the watcher with the example.
 
 ```yaml
+shell: [ shell that runs hook commands (sh, cmd, powershell), default is sh on Unix and cmd on Windows ]
 global:
   lifeCycle:
     onStartWatch: # global onStartWatch hook
@@ -95,6 +96,34 @@ command <command>: <error>
 
 Watching still starts after a global `onStartWatch` failure. A global `onFinishWatch` failure does not change the exit code: it stays 0 after a shutdown signal and 1 after a fatal error.
 
+### Shell that runs hook commands
+
+Every hook command runs in the shell selected by `shell`: global hooks, target hooks, `onError`, structured `cmd`, and each entry of a command list. Quotes, variable expansion, command substitution, `&&`, and redirection follow that shell's rules, and a command that ends with a nonzero exit code is a failure.
+
+| `shell` | How it runs | Available on | Reference that replaces `{{.Path}}` |
+|---|---|---|---|
+| `sh` | `sh -c <command>` | Every OS. On Windows, `sh` must be on PATH. | `"$DW_PATH"` |
+| `cmd` | `cmd.exe /d /v:on /s /c "<command>"` | Windows | `"!DW_PATH!"` |
+| `powershell` | `powershell.exe -NoProfile -NonInteractive -Command <command>` (Windows PowerShell) | Windows | `${env:DW_PATH}` |
+
+Without `shell`, hooks run in `sh` on Unix and in `cmd` on Windows. If the value is not in the list, or if `cmd` or `powershell` is selected on Unix, the watcher runs no hook, prints `Error: unknown shell "bash": must be one of sh, cmd, powershell` or `Error: shell "cmd" runs only on Windows`, and exits with code 1.
+
+```yaml
+shell: powershell
+watchTargets:
+  - path: ./src
+    lifeCycle:
+      onChange:
+        - Write-Output "changed: {{.Path}}"
+```
+
+A configuration file is meant for one OS, so write its hooks in the syntax of that OS's shell. To use the watcher on several OSes, keep a configuration file per OS or call an OS-specific script from the hook. To run a single hook in another shell, wrap it in the command yourself, as in `bash -c "..."`.
+
+- `cmd` runs with delayed expansion (`/v:on`), so a `!` in a command is read as part of a `!name!` variable reference, and an unpaired `!` is removed.
+- Windows PowerShell 5.1 has no `&&`. To run a command only after the previous one succeeded, write `command1; if ($?) { command2 }`.
+
+The `<command>` in a failure log shows how the shell was run together with the command after template variables were replaced with references, for example `/bin/sh -c cat "$DW_PATH"`.
+
 ### Command execution location
 
 | dir | global onStartWatch, global onFinishWatch, global onError | Other hooks |
@@ -110,15 +139,23 @@ working directory <working directory>: <cause>
 
 ### Variables in commands
 
-| Variable        | Description                                             | Example (when `test/dir2` is set as the monitored directory) |
-|-----------------|---------------------------------------------------------|--------------------------------------------------------------|
-| {{.Path}}       | Relative path of the file where the event occurred      | test/dir2/b.txt                                              |
-| {{.AbsPath}}    | Absolute path of the file where the event occurred      | /Users/example/directory-watcher/test/dir2/b.txt             |
-| {{.FileName}}   | File name where the event occurred                      | b.txt                                                        |
-| {{.ExtName}}    | Extension of the file where the event occurred          | .txt                                                         |
-| {{.DirPath}}    | Relative path of the directory where the event occurred | test/dir2                                                    |
-| {{.DirAbsPath}} | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
-| {{.Event}}      | Event type (C: create, U: update, D: delete)            | C                                                            |
+| Variable        | Environment variable | Description                                             | Example (when `test/dir2` is set as the monitored directory) |
+|-----------------|----------------------|---------------------------------------------------------|--------------------------------------------------------------|
+| {{.Path}}       | `DW_PATH`            | Relative path of the file where the event occurred      | test/dir2/b.txt                                              |
+| {{.AbsPath}}    | `DW_ABS_PATH`        | Absolute path of the file where the event occurred      | /Users/example/directory-watcher/test/dir2/b.txt             |
+| {{.FileName}}   | `DW_FILE_NAME`       | File name where the event occurred                      | b.txt                                                        |
+| {{.ExtName}}    | `DW_EXT_NAME`        | Extension of the file where the event occurred          | .txt                                                         |
+| {{.DirPath}}    | `DW_DIR_PATH`        | Relative path of the directory where the event occurred | test/dir2                                                    |
+| {{.DirAbsPath}} | `DW_DIR_ABS_PATH`    | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
+| {{.Event}}      | `DW_EVENT`           | Event type (C: create, U: update, D: delete)            | C                                                            |
+
+The watcher puts each value in the environment variable of the table and replaces the variable in the command with a shell reference that reads that environment variable. The reference for each shell is in the table of [Shell that runs hook commands](#shell-that-runs-hook-commands). File names never enter the command string, so a name that contains `;`, `&`, or `$(...)` never runs as a command.
+
+Write variables outside quotes. A variable outside quotes is passed as one argument, even when its value contains spaces. Inside quotes, variables behave as follows:
+
+- In `sh`, inside single quotes as in `'{{.Path}}'`, the literal text `"$DW_PATH"` is passed instead of the value.
+- In `sh` and `cmd`, inside double quotes as in `"{{.Path}}"`, the reference ends up outside quotes, so the value can be split into several arguments at spaces.
+- `powershell` expands the value inside double quotes as well, as in `"changed: {{.Path}}"`, and keeps the literal text `${env:DW_PATH}` inside single quotes.
 
 If `path` is a link to a folder, the folder it points to is watched. The variables above then hold paths based on the fully resolved path instead of `path`. An `excludeDir` written under the link path excludes the same location in the linked folder.
 
@@ -142,7 +179,7 @@ Error context is passed as environment variables, never interpolated into comman
 | `DW_ERROR_MESSAGE` | Complete `FatalError.Error()` message |
 | `DW_ERROR_POSSIBLE_LOSS` | `true` (possible loss, not a lost-event count) |
 
-Have the notification executable read these environment variables directly; command strings do not perform shell expansion or redirection. If you use an executable shell script, quote expansions inside it, for example `printf '%s\n' "$DW_ERROR_MESSAGE"`. File-event template variables are not available for this hook. A structured `dir` selects its working directory; without it, the command uses the program execution directory.
+The notification command also runs in the configured shell, so read the environment variables with that shell's syntax: for example `printf '%s\n' "$DW_ERROR_MESSAGE"` in `sh`, `echo !DW_ERROR_MESSAGE!` in `cmd`, and `Write-Output $env:DW_ERROR_MESSAGE` in `powershell`. In `cmd`, use `!DW_ERROR_MESSAGE!` rather than `%DW_ERROR_MESSAGE%`, which lets a `&` in the value split the command. File-event template variables are not available for this hook. A structured `dir` selects its working directory; without it, the command uses the program execution directory.
 
 The first fatal error immediately prevents new normal-hook approvals across all targets. The notification has an independent, fixed 5-second execution timeout, followed by up to 20 seconds of cancellation cleanup (at most 25 seconds total), regardless of normal-hook cancellation. A notification failure or timeout is logged and never replaces the original fatal error; the CLI still exits nonzero for that original error. Normal finish hooks still run after cancellation, with their existing behavior.
 

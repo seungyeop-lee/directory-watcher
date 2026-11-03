@@ -56,8 +56,8 @@ done
 for dir in "$@"; do
 	: >"$dir/$file"
 done
-wait_for "'dir1 onChange'"
-wait_for "'dir2 onChange test/dir2/$file, $root/test/dir2/$file, $file, .txt, test/dir2, $root/test/dir2, C'"
+wait_for "dir1 onChange"
+wait_for "dir2 onChange test/dir2/$file, $root/test/dir2/$file, $file, .txt, test/dir2, $root/test/dir2, C"
 wait_for "$root/cmd"
 
 kill -TERM "$pid"
@@ -72,7 +72,7 @@ wait "$pid" || status=$?
 pid=
 [ "$status" -eq 0 ] || fail "watcher exited with status $status after SIGTERM"
 echo "smoke-example: ok: exit status 0 after SIGTERM"
-for line in "'dir2 onFinishWatch'" "$root/internal" "'global onFinishWatch'"; do
+for line in "dir2 onFinishWatch" "$root/internal" "global onFinishWatch"; do
 	log_has "$line" || fail "missing onFinishWatch output: $line"
 	echo "smoke-example: ok: $line"
 done

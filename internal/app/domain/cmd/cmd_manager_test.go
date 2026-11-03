@@ -82,11 +82,18 @@ func outputCommand(t *testing.T, mode string, count int) command.SingleCmd {
 	t.Setenv("DW_HOOK_OUTPUT_HELPER", "1")
 	// -race로 빌드한 바이너리는 끝날 때 1초를 기다리므로, 이 바이너리를 여러 번 실행하는 테스트가 느려지지 않게 끈다.
 	t.Setenv("GORACE", strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
-	return command.SingleCmd(fmt.Sprintf("%s -test.run=^TestHookOutputProcess$ -- %s %d", os.Args[0], mode, count))
+	return command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^TestHookOutputProcess$" -- %s %d`, os.Args[0], mode, count)}
 }
 
 // capturedContext는 훅 출력이 가는 표준 출력을 파일로 바꾼 뒤 만든 실행 context와, 그 파일의 내용을 읽는 함수를 돌려준다.
 func capturedContext(t *testing.T) (*helper.WatcherContext, func() string) {
+	t.Helper()
+	base, output := capturedBase(t)
+	return base.NewRun(), output
+}
+
+// capturedBase는 capturedContext와 같지만, NewRun이나 NewTimeoutRun으로 실행 context를 직접 만들 수 있게 바탕 context를 돌려준다.
+func capturedBase(t *testing.T) (*helper.WatcherContext, func() string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stdout")
 	file, err := os.Create(path)
@@ -101,7 +108,7 @@ func capturedContext(t *testing.T) (*helper.WatcherContext, func() string) {
 		base.Cancel()
 		_ = file.Close()
 	})
-	return base.NewRun(), func() string {
+	return base, func() string {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

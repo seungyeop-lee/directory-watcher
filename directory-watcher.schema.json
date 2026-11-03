@@ -4,6 +4,11 @@
   "description": "JSON schema for the configuration file of Directory Watcher.",
   "type": "object",
   "properties": {
+    "shell": {
+      "type": "string",
+      "enum": ["sh", "cmd", "powershell"],
+      "description": "Shell that runs every hook command. Defaults to sh on Unix and cmd on Windows. cmd and powershell (Windows PowerShell) are available only on Windows."
+    },
     "global": {
       "type": "object",
       "description": "Global configurations applicable to all watch targets.",
@@ -142,8 +147,8 @@
         "anyOf": [
           {
             "type": "string",
-            "description": "A command to execute.",
-            "examples": ["npm run build", "echo 'Change detected'"]
+            "description": "A command line run by the configured shell. Write template variables such as {{.Path}} outside quotes.",
+            "examples": ["npm run build", "echo 'Change detected:' {{.Path}}"]
           },
           {
             "type": "object",
@@ -157,8 +162,8 @@
                 "anyOf": [
                   {
                     "type": "string",
-                    "description": "A command to execute.",
-                    "examples": ["npm run build", "echo 'Change detected'"]
+                    "description": "A command line run by the configured shell. Write template variables such as {{.Path}} outside quotes.",
+                    "examples": ["npm run build", "echo 'Change detected:' {{.Path}}"]
                   },
                   {
                     "type": "array",

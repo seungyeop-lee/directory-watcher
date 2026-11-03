@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,7 +146,7 @@ func TestFatalLossNotificationReceivesOriginalContext(t *testing.T) {
 	t.Setenv("DW_NOTIFICATION_RECORD", record)
 	t.Setenv("DW_ERROR_KIND", "stale-parent-value")
 	set := testCommandSet(t.TempDir())
-	set.Global.LifeCycle.OnError = command.NewManager(command.SingleCmd(os.Args[0] + " -test.run=^TestNotificationRecorderProcess$"))
+	set.Global.LifeCycle.OnError = command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^TestNotificationRecorderProcess$"`, os.Args[0])})
 	r := NewRunner(set, &notificationLog{})
 	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, source := controlledSource(r.watchTargets[0])

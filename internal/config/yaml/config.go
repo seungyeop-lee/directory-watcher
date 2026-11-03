@@ -2,6 +2,7 @@ package yaml
 
 import (
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain/cmd"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/config"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/config/converter"
 	"gopkg.in/yaml.v3"
@@ -18,24 +19,29 @@ func NewConfig(configFile []byte) config.Config {
 }
 
 type Config struct {
+	Shell        config.Shell        `yaml:"shell"`
 	Global       GlobalConfig        `yaml:"global"`
 	WatchTargets WatchTargetsConfigs `yaml:"watchTargets"`
 }
 
-func (c Config) BuildCommandSet() domain.CommandSet {
-	return domain.CommandSet{
-		Global:       c.Global.BuildCommandSet(),
-		WatchTargets: c.WatchTargets.BuildCommandSets(),
+func (c Config) BuildCommandSet() (domain.CommandSet, error) {
+	shell, err := converter.NewShellConverter(c.Shell).Convert()
+	if err != nil {
+		return domain.CommandSet{}, err
 	}
+	return domain.CommandSet{
+		Global:       c.Global.BuildCommandSet(shell),
+		WatchTargets: c.WatchTargets.BuildCommandSets(shell),
+	}, nil
 }
 
 type GlobalConfig struct {
 	LifeCycle GlobalLifeCycleConfig `yaml:"lifeCycle"`
 }
 
-func (c GlobalConfig) BuildCommandSet() domain.GlobalCommandSet {
+func (c GlobalConfig) BuildCommandSet(shell cmd.Shell) domain.GlobalCommandSet {
 	return domain.GlobalCommandSet{
-		LifeCycle: c.LifeCycle.BuildLifeCycle(),
+		LifeCycle: c.LifeCycle.BuildLifeCycle(shell),
 	}
 }
 
@@ -47,22 +53,22 @@ type GlobalLifeCycleConfig struct {
 	OnError        config.CmdInfo `yaml:"onError"`
 }
 
-func (c GlobalLifeCycleConfig) BuildLifeCycle() domain.GlobalLifeCycle {
+func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) domain.GlobalLifeCycle {
 	return domain.GlobalLifeCycle{
-		OnStartWatch:   converter.NewCmdInfoConverter(c.OnStartWatch).Convert(),
-		OnBeforeChange: converter.NewCmdInfoConverter(c.OnBeforeChange).Convert(),
-		OnAfterChange:  converter.NewCmdInfoConverter(c.OnAfterChange).Convert(),
-		OnFinishWatch:  converter.NewCmdInfoConverter(c.OnFinishWatch).Convert(),
-		OnError:        converter.NewCmdInfoConverter(c.OnError).Convert(),
+		OnStartWatch:   converter.NewCmdInfoConverter(c.OnStartWatch, shell).Convert(),
+		OnBeforeChange: converter.NewCmdInfoConverter(c.OnBeforeChange, shell).Convert(),
+		OnAfterChange:  converter.NewCmdInfoConverter(c.OnAfterChange, shell).Convert(),
+		OnFinishWatch:  converter.NewCmdInfoConverter(c.OnFinishWatch, shell).Convert(),
+		OnError:        converter.NewCmdInfoConverter(c.OnError, shell).Convert(),
 	}
 }
 
 type WatchTargetsConfigs []WatchTargetsConfig
 
-func (cs WatchTargetsConfigs) BuildCommandSets() domain.WatchTargetsCommandSets {
+func (cs WatchTargetsConfigs) BuildCommandSets(shell cmd.Shell) domain.WatchTargetsCommandSets {
 	result := domain.WatchTargetsCommandSets{}
 	for _, c := range cs {
-		result = append(result, c.BuildCommandSet())
+		result = append(result, c.BuildCommandSet(shell))
 	}
 	return result
 }
@@ -73,10 +79,10 @@ type WatchTargetsConfig struct {
 	Option    WatchTargetsOptionConfig    `yaml:"option"`
 }
 
-func (c WatchTargetsConfig) BuildCommandSet() domain.WatchTargetsCommandSet {
+func (c WatchTargetsConfig) BuildCommandSet(shell cmd.Shell) domain.WatchTargetsCommandSet {
 	return domain.WatchTargetsCommandSet{
 		Path:      converter.NewPathConverter(c.Path).Convert(),
-		LifeCycle: c.LifeCycle.BuildLifeCycle(),
+		LifeCycle: c.LifeCycle.BuildLifeCycle(shell),
 		Option:    c.Option.BuildOption(),
 	}
 }
@@ -87,11 +93,11 @@ type WatchTargetsLifeCycleConfig struct {
 	OnFinishWatch config.CmdInfo `yaml:"onFinishWatch"`
 }
 
-func (c WatchTargetsLifeCycleConfig) BuildLifeCycle() domain.WatchTargetsLifeCycle {
+func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) domain.WatchTargetsLifeCycle {
 	return domain.WatchTargetsLifeCycle{
-		OnStartWatch:  converter.NewCmdInfoConverter(c.OnStartWatch).Convert(),
-		OnChange:      converter.NewCmdInfoConverter(c.OnChange).Convert(),
-		OnFinishWatch: converter.NewCmdInfoConverter(c.OnFinishWatch).Convert(),
+		OnStartWatch:  converter.NewCmdInfoConverter(c.OnStartWatch, shell).Convert(),
+		OnChange:      converter.NewCmdInfoConverter(c.OnChange, shell).Convert(),
+		OnFinishWatch: converter.NewCmdInfoConverter(c.OnFinishWatch, shell).Convert(),
 	}
 }
 

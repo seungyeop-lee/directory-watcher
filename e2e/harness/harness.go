@@ -99,11 +99,6 @@ func NewScenario(t *testing.T) *Scenario {
 	}
 	s := &Scenario{t: t, Work: work, Watch: filepath.Join(work, "watch"), Records: filepath.Join(work, "records.log"), procs: newProcessObserver()}
 	t.Cleanup(s.cleanup)
-	for _, p := range []string{work, watcherBin, hookrecBin} {
-		if strings.ContainsAny(p, " \t\r\n") {
-			t.Fatalf("hook command paths cannot contain whitespace: %q", p)
-		}
-	}
 	if err := os.Mkdir(s.Watch, 0755); err != nil {
 		t.Fatal(err)
 	}

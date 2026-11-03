@@ -185,7 +185,7 @@ func notificationConfig(s *harness.Scenario, dir, mode string) string {
 		return ""
 	}
 	if mode == "missing-command" {
-		return fmt.Sprintf("    onError:\n      - '%s'\n", filepath.Join(s.Work, "missing-notification-executable"))
+		return fmt.Sprintf("    onError:\n      - '\"%s\"'\n", filepath.Join(s.Work, "missing-notification-executable"))
 	}
 	arguments := []string{"--error-context", "--line=NOTIFY"}
 	if mode == "failure" || mode == "success-tree" {

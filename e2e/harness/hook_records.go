@@ -26,9 +26,19 @@ func ReadLinesLenient(path string) []string {
 func (s *Scenario) Lines() []string { return ReadLinesLenient(s.Records) }
 
 // Hook은 주어진 인자로 hookrec을 실행해 이 시나리오의 기록 파일에 기록하는 YAML
-// 명령을 작은따옴표로 감싸 돌려준다.
+// 명령을 작은따옴표로 감싸 돌려준다. 명령은 기본 셸(sh, cmd)이 해석하므로, 템플릿이 없는
+// 인자는 경로에 공백이 있어도 인자 하나가 되게 큰따옴표로 감싼다. 템플릿이 든 인자는
+// 템플릿이 따옴표 밖에 있어야 값이 인자 하나로 넘어가므로 감싸지 않는다. 그런 인자에는
+// 셸이 해석하는 문자를 넣지 않는다.
 func (s *Scenario) Hook(arguments ...string) string {
-	return fmt.Sprintf("'%s'", strings.Join(append([]string{hookrecBin, "--file=" + s.Records}, arguments...), " "))
+	var words []string
+	for _, argument := range append([]string{hookrecBin, "--file=" + s.Records}, arguments...) {
+		if !strings.Contains(argument, "{{") {
+			argument = `"` + argument + `"`
+		}
+		words = append(words, argument)
+	}
+	return fmt.Sprintf("'%s'", strings.Join(words, " "))
 }
 
 func CountRecord(lines []string, value string) int {

@@ -63,7 +63,10 @@ var rootCmd = &cobra.Command{
 		config := yamlConfig.NewConfig(configFile)
 		debugLogConfig(logger, config)
 
-		commandSet := config.BuildCommandSet()
+		commandSet, err := config.BuildCommandSet()
+		if err != nil {
+			return err
+		}
 		debugLogCommandSet(logger, commandSet)
 
 		r := service.NewRunner(commandSet, logger)

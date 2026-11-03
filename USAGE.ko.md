@@ -40,6 +40,7 @@ docker run --rm \
 `config.yml` 파일에는 감시할 디렉터리와 각 디렉터리에서 변경이 생겼을 때 실행할 명령을 정의합니다. 감시를 시작하거나 끝낼 때 실행할 명령도 정의할 수 있습니다. 실제 예시는 [`config.example.yml`](config.example.yml)에 있고, 같은 형식을 JSON 스키마로 기술한 파일은 [`directory-watcher.schema.json`](directory-watcher.schema.json)입니다. 저장소 루트에서 `make run`을 실행하면 이 예시가 감시하는 폴더를 먼저 만든 뒤 이 예시로 watcher를 실행합니다.
 
 ```yaml
+shell: [ hook 명령을 실행할 셸 (sh, cmd, powershell), default는 Unix에서 sh, Windows에서 cmd ]
 global:
   lifeCycle:
     onStartWatch: # global onStartWatch hook
@@ -95,6 +96,34 @@ command <명령>: <오류>
 
 전역 `onStartWatch`가 실패해도 감시는 시작됩니다. 전역 `onFinishWatch`가 실패해도 종료 코드는 바뀌지 않으므로, 종료 신호로 끝나면 0이고 치명적 오류로 끝나면 1입니다.
 
+### hook 명령을 실행하는 셸
+
+모든 hook 명령은 `shell`로 고른 셸이 실행합니다. 전역 hook, 대상 hook, `onError`, 구조화된 `cmd`, 명령 목록의 각 항목이 모두 해당합니다. 따옴표, 변수 확장, 명령 치환, `&&`, 리다이렉션은 그 셸의 규칙대로 해석되고, 명령이 0이 아닌 종료 코드로 끝나면 실패로 처리합니다.
+
+| `shell` | 실행 방식 | 쓸 수 있는 OS | `{{.Path}}`가 바뀌는 참조 |
+|---|---|---|---|
+| `sh` | `sh -c <명령>` | 모든 OS. Windows에서는 PATH에 `sh`가 있어야 합니다. | `"$DW_PATH"` |
+| `cmd` | `cmd.exe /d /v:on /s /c "<명령>"` | Windows | `"!DW_PATH!"` |
+| `powershell` | `powershell.exe -NoProfile -NonInteractive -Command <명령>` (Windows PowerShell) | Windows | `${env:DW_PATH}` |
+
+`shell`을 생략하면 Unix에서는 `sh`, Windows에서는 `cmd`를 씁니다. 목록에 없는 값을 쓰거나 Unix에서 `cmd`나 `powershell`을 고르면, watcher는 hook을 하나도 실행하지 않고 `Error: unknown shell "bash": must be one of sh, cmd, powershell`이나 `Error: shell "cmd" runs only on Windows`를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```yaml
+shell: powershell
+watchTargets:
+  - path: ./src
+    lifeCycle:
+      onChange:
+        - Write-Output "changed: {{.Path}}"
+```
+
+설정 파일 하나는 OS 하나에서 쓴다고 보고, 그 OS 셸의 문법으로 hook을 씁니다. 여러 OS에서 쓰려면 OS마다 설정 파일을 따로 두거나 OS별 스크립트를 hook에서 호출합니다. hook 하나만 다른 셸로 실행하려면 `bash -c "..."`처럼 명령 안에서 직접 감쌉니다.
+
+- `cmd`는 지연 확장(`/v:on`)을 켜고 실행하므로, 명령에 쓴 `!`는 `!이름!` 형태의 변수 참조로 해석되고 짝이 없는 `!`는 사라집니다.
+- Windows PowerShell 5.1에는 `&&`가 없습니다. 앞 명령이 성공했을 때만 다음 명령을 실행하려면 `명령1; if ($?) { 명령2 }`처럼 씁니다.
+
+실패 로그의 `<명령>`에는 셸 실행 방식과, 템플릿 변수를 참조로 바꾼 명령이 함께 나옵니다(예: `/bin/sh -c cat "$DW_PATH"`).
+
 ### 명령 실행 위치
 
 | dir | global onStartWatch, global onFinishWatch, global onError | 그외 hook |
@@ -110,15 +139,23 @@ working directory <작업 폴더>: <원인>
 
 ### 실행 명령에서 쓸 수 있는 변수
 
-| 변수              | 설명                           | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
-|-----------------|------------------------------|--------------------------------------------------|
-| {{.Path}}       | 이벤트가 일어난 파일의 상대 경로           | test/dir2/b.txt                                  |
-| {{.AbsPath}}    | 이벤트가 일어난 파일의 절대 경로           | /Users/example/directory-watcher/test/dir2/b.txt |
-| {{.FileName}}   | 이벤트가 일어난 파일 이름               | b.txt                                            |
-| {{.ExtName}}    | 이벤트가 일어난 파일의 확장자             | .txt                                             |
-| {{.DirPath}}    | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로   | test/dir2                                        |
-| {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
-| {{.Event}}      | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
+| 변수              | 환경 변수             | 설명                           | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
+|-----------------|-------------------|------------------------------|--------------------------------------------------|
+| {{.Path}}       | `DW_PATH`         | 이벤트가 일어난 파일의 상대 경로           | test/dir2/b.txt                                  |
+| {{.AbsPath}}    | `DW_ABS_PATH`     | 이벤트가 일어난 파일의 절대 경로           | /Users/example/directory-watcher/test/dir2/b.txt |
+| {{.FileName}}   | `DW_FILE_NAME`    | 이벤트가 일어난 파일 이름               | b.txt                                            |
+| {{.ExtName}}    | `DW_EXT_NAME`     | 이벤트가 일어난 파일의 확장자             | .txt                                             |
+| {{.DirPath}}    | `DW_DIR_PATH`     | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로   | test/dir2                                        |
+| {{.DirAbsPath}} | `DW_DIR_ABS_PATH` | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
+| {{.Event}}      | `DW_EVENT`        | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
+
+watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자리를 그 환경 변수를 읽는 셸 참조로 바꿉니다. 참조 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)의 표에 있습니다. 파일 이름이 명령 문자열에 들어가지 않으므로, 이름에 `;`, `&`, `$(...)`가 있어도 명령으로 실행되지 않습니다.
+
+변수는 따옴표 밖에 씁니다. 따옴표 밖에 쓴 변수는 값에 공백이 있어도 인자 하나로 전달됩니다. 따옴표 안에 쓰면 다음과 같이 동작합니다.
+
+- `sh`에서 `'{{.Path}}'`처럼 작은따옴표 안에 쓰면 값 대신 `"$DW_PATH"`라는 글자가 그대로 전달됩니다.
+- `sh`와 `cmd`에서 `"{{.Path}}"`처럼 큰따옴표 안에 쓰면 참조가 따옴표 밖에 놓이므로, 값이 공백에서 여러 인자로 나뉠 수 있습니다.
+- `powershell`은 `"changed: {{.Path}}"`처럼 큰따옴표 안에서도 값을 펼치고, 작은따옴표 안에서는 `${env:DW_PATH}`라는 글자를 그대로 둡니다.
 
 `path`가 폴더를 가리키는 링크이면 링크가 가리키는 폴더를 감시합니다. 이때 위 변수에는 `path` 대신 링크를 모두 푼 경로를 기준으로 한 경로가 들어갑니다. `excludeDir`를 링크 경로 아래로 적으면 링크가 가리키는 폴더의 같은 위치를 제외합니다.
 
@@ -142,7 +179,7 @@ working directory <작업 폴더>: <원인>
 | `DW_ERROR_MESSAGE` | `FatalError.Error()`의 전체 메시지 |
 | `DW_ERROR_POSSIBLE_LOSS` | `true` (유실 가능성이며 유실 개수가 아님) |
 
-알림 실행 파일에서 환경 변수를 직접 읽으세요. 명령 문자열 자체는 셸 확장이나 리다이렉션을 수행하지 않습니다. 실행 가능한 셸 스크립트를 사용한다면 그 안에서 `printf '%s\n' "$DW_ERROR_MESSAGE"`처럼 확장을 따옴표로 감싸세요. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다. 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
+알림 명령도 설정한 셸이 실행하므로 환경 변수를 셸 문법으로 읽습니다. 예를 들어 `sh`에서는 `printf '%s\n' "$DW_ERROR_MESSAGE"`, `cmd`에서는 `echo !DW_ERROR_MESSAGE!`, `powershell`에서는 `Write-Output $env:DW_ERROR_MESSAGE`처럼 씁니다. `cmd`에서 `%DW_ERROR_MESSAGE%`로 읽으면 값에 든 `&`가 명령을 나누므로 `!DW_ERROR_MESSAGE!`를 씁니다. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다. 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
 
 최초 치명적 오류가 발생하면 모든 대상에서 새로운 일반 hook 실행 승인을 즉시 중단합니다. 알림은 일반 hook 취소와 독립적으로 고정 5초 실행 제한을 적용하고, 취소 정리에 최대 20초를 더 사용합니다(총 최대 25초). 알림 실패나 시간 초과는 로그에 남기며 원래 치명적 오류를 대체하지 않습니다. CLI는 원래 오류로 비정상 종료합니다. 취소 후에도 정상 종료 hook은 기존 규칙대로 실행합니다.
 

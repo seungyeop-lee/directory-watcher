@@ -114,9 +114,10 @@ func cleanupProcessTree(_ *exec.Cmd, tree processTree, deadline time.Time) error
 }
 
 func SetupForOs(cmd *exec.Cmd) error {
-	// 새로운 프로세스 그룹을 생성합니다.
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+	// 새로운 프로세스 그룹을 생성합니다. cmd 셸이 정한 명령줄(CmdLine)은 그대로 둡니다.
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
+	cmd.SysProcAttr.CreationFlags |= syscall.CREATE_NEW_PROCESS_GROUP
 	return nil
 }

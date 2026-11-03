@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,12 @@ func (f fakeCmd) Run(ctx *helper.WatcherContext, _ domain.Path, _ *domain.Event)
 
 func succeed(*helper.WatcherContext) error { return nil }
 
+// testBinaryCommand는 이 테스트 바이너리를 flags로 다시 실행하는 hook 명령이다. 인자를 큰따옴표로 감싸
+// 기본 셸(sh, cmd)이 경로의 공백이나 -test.run의 ^, $를 해석하지 않게 한다.
+func testBinaryCommand(flags string) string {
+	return fmt.Sprintf(`"%s" "%s"`, os.Args[0], flags)
+}
+
 // 0이 아닌 종료 코드로 끝나는 실제 프로세스가 필요한 테스트가 이 테스트 바이너리를 다시 실행한다.
 func TestHookExitProcess(t *testing.T) {
 	if os.Getenv("DW_HOOK_EXIT_HELPER") != "1" {
@@ -49,14 +56,14 @@ func TestHookExitProcess(t *testing.T) {
 
 func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 	t.Setenv("DW_HOOK_EXIT_HELPER", "1")
-	exitCommand := os.Args[0] + " -test.run=^TestHookExitProcess$"
+	exitCommand := testBinaryCommand("-test.run=^TestHookExitProcess$")
 	missingDir := domain.Path(filepath.Join(t.TempDir(), "not_exist"))
 	cases := map[string]struct {
 		failing domain.Cmd
 		want    string
 	}{
-		"start failure": {command.NewManager(command.StructuredCmd{Cmd: command.SingleCmd("pwd"), Dir: missingDir}), "pwd"},
-		"non-zero exit": {command.NewManager(command.SingleCmd(exitCommand)), exitCommand},
+		"start failure": {command.NewManager(command.StructuredCmd{Cmd: command.SingleCmd{Shell: command.DefaultShell(), Cmd: "pwd"}, Dir: missingDir}), "pwd"},
+		"non-zero exit": {command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: exitCommand}), exitCommand},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -79,9 +86,9 @@ func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 
 func TestTargetFinishHookFailureIsLogged(t *testing.T) {
 	t.Setenv("DW_HOOK_EXIT_HELPER", "1")
-	exitCommand := os.Args[0] + " -test.run=^TestHookExitProcess$"
+	exitCommand := testBinaryCommand("-test.run=^TestHookExitProcess$")
 	logger := &errorLog{}
-	info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: fakeCmd(succeed), OnAfterChange: fakeCmd(succeed), OnFinishWatch: command.NewManager(command.SingleCmd(exitCommand))}
+	info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: fakeCmd(succeed), OnAfterChange: fakeCmd(succeed), OnFinishWatch: command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: exitCommand})}
 	hooks := domain.Interruptible(false).BuildHookFuncBuilder("[target-alias]", info, logger)(".")
 	hooks.RunFinishHook()
 	if got := logger.String(); !strings.Contains(got, "[target-alias]") || !strings.Contains(got, exitCommand) {
@@ -120,7 +127,7 @@ func TestInterruptedRunIsNotLoggedAsFailure(t *testing.T) {
 
 func TestTargetHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 	missingDir := filepath.Join(t.TempDir(), "missing-dir")
-	noop := command.SingleCmd(os.Args[0] + " -test.run=^$")
+	noop := command.SingleCmd{Shell: command.DefaultShell(), Cmd: testBinaryCommand("-test.run=^$")}
 	cases := map[string]struct {
 		finish     domain.Cmd
 		targetPath domain.Path

@@ -4,7 +4,7 @@
 
 ## Run commands
 
-Run these from the repository root in PowerShell on a Windows host where Go and the console API are available. To run on a UTM Windows VM from a Mac, see [Running E2E on a UTM Windows VM](windows-utm.md). If the temporary path contains spaces, set `TEMP` and `TMP` to a path without spaces.
+Run these from the repository root in PowerShell on a Windows host where Go and the console API are available. To run on a UTM Windows VM from a Mac, see [Running E2E on a UTM Windows VM](windows-utm.md).
 
 ```powershell
 go test -count=1 -race ./...

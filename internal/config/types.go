@@ -10,3 +10,5 @@ type PathSuffixes []string
 type Millisecond uint
 
 type WatchEvent string
+
+type Shell string
