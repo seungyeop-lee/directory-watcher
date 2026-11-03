@@ -173,10 +173,7 @@ func (r *watchTargetRunner) addDir() error {
 	if !r.watchSubDir {
 		path := r.path
 		r.logger.Debug(fmt.Sprint("add path:", path))
-		err := r.watcher.Add(path.String())
-		if err != nil {
-			return err
-		}
+		return r.watcher.Add(path.String())
 	}
 
 	err := filepath.Walk(r.path.String(), func(p string, info os.FileInfo, err error) error {
