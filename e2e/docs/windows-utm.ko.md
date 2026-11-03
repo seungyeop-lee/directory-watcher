@@ -65,7 +65,7 @@ VM 기동과 종료에는 시간이 걸리므로, 여러 번 테스트할 때는
 
 실행기는 UTM을 `open -g`로 열고 UTM 메인 창을 바로 닫으며, VM 창은 디스플레이 장치가 없어 생기지 않습니다. 실행 중에 UTM 창을 직접 열어 클릭하지 않습니다([UTM이 크래시함](#utm이-크래시함)).
 
-성공하면 go test 출력에 각 테스트의 `PASS`가 표시되고 명령이 0으로 끝납니다. 테스트 실패, 시간 초과, 통신 실패, 결과 누락은 모두 0이 아닌 종료 코드로 끝납니다. make를 거치면 종료 코드는 2입니다.
+성공하면 go test 출력에 각 테스트의 `PASS`가 표시되고 명령이 0으로 끝납니다. 테스트 실패, 시간 초과, 통신 실패, 결과 누락은 모두 0이 아닌 종료 코드로 끝납니다. make를 거치면 종료 코드는 2입니다. 게스트 실행 디렉터리를 지우지 못한 것은 종료 코드를 바꾸지 않고 경고로만 알립니다([게스트 실행 디렉터리가 남음](#게스트-실행-디렉터리가-남음)).
 
 ### 테스트 선택·반복·시간 제한
 
@@ -104,7 +104,7 @@ Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명
 
 실행기는 결과의 실행 ID가 이번 실행과 같고, 오류·시간 초과·잔존 프로세스가 없으며, go 종료 코드가 0이고, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다. 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일은 전달하지 않습니다.
 
-게스트의 실행별 디렉터리 `<guest-dir>\<실행 ID>`는 회수가 끝나면 삭제됩니다. 회수에 실패하면 남겨 두고 오류 메시지에 경로를 표시합니다.
+게스트의 실행별 디렉터리 `<guest-dir>\<실행 ID>`는 회수가 끝나면 삭제됩니다. 회수에 실패하면 남겨 두고 오류 메시지에 경로를 표시합니다. 회수한 뒤에 디렉터리를 지우지 못하면 테스트 결과와 종료 코드는 그대로 두고, `Windows E2E cleanup:`으로 시작하는 경고에 남은 경로와 그 디렉터리를 지우는 명령을 표시합니다.
 
 같은 Mac에서 같은 VM에 대한 테스트는 동시에 실행할 수 있고, 각자 다른 실행 디렉터리를 사용합니다. 테스트가 실행 중인 동안 `up`의 기동과 `down`은 `another Windows E2E run on this Mac is using the VM`으로 거절됩니다. 다른 사용자 계정이나 다른 Mac의 실행과는 조정하지 않습니다.
 
@@ -131,6 +131,35 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
 ### QEMU가 종료 중에 비정상 종료함
 
 종료 요청 뒤 `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips`가 새로 생기면 `down`과 `all`은 VM이 꺼졌더라도 `QEMU aborted while the VM was stopping`으로 실패합니다. 디스플레이가 있는 원래 VM에서는 종료 11회 중 7회가 이렇게 끝났고, 전용 VM에서는 18회 중 0회였습니다(2026-11-03). 원인은 UTM의 QEMU 쪽이며 확인되지 않았습니다. 보고서에는 VM이 표시되지 않으므로, 같은 시간에 다른 VM의 QEMU가 비정상 종료해도 실패로 판정됩니다.
+
+### 게스트 실행 디렉터리가 남음
+
+`Windows E2E cleanup: guest run directory <경로> is still there after ...`는 실행기가 1분 동안 `rmdir`를 되풀이해도 디렉터리가 남은 경우입니다. 디렉터리 안의 파일을 열어 두었거나 그 안을 현재 디렉터리로 쓰는 게스트 프로세스가 원인입니다. 2026-11-03에는 테스트가 끝난 뒤에도 실행 중이던 `hookrec.exe`가 `src\e2e\scenarios`를 붙잡고 있었습니다. `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다.
+
+`utmctl exec`가 돌려주는 출력과 종료 코드는 게스트 명령의 결과가 아닐 수 있으므로, 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다. 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
+
+1. 게스트의 프로세스 목록을 확인합니다. E2E가 빌드해 실행하는 `directory-watcher.exe`와 `hookrec.exe`, 그리고 `go.exe`와 `*.test.exe`가 남아 있는지 봅니다. 출력은 게스트의 코드 페이지로 인코딩됩니다.
+
+   ```sh
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'tasklist > C:\dw-e2e\tasks.txt'
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\tasks.txt'
+   ```
+
+2. 남은 프로세스를 끝냅니다.
+
+   ```sh
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c taskkill /f /pid <PID>
+   ```
+
+같은 VM에서 동시에 실행 중인 다른 테스트의 디렉터리도 `C:\dw-e2e` 아래에 있습니다. 경고에 나온 경로만 지웁니다.
+
+3. 경고에 나온 명령을 실행해 디렉터리를 지웁니다.
+4. `C:\dw-e2e`의 목록에 경고의 실행 ID가 없으면 지워진 것입니다.
+
+   ```sh
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'dir /b C:\dw-e2e > C:\dw-e2e\list.txt'
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\list.txt'
+   ```
 
 ### VM 창이 화면에 뜨거나 부팅음이 남
 

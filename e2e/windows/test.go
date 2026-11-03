@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,7 +105,16 @@ func (g guestTest) run() error {
 		collectErr = fmt.Errorf("collect guest files: %w; they are kept in %s", collectErr, g.dir)
 	}
 	fmt.Fprintln(g.log, "Windows diagnostics:", g.local)
-	return errors.Join(testErr, collectErr, cleanupErr)
+	return report(os.Stderr, testErr, collectErr, cleanupErr)
+}
+
+// report는 실행 결과를 돌려준다. 게스트 실행 디렉터리를 지우지 못한 것은 테스트 결과를
+// 바꾸지 않으므로, 결과에 합치지 않고 warn에 경고로 알린다.
+func report(warn io.Writer, testErr, collectErr, cleanupErr error) error {
+	if cleanupErr != nil {
+		fmt.Fprintln(warn, "Windows E2E cleanup:", cleanupErr)
+	}
+	return errors.Join(testErr, collectErr)
 }
 
 func (g guestTest) file(name string) string { return g.dir + `\` + name }
@@ -300,18 +310,72 @@ func (g guestTest) collect(result []byte) error {
 	return errors.Join(problems...)
 }
 
-// removeGuestDir는 파일이 Mac에 도착한 뒤 게스트 실행 디렉터리를 지우고, 요청 파일을
-// 더 이상 읽을 수 없게 되었는지로 삭제를 확인한다.
+// removeLimit은 게스트 실행 디렉터리를 지우는 데 주는 시간이다. 이 시간 안에서는
+// 디렉터리가 남을 때마다 rmdir를 다시 보낸다.
+var removeLimit = time.Minute
+
+// removeGuestDir는 파일이 Mac에 도착한 뒤 게스트 실행 디렉터리를 지운다. rmdir를 실행한
+// cmd.exe가 디렉터리가 남았는지를 실행 디렉터리 옆의 표시 파일에 적고, 실행기는 그
+// 파일을 읽어 삭제를 확인한다. utmctl exec의 출력은 근거로 쓰지 않는다: 2026-11-03에
+// exec는 대개 rmdir를 기다리지 않고 출력 없이 0으로 끝났고, 앞서 실행한 다른 명령의
+// 출력과 종료 코드를 돌려준 적도 있다.
+//
+// 삭제를 확인하려고 실행 디렉터리 안의 파일을 읽으면 안 된다. Guest Agent가 file
+// pull로 열어 둔 파일은 rmdir가 지우지 못해서, 그날 rmdir가 지우는 동안 request.json을
+// 읽자 디렉터리에 request.json만 남았다. 디렉터리를 현재 디렉터리로 쓰는 프로세스가
+// 남아 있어도 rmdir는 디렉터리를 지우지 못한다.
 func (g guestTest) removeGuestDir() error {
-	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c", "rmdir", "/s", "/q", g.dir); err != nil {
-		return fmt.Errorf("remove guest run directory: %w", err)
-	}
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := g.pull(guestrun.RequestFile, requestLimit); err != nil {
+	defer g.deleteRemovalMarkers()
+	deadline := time.Now().Add(removeLimit)
+	for attempt := 1; ; attempt++ {
+		marker := g.dir + ".rmdir-" + strconv.Itoa(attempt)
+		if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c",
+			"rmdir", "/s", "/q", g.dir, "&", "(if", "exist", g.dir, "(echo", "kept)", "else", "(echo", "removed))>", marker); err != nil {
+			fmt.Fprintln(g.log, "rmdir request (utmctl exec may answer with the result of another guest command):", err)
+		}
+		switch g.awaitRemoval(marker, deadline) {
+		case "removed":
 			return nil
+		case "kept":
+			if time.Now().After(deadline) {
+				return fmt.Errorf("guest run directory %s is still there after %d rmdir attempts in %s; "+
+					"stop the guest processes that use it, then remove it with %s", g.dir, attempt, removeLimit, g.removeCommand())
+			}
+			if attempt == 1 {
+				fmt.Fprintf(g.log, "guest run directory is still there after rmdir; retrying for up to %s\n", removeLimit)
+			}
+			time.Sleep(time.Second)
+		default:
+			return fmt.Errorf("could not confirm that guest run directory %s was removed: rmdir attempt %d reported nothing within %s; "+
+				"if it is still there, remove it with %s", g.dir, attempt, removeLimit, g.removeCommand())
+		}
+	}
+}
+
+// awaitRemoval은 rmdir 한 번이 표시 파일에 적은 결과를 deadline까지 기다린다. 결과가
+// 없으면 빈 문자열을 돌려준다.
+func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
+	for {
+		data, err := g.utm.call(requestLimit, nil, "file", "pull", g.vm, marker)
+		if state := strings.TrimSpace(string(data)); err == nil && (state == "removed" || state == "kept") {
+			return state
+		}
+		if time.Now().After(deadline) {
+			return ""
 		}
 		time.Sleep(time.Second)
 	}
-	return fmt.Errorf("guest run directory %s still exists 30s after rmdir", g.dir)
+}
+
+// deleteRemovalMarkers는 이번 실행의 표시 파일을 지운다. 지우지 못한 표시 파일은 몇
+// 바이트뿐이므로 확인하지 않는다.
+func (g guestTest) deleteRemovalMarkers() {
+	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c", "del", "/q", g.dir+".rmdir-*"); err != nil {
+		fmt.Fprintln(g.log, "delete rmdir markers:", err)
+	}
+}
+
+// removeCommand는 남은 실행 디렉터리를 Mac의 셸에서 지우는 명령이다.
+func (g guestTest) removeCommand() string {
+	return fmt.Sprintf("%s exec %s --cmd cmd.exe /d /c rmdir /s /q '%s' (see e2e/docs/windows-utm.md)", g.utm.ctl, g.vm, g.dir)
 }

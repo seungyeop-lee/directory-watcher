@@ -65,7 +65,7 @@ Starting and shutting down the VM takes time, so when testing several times, run
 
 The runner opens UTM with `open -g` and closes the UTM main window right away, and no VM window appears because the VM has no display device. Do not open or click the UTM window yourself during a run ([UTM crashes](#utm-crashes)).
 
-On success, the go test output shows `PASS` for each test and the command exits with 0. Test failures, timeouts, communication failures, and missing results all end with a nonzero exit code. Through make, the exit code is 2.
+On success, the go test output shows `PASS` for each test and the command exits with 0. Test failures, timeouts, communication failures, and missing results all end with a nonzero exit code. Through make, the exit code is 2. Failing to remove the guest run directory does not change the exit code and is reported only as a warning ([Guest run directory is left behind](#guest-run-directory-is-left-behind)).
 
 ### Test selection, repetition, and time limits
 
@@ -104,7 +104,7 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 
 The runner judges a run successful only when the result's run ID matches this run, there are no errors, timeouts, or leftover processes, the go exit code is 0, and the run directory is on an internal disk (`fixed`). Uncommitted modifications, additions, and deletions in the working tree are sent as they are, and files excluded by `.gitignore` are not sent.
 
-The guest's per-run directory `<guest-dir>\<run ID>` is deleted once collection finishes. If collection fails, it is left in place and the error message shows its path.
+The guest's per-run directory `<guest-dir>\<run ID>` is deleted once collection finishes. If collection fails, it is left in place and the error message shows its path. If the directory cannot be removed after collection, the test result and the exit code stay as they are, and a warning starting with `Windows E2E cleanup:` shows the remaining path and the command that removes that directory.
 
 Tests against the same VM from the same Mac can run at the same time, and each uses a different run directory. While a test is running, both a VM start by `up` and `down` are refused with `another Windows E2E run on this Mac is using the VM`. Runs from other user accounts or other Macs are not coordinated.
 
@@ -131,6 +131,35 @@ In one case, clicking the UTM window during a run made UTM exit with SIGSEGV, an
 ### QEMU aborts during shutdown
 
 If a new `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips` appears after the shutdown request, `down` and `all` fail with `QEMU aborted while the VM was stopping` even if the VM shut down. On the original VM with a display, 7 of 11 shutdowns ended this way, and on the dedicated VM 0 of 18 did (2026-11-03). The cause is on UTM's QEMU side and has not been determined. The report does not identify the VM, so a QEMU abort of another VM at the same time is also judged a failure.
+
+### Guest run directory is left behind
+
+`Windows E2E cleanup: guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute. The cause is a guest process that keeps a file in the directory open or uses a directory inside it as its current directory. On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`. `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below.
+
+The output and exit code that `utmctl exec` returns may not be those of the guest command, so the commands below write their results to a file in the guest and read it with `utmctl file pull`. `C:\dw-e2e` in the commands is the default `-guest-dir`.
+
+1. Check the guest's process list. Look for the `directory-watcher.exe` and `hookrec.exe` that the E2E builds and runs, and for `go.exe` and `*.test.exe`. The output is encoded in the guest's code page.
+
+   ```sh
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'tasklist > C:\dw-e2e\tasks.txt'
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\tasks.txt'
+   ```
+
+2. End the remaining processes.
+
+   ```sh
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c taskkill /f /pid <PID>
+   ```
+
+The directories of other tests running on the same VM at the same time are also under `C:\dw-e2e`. Remove only the path shown in the warning.
+
+3. Run the command shown in the warning to remove the directory.
+4. If the run ID from the warning is not in the listing of `C:\dw-e2e`, the directory has been removed.
+
+   ```sh
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'dir /b C:\dw-e2e > C:\dw-e2e\list.txt'
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\list.txt'
+   ```
 
 ### The VM window appears or the boot sound plays
 
