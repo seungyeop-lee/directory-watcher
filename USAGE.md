@@ -19,9 +19,19 @@ Flags:
 
 ## Running with Docker
 
+Mount `config.yml` and the directory to watch into the published image, and pass the config path after the image name:
+
 ```shell
-docker run --rm ghcr.io/seungyeop-lee/directory-watcher:latest
+docker run --rm \
+  -v "$PWD/config.yml:/config.yml" \
+  -v "$PWD/src:/src" \
+  ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
 ```
+
+- Arguments after the image name are passed to `directory-watcher` as [command-line options](#command-line-options). Without arguments, the image only prints the help and exits.
+- The container's working directory is `/`, so relative paths in `config.yml` resolve under `/`. In the example, `path: src` refers to the mounted `/src`. Keep the working directory at `/`: if you change it with `-w`, the container exits with `./directory-watcher: not found`.
+- Hooks run inside the container. Mount each directory that a hook's `dir` names at the same path, as in `-v "$PWD/<dir>:/<dir>"`; otherwise the hook's commands fail. `dir: .` is `/` in the container.
+- Hook commands can use only the tools in the image. The image is based on Alpine Linux and includes `bash`, `curl`, `git`, `jq`, `make`, and `openssh-client`.
 
 **Known issue: delete events with bind mounts.** When you delete files on the host in a directory that is bind-mounted into a container, the delete event may not always be detected. This is a known issue with the underlying file system notification library (fsnotify). For details, see [fsnotify/fsnotify#592](https://github.com/fsnotify/fsnotify/issues/592).
 
