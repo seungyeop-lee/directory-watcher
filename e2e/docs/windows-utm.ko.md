@@ -69,7 +69,7 @@ VM 기동과 종료에는 시간이 걸리므로, 여러 번 테스트할 때는
 
 ### 테스트 선택·반복·시간 제한
 
-`ARGS`에는 실행기 옵션을 먼저 쓰고, `--` 뒤에 go test 인자를 씁니다. 게스트에서는 `go test -count=1 -v <전달 인자> ./e2e/scenarios`로 실행하므로, 뒤에 붙인 `-count`가 기본값을 대신합니다.
+`ARGS`에는 실행기 옵션을 먼저 쓰고, `--` 뒤에 go test 인자를 씁니다. 게스트에서는 `go test -count=1 -v <전달 인자> ./e2e/scenarios`로 실행하므로, 뒤에 붙인 `-count`가 기본값을 대신합니다. `--` 뒤에 패키지 경로를 더하면 그 패키지의 테스트도 `./e2e/scenarios`와 함께 실행합니다. 예를 들어 `make e2e-windows-all ARGS="-vm=Windows-E2E -- ./internal/app/service"`는 게스트에서 `go test -count=1 -v ./internal/app/service ./e2e/scenarios`를 실행합니다. `./e2e/scenarios`는 빼고 실행할 수 없습니다.
 
 ```sh
 make e2e-windows ARGS="-deadline=10m -- -count=3 -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|TestStartHookShutdownModes)$'"

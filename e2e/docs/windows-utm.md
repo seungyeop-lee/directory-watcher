@@ -69,7 +69,7 @@ On success, the go test output shows `PASS` for each test and the command exits 
 
 ### Test selection, repetition, and time limits
 
-In `ARGS`, write the runner options first and the go test arguments after `--`. The guest runs `go test -count=1 -v <passed arguments> ./e2e/scenarios`, so a `-count` you append replaces the default.
+In `ARGS`, write the runner options first and the go test arguments after `--`. The guest runs `go test -count=1 -v <passed arguments> ./e2e/scenarios`, so a `-count` you append replaces the default. If you add package paths after `--`, the tests in those packages also run along with `./e2e/scenarios`. For example, `make e2e-windows-all ARGS="-vm=Windows-E2E -- ./internal/app/service"` runs `go test -count=1 -v ./internal/app/service ./e2e/scenarios` in the guest. You cannot leave out `./e2e/scenarios`.
 
 ```sh
 make e2e-windows ARGS="-deadline=10m -- -count=3 -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|TestStartHookShutdownModes)$'"
