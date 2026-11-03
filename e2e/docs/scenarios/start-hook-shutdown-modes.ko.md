@@ -12,7 +12,7 @@
 
 ## 설정
 
-- 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
+- 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
 - 대상 옵션은 하위 테스트별 `noWait`·`interruptible`과 `waitMillisecond: 10`, `watchEvent: C`, `excludeSuffix: [.probe]`입니다. 종료 hook은 설정하지 않습니다.
 
 ## 하위 테스트
@@ -67,9 +67,9 @@ go run ./e2e/linux -- -run '^TestStartHookShutdownModes$'
 make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 ```
 
-하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^noWait=true$/^interruptible=false$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.md#실행-명령)에 있습니다.
+하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^noWait=true$/^interruptible=false$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 
 - `e2e/scenarios/process_test.go`: `TestStartHookShutdownModes`
-- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `ProcessRecords`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `ProcessRecords`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

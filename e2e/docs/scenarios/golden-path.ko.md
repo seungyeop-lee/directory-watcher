@@ -64,9 +64,9 @@ go run ./e2e/linux -- -run '^TestGoldenPath$'
 make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 ```
 
-UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.md#실행-명령)에 있습니다.
+UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 
 - `e2e/scenarios/golden_path_test.go`: `TestGoldenPath`, 설정을 만드는 `goldenConfig`, 기대 기록을 만드는 `changeValues`·`expectedSequence`
-- `e2e/harness`: `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

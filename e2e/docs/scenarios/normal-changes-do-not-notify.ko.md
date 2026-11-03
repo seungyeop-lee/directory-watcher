@@ -4,7 +4,7 @@
 
 ## 확인 내용과 성공 조건
 
-- **배치 완료**: `normal-00.txt`~`normal-19.txt`의 `CREATE` 이벤트 가운데 DEBUG 로그에 실제로 수신된 것만 대상으로 합니다. 마지막 `CHANGE:` 기록의 경로가 마지막으로 수신된 경로와 같고, 로그와 기록이 120ms 동안 변하지 않아야 합니다. `noWait=true`에서는 `CHANGE:` 기록 수가 수신된 생성 이벤트 수와도 같아야 합니다. 판정의 근거와 한계는 [OS E2E의 수신 경계 판정](../reliability.md#os-e2e의-수신-경계-판정)에 있습니다.
+- **배치 완료**: `normal-00.txt`~`normal-19.txt`의 `CREATE` 이벤트 가운데 DEBUG 로그에 실제로 수신된 것만 대상으로 합니다. 마지막 `CHANGE:` 기록의 경로가 마지막으로 수신된 경로와 같고, 로그와 기록이 120ms 동안 변하지 않아야 합니다. `noWait=true`에서는 `CHANGE:` 기록 수가 수신된 생성 이벤트 수와도 같아야 합니다. 판정의 근거와 한계는 [OS E2E의 수신 경계 판정](../reliability.ko.md#os-e2e의-수신-경계-판정)에 있습니다.
 - **고립된 변경**: 배치가 안정된 뒤 만든 `last.txt`의 `CHANGE:` 기록이 나타나야 합니다. 이 대기와 배치 완료 대기는 하나의 10초 제한을 공유합니다.
 - **알림 미실행**: watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝난 뒤, `ERROR|` 알림 기록이 하나도 없고 `FINISH` 기록이 정확히 한 번 있어야 합니다.
 
@@ -57,9 +57,9 @@ go run ./e2e/linux -- -run '^TestNormalChangesDoNotNotify$'
 make e2e-windows ARGS="-- -run '^TestNormalChangesDoNotNotify$'"
 ```
 
-하위 테스트 하나만 실행하려면 `-run '^TestNormalChangesDoNotNotify$/^noWait=true$'`처럼 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+하위 테스트 하나만 실행하려면 `-run '^TestNormalChangesDoNotNotify$/^noWait=true$'`처럼 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 
 ## 관련 코드
 
 - `e2e/scenarios/error_notification_test.go`: `TestNormalChangesDoNotNotify`, 알림 기록을 읽는 `errorContexts`
-- `e2e/harness`: `Start`, `Hook`, `AwaitChangesComplete`, `AwaitLine`, `Stop`, `Lines`, `CountRecord`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `AwaitChangesComplete`, `AwaitLine`, `Stop`, `Lines`, `CountRecord`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

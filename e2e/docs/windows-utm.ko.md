@@ -98,7 +98,7 @@ Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명
 | `source.txt` | 커밋, 전달한 소스 tar의 크기와 SHA-256, go test 인자, 미커밋 변경 목록 |
 | `request.json`, `result.json` | 게스트에 보낸 요청과 게스트 결과. 결과에는 실행 ID, go 종료 코드, 시간 초과 여부, 잔존 프로세스, Windows·Go 버전, 실행 디렉터리와 드라이브 종류가 있습니다. |
 | `stdout.log`, `stderr.log` | 게스트 go test의 출력 |
-| `diagnostics/` | 게스트 E2E 진단 파일. `cleanup.log`·`records.log.processes`의 분석은 [Windows 실패 분석](windows.md#실패-분석)과 같습니다. |
+| `diagnostics/` | 게스트 E2E 진단 파일. `cleanup.log`·`records.log.processes`의 분석은 [Windows 실패 분석](windows.ko.md#실패-분석)과 같습니다. |
 
 실행기는 결과의 실행 ID가 이번 실행과 같고, 오류·시간 초과·잔존 프로세스가 없으며, go 종료 코드가 0이고, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다. 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일은 전달하지 않습니다.
 
@@ -114,7 +114,7 @@ Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명
 
 ## Windows ARM64와 x64의 차이
 
-UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 race detector는 Windows에서 `windows/amd64`만 지원하므로([요구 사항](https://go.dev/doc/articles/race_detector#Requirements)), 이 VM에서는 `-race` 검증을 할 수 없습니다. `-race` 검증과 Windows x64 동작은 계속 GitHub Actions의 `test (windows-latest)`로 확인합니다([CI 단계](windows.md#ci-단계)). UTM 실행의 통과를 Windows x64 CI 결과로 대신하지 않습니다.
+UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 race detector는 Windows에서 `windows/amd64`만 지원하므로([요구 사항](https://go.dev/doc/articles/race_detector#Requirements)), 이 VM에서는 `-race` 검증을 할 수 없습니다. `-race` 검증과 Windows x64 동작은 계속 GitHub Actions의 `test (windows-latest)`로 확인합니다([CI 단계](windows.ko.md#ci-단계)). UTM 실행의 통과를 Windows x64 CI 결과로 대신하지 않습니다.
 
 ## 문제 해결
 

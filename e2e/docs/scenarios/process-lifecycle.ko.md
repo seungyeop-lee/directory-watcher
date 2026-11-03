@@ -13,7 +13,7 @@
 
 ## 설정
 
-- 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식(`세대|PID|깊이|상태`)과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
+- 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식(`세대|PID|깊이|상태`)과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
 - 대상 `onFinishWatch`는 `TARGET:onFinishWatch`를, 전역 `onFinishWatch`는 `GLOBAL:onFinishWatch`를 기록합니다.
 - 대상 옵션은 `interruptible: true`, `waitMillisecond: 100`, `watchEvent: C`, `excludeSuffix: [.probe]`입니다.
 
@@ -52,7 +52,7 @@ sequenceDiagram
 ```
 
 - `restart.txt`는 내용 없이 `O_CREATE|O_EXCL|O_RDONLY`로 열었다 닫아 생성합니다.
-- `DW_E2E_FAULT`를 지정하면 첫 세대를 확인한 직후 테스트가 실패하므로, 실제 프로세스 트리가 살아 있는 상태에서 정리 경로를 검사할 수 있습니다. 명령과 확인할 진단 파일은 [의도적인 실패·시간 초과](../diagnostics.md#의도적인-실패시간-초과)와 [Windows 실패 분석](../windows.md#실패-분석)에 있습니다.
+- `DW_E2E_FAULT`를 지정하면 첫 세대를 확인한 직후 테스트가 실패하므로, 실제 프로세스 트리가 살아 있는 상태에서 정리 경로를 검사할 수 있습니다. 명령과 확인할 진단 파일은 [의도적인 실패·시간 초과](../diagnostics.ko.md#의도적인-실패시간-초과)와 [Windows 실패 분석](../windows.ko.md#실패-분석)에 있습니다.
 
 ## 실행
 
@@ -64,9 +64,9 @@ go run ./e2e/linux -- -run '^TestProcessLifecycle$'
 make e2e-windows ARGS="-- -run '^TestProcessLifecycle$'"
 ```
 
-UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.md#실행-명령)에 있습니다.
+UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 
 - `e2e/scenarios/process_test.go`: `TestProcessLifecycle`, 세대 교체 순서를 검사하는 `assertCompletedBeforeRestart`
-- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `Stop`, `AssertGracefulCompletion`, `ProcessRecords`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `Stop`, `AssertGracefulCompletion`, `ProcessRecords`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

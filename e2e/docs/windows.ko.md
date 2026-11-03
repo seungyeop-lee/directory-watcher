@@ -2,7 +2,7 @@
 
 ## 실행 명령
 
-Go와 콘솔 API를 사용할 수 있는 Windows 호스트의 PowerShell에서 저장소 루트로 이동한 뒤 실행합니다. Mac에서 UTM Windows VM으로 실행하는 방법은 [UTM Windows VM에서 E2E 실행](windows-utm.md)에 있습니다. 임시 경로에 공백이 있으면 공백 없는 `TEMP`·`TMP` 경로를 지정합니다.
+Go와 콘솔 API를 사용할 수 있는 Windows 호스트의 PowerShell에서 저장소 루트로 이동한 뒤 실행합니다. Mac에서 UTM Windows VM으로 실행하는 방법은 [UTM Windows VM에서 E2E 실행](windows-utm.ko.md)에 있습니다. 임시 경로에 공백이 있으면 공백 없는 `TEMP`·`TMP` 경로를 지정합니다.
 
 ```powershell
 go test -count=1 -race ./...
@@ -10,7 +10,7 @@ go test -count=3 -v -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|Test
 if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 ```
 
-각 테스트가 확인하는 내용은 [`TestGoldenPath`](scenarios/golden-path.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) 문서에 있습니다.
+각 테스트가 확인하는 내용은 [`TestGoldenPath`](scenarios/golden-path.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) 문서에 있습니다.
 
 ## 정상 종료 방식
 
@@ -20,9 +20,9 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 `.github/workflows/ci.yml`의 `test (windows-latest)`는 `go test -count=1 -race ./...` 뒤 오류 알림 프로세스 검증과 위 세 테스트의 `-count=3` 반복을 실행합니다. 이어 `DW_E2E_FAULT=failure`, `timeout`의 의도적인 실패·시간 초과, 진단 파일과 세 PID 정리를 검사하고 별도로 실행한 Go 부모·자식·손자 트리가 살아 있는지 확인합니다. Windows 전용 단계는 앞 단계가 실패해도 job이 취소되지 않았다면 실행합니다. 앞 단계의 실패는 그대로 남아 최종 job도 실패하며, 진단 업로드 단계는 항상 실행됩니다. Go 빌드 캐시와 별개로 테스트 **결과 캐시는 재사용하지 않습니다**.
 
-`Verify Windows error notification process trees` 단계는 `TestEventLossNotificationCLI`를 실행하고 테스트 출력을 `notification.log`에 저장합니다. `notification.log`에는 알림 1회·최초 오류·소요 시간의 검사 결과가 남고, 이 단계는 `DW_E2E_KEEP=1`로 실행 폴더를 보존하므로 실행별 `watcher.log`에 실제 오류 진단이 남습니다. 모드별 확인 내용과 실행 폴더에 남는 생존 기록 파일은 [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) 문서에 있습니다.
+`Verify Windows error notification process trees` 단계는 `TestEventLossNotificationCLI`를 실행하고 테스트 출력을 `notification.log`에 저장합니다. `notification.log`에는 알림 1회·최초 오류·소요 시간의 검사 결과가 남고, 이 단계는 `DW_E2E_KEEP=1`로 실행 폴더를 보존하므로 실행별 `watcher.log`에 실제 오류 진단이 남습니다. 모드별 확인 내용과 실행 폴더에 남는 생존 기록 파일은 [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md) 문서에 있습니다.
 
-Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 이 정리를 검사하는 조건은 [트리 모드의 추가 확인](scenarios/event-loss-notification-cli.md#트리-모드의-추가-확인)에 있습니다.
+Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 이 정리를 검사하는 조건은 [트리 모드의 추가 확인](scenarios/event-loss-notification-cli.ko.md#트리-모드의-추가-확인)에 있습니다.
 
 ## CI 결과 확인
 
@@ -40,4 +40,4 @@ go test -count=1 -v -timeout=2m -run '^TestProcessLifecycle$' ./e2e/scenarios
 Remove-Item Env:DW_E2E_FAULT
 ```
 
-이 명령은 0이 아닌 종료가 기대 결과입니다. `diagnostics retained:` 경로의 진단 파일과 `cleanup.log`의 세 `alive=false`를 확인합니다. `DW_E2E_DIAGNOSTICS`로 진단 상위 디렉터리를 지정할 수 있으며 CI는 `${{ runner.temp }}/dw-e2e`를 사용합니다. 진단 파일 목록과 macOS·Linux의 같은 검사는 [E2E 실패·시간 초과 진단과 격리](diagnostics.md)에 있습니다.
+이 명령은 0이 아닌 종료가 기대 결과입니다. `diagnostics retained:` 경로의 진단 파일과 `cleanup.log`의 세 `alive=false`를 확인합니다. `DW_E2E_DIAGNOSTICS`로 진단 상위 디렉터리를 지정할 수 있으며 CI는 `${{ runner.temp }}/dw-e2e`를 사용합니다. 진단 파일 목록과 macOS·Linux의 같은 검사는 [E2E 실패·시간 초과 진단과 격리](diagnostics.ko.md)에 있습니다.

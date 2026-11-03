@@ -102,7 +102,7 @@ sequenceDiagram
 ## 플랫폼별 자손 정리
 
 - macOS·Linux의 트리 모드는 부모가 먼저 끝나거나 실패한 뒤에도 남은 자손까지 정리되는지 검사합니다. 알림의 프로세스 그룹에는 TERM을 보내고 필요하면 KILL을 보내며, 5초 실행 제한과 20초 정리 상한을 공유합니다.
-- Windows의 같은 모드는 Job Object로 자손을 정리합니다. CI 단계와 확인할 기록은 [Windows CI 단계](../windows.md#ci-단계)와 [CI 결과 확인](../windows.md#ci-결과-확인)에 있습니다.
+- Windows의 같은 모드는 Job Object로 자손을 정리합니다. CI 단계와 확인할 기록은 [Windows CI 단계](../windows.ko.md#ci-단계)와 [CI 결과 확인](../windows.ko.md#ci-결과-확인)에 있습니다.
 
 ## 실행
 
@@ -114,10 +114,10 @@ go run ./e2e/linux -- -run '^TestEventLossNotificationCLI$'
 make e2e-windows ARGS="-- -run '^TestEventLossNotificationCLI$'"
 ```
 
-모드 하나만 실행하려면 `-run '^TestEventLossNotificationCLI$/^timeout$'`처럼 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+모드 하나만 실행하려면 `-run '^TestEventLossNotificationCLI$/^timeout$'`처럼 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 
 ## 관련 코드
 
 - `e2e/scenarios/error_notification_test.go`: `TestEventLossNotificationCLI`, 모드별 `onError`를 만드는 `notificationConfig`, 알림 기록을 읽는 `errorContexts`, 검사 함수 `assertErrorContext`·`assertLossExit`
-- `e2e/harness`: `NewScenario`, `StartProcess`, `HookrecBin`, `Launch`, `WatcherBin`, `Hook`, `Await`, `DelayedHookBegun`, `CountRecord`, `ReadLinesLenient`, `AwaitReadyGenerations`, `AssertRunning`, `SnapshotProcesses`, `Done`, `Exited`, `ExitErr`, `Log`, `AwaitDelayedHooksGone`, `ProcessRecords`, `ProcessesGone`, `Alive`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `NewScenario`, `StartProcess`, `HookrecBin`, `Launch`, `WatcherBin`, `Hook`, `Await`, `DelayedHookBegun`, `CountRecord`, `ReadLinesLenient`, `AwaitReadyGenerations`, `AssertRunning`, `SnapshotProcesses`, `Done`, `Exited`, `ExitErr`, `Log`, `AwaitDelayedHooksGone`, `ProcessRecords`, `ProcessesGone`, `Alive`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
 - `e2e/hookrec`: `--error-context`(오류 환경 변수와 작업 디렉터리를 `ERROR|<JSON>`으로 기록), `--release-file`(해제 파일이 생기면 부모만 종료), `--exit-code`

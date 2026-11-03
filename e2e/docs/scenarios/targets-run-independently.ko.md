@@ -60,9 +60,9 @@ go run ./e2e/linux -- -run '^TestTargetsRunIndependently$'
 make e2e-windows ARGS="-- -run '^TestTargetsRunIndependently$'"
 ```
 
-UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.md#경합과-과부하-검증)에 있습니다.
+UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 ## 관련 코드
 
 - `e2e/scenarios/reliability_test.go`: `TestTargetsRunIndependently`
-- `e2e/harness`: `Start`, `Hook`, `Await`, `DelayedHookBegun`, `AwaitLine`, `CountRecord`, `Stop`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `Await`, `DelayedHookBegun`, `AwaitLine`, `CountRecord`, `Stop`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
