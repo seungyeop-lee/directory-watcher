@@ -4,7 +4,7 @@
 
 Causes a fatal error with a real dispatch queue saturation and checks that the CLI runs `global.lifeCycle.onError` once and exits abnormally with the original error. Six modes check that, even when the notification is absent, its executable is missing, it fails or times out, or only its parent exits first, the original error and the finish hooks are preserved and only the notification's descendants are cleaned up.
 
-This saturation is a loss in the application queue and is not evidence of an observed OS overflow. The notification's environment variables and its run and cleanup time limit contract follow [Event-loss notification](../../../README.md#event-loss-notification).
+This saturation is a loss in the application queue and is not evidence of an observed OS overflow. The notification's environment variables and its run and cleanup time limit contract follow [Event-loss notification](../../../USAGE.md#event-loss-notification).
 
 ## What it checks and success criteria
 

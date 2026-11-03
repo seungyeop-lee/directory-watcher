@@ -31,7 +31,7 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 
 What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) and [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md) documents. How notification descendants are cleaned up on macOS, Linux, and Windows is in [Descendant cleanup by platform](scenarios/event-loss-notification-cli.md#descendant-cleanup-by-platform).
 
-The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./internal/config/yaml` actually runs decoded structured commands and checks that environment variables are passed verbatim, the `dir` working directory, and compatibility with existing configurations. The notification's environment variables and its contract of a fixed 5-second run limit and at most 20 seconds of cancellation cleanup follow [Event-loss notification](../../README.md#event-loss-notification).
+The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./internal/config/yaml` actually runs decoded structured commands and checks that environment variables are passed verbatim, the `dir` working directory, and compatibility with existing configurations. The notification's environment variables and its contract of a fixed 5-second run limit and at most 20 seconds of cancellation cleanup follow [Event-loss notification](../../USAGE.md#event-loss-notification).
 
 ## Kinds of loss verification
 

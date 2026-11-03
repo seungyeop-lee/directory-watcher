@@ -1,31 +1,46 @@
-<p align="center">
-    <a href="README.md"><b>영어</b></a> •
-    <a href="README.ko.md"><b>한국어</b></a>
-</p>
-
-> [!WARNING]
-> 이 프로그램은 macOS와 Linux에서 정상 작동하는 것을 확인하였습니다.
-> Windows환경에서는 Git Bash에서 사용이 가능합니다. Powershell이나 명령 프롬프트에서는 표준 출력에 문제가 있습니다. 
-> 또한 Windows환경에서 `interruptible: true` 설정 시 자식의 자식 프로세스가 제대로 종료되지 않는 경우가 있으므로 주의가 필요합니다.
-
 # Directory Watcher
 
-디렉토리 내 변경 (생성, 수정, 삭제)이 발생 시 정해진 커맨드를 실행하게 하는 프로그램입니다.
-이 도구를 사용하면 파일 시스템의 변경 사항에 대해 실시간으로 반응하고, 이러한 변경 사항에 따라 특정 작업을 자동화할 수 있습니다.
-예를 들어, 특정 디렉토리에서 파일이 변경되면 자동으로 백업을 만들거나, 코드가 변경되면 테스트를 실행하는 등의 작업을 설정할 수 있습니다.
+🇺🇸 [English](README.md) | 🇰🇷 한국어
 
-## 기능 및 특징
+Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·삭제되면 미리 정해 둔 명령을 실행하는 프로그램입니다. 코드를 고칠 때마다 빌드나 테스트를 다시 실행하거나, 소스가 바뀌면 개발 서버를 재시작하거나, 파일이 바뀔 때 백업을 만드는 작업을 자동화할 수 있습니다.
 
-- 여러개의 디렉토리 감시 가능
-- 각 디렉토리 별 변경 발생 시 실행되는 커맨드 개별 설정 가능
-- 공통적으로 실행되어야 하는 커맨드 설정, 감시 시작 및 감시 종료 시 실행되어야 하는 커맨드 설정 가능
-- 감시 대상 디렉토리 내 감시 제외 디렉토리 추가 가능
-- 감시 대상 디렉토리 내 감시 제외 접미사 추가 가능
-- 이벤트 발생 후, hook을 실행하는 사이 대기시간 설정 가능
-- 하위 디렉토리 감시 여부 설정 가능
-- 감시 이벤트 설정 가능 (C: 생성, U: 수정, D: 삭제)
-- 실행 커맨드 내 사용가능 변수 설정 가능
-- 커맨드 실행 중 이벤트 발생 시, 실행 중인 커맨드 중지 후 새 커맨드 실행 가능 (데몬 프로세스 대응)
+## 기능
+
+### 파일이 바뀌면 명령 실행하기
+
+- 여러 디렉터리를 한 번에 감시합니다. 감시 대상마다 `onChange` 명령을 따로 정하고, 전역 `onBeforeChange`와 `onAfterChange` 명령은 모든 대상의 `onChange` 앞뒤에 실행됩니다.
+- 반응할 이벤트(생성, 수정, 삭제)를 고르고, 특정 디렉터리나 파일 접미사, 하위 디렉터리를 감시에서 뺄 수 있습니다.
+- 바뀐 파일의 경로, 이름, 확장자, 디렉터리, 이벤트 종류를 [템플릿 변수](USAGE.ko.md#실행-명령에서-쓸-수-있는-변수)로 명령에 넘깁니다.
+
+### 몰려드는 변경 다루기
+
+- 기본 동작에서는 이벤트가 몰려도 마지막 이벤트 뒤 `waitMillisecond`(기본 100ms)가 지나면 hook을 한 번만 실행합니다.
+- `noWait: true`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다.
+- 대상마다 대기 이벤트를 최대 256개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
+
+### 오래 실행되는 프로세스 재시작하기
+
+- `interruptible: true`로 설정하면 새 변경이 생겼을 때 실행 중인 명령을 취소하고, 그 명령이 끝나기를 기다린 뒤 변경 명령을 다시 실행합니다. 스스로 끝나지 않는 서버 같은 프로세스에 사용합니다.
+- watcher를 멈추면 실행 중인 명령을 취소한 뒤 종료 명령을 실행합니다.
+
+### 시작·종료 명령 실행하기
+
+- `onStartWatch`와 `onFinishWatch`는 감시를 시작하고 끝낼 때 실행되며, 전역과 감시 대상별로 각각 정할 수 있습니다.
+
+### 이벤트 유실 가능성 알림 받기
+
+- 대상의 대기열이 가득 차거나 OS가 이벤트 overflow를 보고하면, 선택 항목인 전역 `onError` 명령이 한 번 실행됩니다. 오류 정보는 `DW_ERROR_*` 환경 변수로 전달됩니다. 자세한 내용은 [이벤트 유실 알림](USAGE.ko.md#이벤트-유실-알림)을 확인하세요.
+
+## 요구 사항
+
+- macOS 또는 Linux. 이 두 환경에서 정상 작동하는 것을 확인했습니다.
+- Windows. 아래 경고의 제약이 있습니다.
+- Go 1.23 이상. `go install`로 설치할 때만 필요합니다.
+
+> [!WARNING]
+> Windows의 PowerShell이나 명령 프롬프트에서는 표준 출력에 문제가 있을 수 있습니다.
+>
+> Windows에서 watcher는 실행 중인 명령을 멈출 때 그 명령의 프로세스 그룹에 CTRL+BREAK를 보냅니다. Windows E2E(UTM VM의 Windows 11 ARM64, 2026-11-03 실행)는 Git Bash 없이 watcher를 실행해, `interruptible: true`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 그 그룹에 남아 신호를 받고 끝나는 경우 모두 종료되는 것을 확인합니다([`TestProcessLifecycle`](e2e/docs/scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](e2e/docs/scenarios/start-hook-shutdown-modes.ko.md)). 자기만의 콘솔이나 프로세스 그룹을 만들거나 신호를 무시하는 자손 프로세스는 계속 실행될 수 있습니다.
 
 ## 설치
 
@@ -41,168 +56,120 @@ brew install seungyeop-lee/tap/directory-watcher
 go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
 
-### In Dockerfile
+### Dockerfile에서 설치
 
 ```dockerfile
 COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
 ```
 
-### Releases
+### 릴리스 파일
 
-[releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에서 실행파일을 다운로드
+[releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에서 실행 파일을 내려받습니다.
 
-## 사용법
+## 시작하기
 
-다음의 커맨드를 통해 `directory-watcher`를 실행할 수 있습니다.
+1. watcher를 실행할 디렉터리에 `config.yml`을 만듭니다. 다음 예시는 `src` 아래의 파일이 바뀔 때마다 그 디렉터리에서 `make test`를 실행합니다.
 
-```shell
-directory-watcher
-```
+   ```yaml
+   watchTargets:
+     - path: src
+       lifeCycle:
+         onChange:
+           - dir: .
+             cmd: make test
+   ```
 
-또한 docker를 사용하여 실행할 수 있습니다.
+2. 같은 디렉터리에서 watcher를 시작합니다.
 
-```shell
-docker run --rm ghcr.io/seungyeop-lee/directory-watcher:latest
+   ```shell
+   directory-watcher
+   ```
 
-# 알려진 이슈: bind mount된 디렉토리에서 파일 삭제 시 삭제 이벤트 누락
-# 호스트 시스템에서 컨테이너에 bind mount된 디렉토리 내의 파일을 삭제할 경우, 삭제 이벤트가 항상 감지되는 것은 아닙니다. 
-# 이는 파일 시스템 알림 라이브러리(fsnotify)의 알려진 문제입니다.
-# 자세한 내용은 다음을 참조하세요: https://github.com/fsnotify/fsnotify/issues/592
-```
+   다른 위치의 설정 파일을 쓰려면 `-c <설정 파일 경로>`로 경로를 지정합니다.
 
-이 커맨드는 다음과 같은 옵션을 제공합니다.
+3. `src` 아래의 파일을 고칩니다. 마지막 변경 뒤 100ms가 지나면 `make test`가 실행됩니다.
 
-```shell
-Usage:
-  directory-watcher [flags]
-
-Flags:
-  -c, --config-path string   set config path (default "config.yml")
-  -h, --help                 help for directory-watcher
-  -l, --log-level string     set log level (default "ERROR")
-  -v, --version              version for directory-watcher
-```
-
-## config.yml
-
-실제 파일은 `config.example.yml` 예제 참조.
-`config.yml` 파일은 감시할 디렉토리와 각 디렉토리에서 발생하는 변경에 대해 실행할 커맨드를 정의합니다.
-또한, 감시를 시작하거나 종료할 때 실행할 커맨드를 정의할 수도 있습니다.
-
-```yaml
-global:
-  lifeCycle:
-    onStartWatch: # global onStartWatch hook
-      - '실행 커맨드'
-      - dir: '실행 커맨드가 실행 될 디렉토리경로'
-        cmd: '실행 커맨드'
-      - dir: '실행 커맨드가 실행 될 디렉토리경로'
-        cmd:
-          - '실행 커맨드 1'
-          - '실행 커맨드 2'
-    onBeforeChange: # global onBeforeChange hook
-      [ global onStartWatch hook의 사양과 동일 ]
-    onAfterChange: # global onAfterChange hook
-      [ global onStartWatch hook의 사양과 동일 ]
-    onFinishWatch: # global onFinishWatch hook
-      [ global onStartWatch hook의 사양과 동일 ]
-    onError: # 선택적인 전역 이벤트 유실 알림
-      [ global onStartWatch hook의 사양과 동일 ]
-watchTargets:
-  - path: [ 감시대상 폴더 path ]
-    lifeCycle:
-      onStartWatch: # onStartWatch hook
-        [ global onStartWatch hook의 사양과 동일 ]
-      onChange: # onChange hook
-        [ global onStartWatch hook의 사양과 동일 ]
-      onFinishWatch: # onFinishWatch hook
-        [ global onStartWatch hook의 사양과 동일 ]
-    option:
-      excludeDir:
-        - [ 감시 제외대상 폴더 path ]
-      excludeSuffix:
-        - [ 감시 제외대상 파일 접미사 ]
-      waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
-      watchSubDir: [ 하위 디렉토리 감시 여부, default는 true ]
-      watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제), default는 "CUD" ]
-      noWait: [ 이벤트 발생 후 대기시간 없이 바로 hook을 실행할지 여부, default는 false ]
-      interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
-```
-
-### cmd 실행 위치
-
-다음은 각 hook에 대한 커맨드 실행 위치를 설명합니다.
-
-| dir | global onStartWatch, global onFinishWatch, global onError | 그외 hook |
-|-----|-------------------------------------------|------------|
-| O   | dir 설정 위치                                 | dir 설정 위치  |
-| X   | 프로그램 실행 위치                                | path 설정 위치 |
-
-### 실행 커맨드 내 사용가능 변수
-
-| 변수              | 설명                           | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
-|-----------------|------------------------------|--------------------------------------------------|
-| {{.Path}}       | 이벤트가 일어난 파일의 상대 경로           | test/dir2/b.txt                                  |
-| {{.AbsPath}}    | 이벤트가 일어난 파일의 절대 경로           | /Users/example/directory-watcher/test/dir2/b.txt |
-| {{.FileName}}   | 이벤트가 일어난 파일 이름               | b.txt                                            |
-| {{.ExtName}}    | 이벤트가 일어난 파일의 확장자             | .txt                                             |
-| {{.DirPath}}    | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로   | test/dir2                                        |
-| {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
-| {{.Event}}      | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
-
-### 이벤트 유실 알림
-
-`global.lifeCycle.onError`는 선택 항목이며 다른 hook과 같은 명령 목록 및 구조화된 `dir`/`cmd` 형식을 사용합니다. runner별 최대 한 번, 최초 치명적 오류가 `errors.Is(err, fsnotify.ErrEventOverflow)`를 만족할 때만 실행합니다. 전달 대기열 포화와 OS가 보고한 overflow가 여기에 해당합니다. 다른 치명적 오류, 정상 종료, debounce에 의한 대체는 알림을 실행하지 않습니다.
-
-오류 정보는 명령 템플릿에 삽입하지 않고 환경 변수로 전달합니다.
-
-| 환경 변수 | 값 |
-|-----------|----|
-| `DW_ERROR_TARGET` | 치명적 오류가 발생한 감시 대상 |
-| `DW_ERROR_KIND` | `event_loss` |
-| `DW_ERROR_CAUSE` | 원래 원인 문자열 |
-| `DW_ERROR_MESSAGE` | `FatalError.Error()`의 전체 메시지 |
-| `DW_ERROR_POSSIBLE_LOSS` | `true` (유실 가능성이며 유실 개수가 아님) |
-
-알림 실행 파일에서 환경 변수를 직접 읽으세요. 명령 문자열 자체는 셸 확장이나 리다이렉션을 수행하지 않습니다. 실행 가능한 셸 스크립트를 사용한다면 그 안에서 `printf '%s\n' "$DW_ERROR_MESSAGE"`처럼 확장을 따옴표로 감싸세요. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다. 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
-
-최초 치명적 오류가 발생하면 모든 대상에서 새로운 일반 hook 실행 승인을 즉시 중단합니다. 알림은 일반 hook 취소와 독립적으로 고정 5초 실행 제한을 적용하고, 취소 정리에 최대 20초를 더 사용합니다(총 최대 25초). 알림 실패나 시간 초과는 로그에 남기며 원래 치명적 오류를 대체하지 않습니다. CLI는 원래 오류로 비정상 종료합니다. 취소 후에도 정상 종료 hook은 기존 규칙대로 실행합니다.
-
-각 오류 알림 명령이 완료·실패·시간 초과되면 같은 정리 시간 한도 안에서 남은 자손을 종료합니다. Windows에서는 알림 명령마다 별도 Job Object를 만들고, 일시 중단된 부모를 Job에 배정한 뒤 실행하므로 부모 PID의 생존 여부에 의존하지 않습니다. Job을 설정하지 못하면 알림 명령을 실행하지 않습니다. 일반 hook과 다른 실행의 프로세스는 이 알림 Job에 배정하지 않습니다.
-
-## 주의사항
-
-### waitMillisecond와 noWait
-
-- `watchTargets.path` 내부에서 이벤트가 발생하게 되면 waitMillisecond 만큼 대기 후 hook을 실행합니다.
-- 대기 중 `watchTargets.path` 내부에서 다른 이벤트가 발생하게 되면 그 전 이벤트는 무시됩니다. 즉, 새로 생긴 이벤트 기준으로 waitMillisecond 만큼 다시 대기 후 hook을 실행합니다.
-- `watchTargets.path` 내부의 이벤트가 무시되지 않고, 모든 이벤트로 인해 hook이 즉시 실행되길 원한다면 noWait를 true로 설정합니다. (이벤트에 대한 hook은 순차적으로 실행됩니다.)
-
-### 과부하와 종료
-
-- 대상별 대기 이벤트는 최대 256개, 실행 중인 hook 세대는 최대 1개입니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외 suffix는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
-- 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
-- 중단 모드는 이전 세대를 취소하고 완료를 기다린 뒤 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리기를 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
-- 경로 판별 중 연 파일은 디렉터리 정보 조회 실패를 포함해 함수가 반환하기 전에 닫습니다. 이 handle의 반납은 가비지 컬렉션에 의존하지 않습니다.
-- 파일 조작과 OS 알림은 일대일이 아닙니다. fsnotify v1.7.0의 inotify는 `ErrEventOverflow`를 보고하지만 macOS kqueue는 이 오류를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. [E2E 시나리오와 한계](e2e/docs/reliability.ko.md#경합과-과부하-검증)를 확인하세요.
-
-
-### 폴더 이벤트 감지에 대한 제약사항
-
-- 기본동작은 감시 대상 폴더 내의 **파일**의 이벤트에 따라 hook을 실행합니다.
-- 즉, 폴더의 생성 및 이름 수정으로는 hook이 실행되지 않습니다.
-- 그러나, 폴더의 삭제 (빈 폴더 포함)에 대해서는 삭제 대상이 폴더임을 인식 할 수 없어 hook이 실행됩니다.
+- **멈추기:** Ctrl+C를 누르거나 SIGTERM을 보냅니다. watcher는 실행 중인 명령을 취소하고 종료 명령을 실행한 뒤 끝납니다.
+- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
 
 ## 동작 다이어그램
 
-다음 다이어그램은 `Directory Watcher`가 어떻게 동작하는지를 보여줍니다.
+전역 `onStartWatch`가 가장 먼저 실행됩니다. 그 뒤 감시 대상마다 따로 시작하고, 각 대상은 다른 대상과 관계없이 자기 변경을 처리합니다.
 
-![directory-watcher-life-cycle.png](static/directory-watcher-life-cycle.png)
+```mermaid
+flowchart TD
+    globalStart["전역 onStartWatch"]
+    subgraph eachTarget["감시 대상마다 독립적으로"]
+        watchDirs["대상 디렉터리 감시 시작"]
+        targetStart["대상 onStartWatch"]
+        receiveEvent(("이벤트 수신"))
+        filterEvent{"감시하는 이벤트 종류이고<br>제외 접미사가 아닌가?"}
+        queueEvent{"대상의 256개 대기열에<br>자리가 있는가?"}
+        modeChoice{"noWait?"}
+        debounceWait["마지막 이벤트 뒤 waitMillisecond 대기<br>그 이벤트만 남김"]
+        orderedRun["받은 순서대로 이벤트 처리"]
+        interruptChoice{"interruptible?"}
+        cancelPrevious["실행 중인 명령을 취소하고<br>끝나기를 기다림"]
+        runChange["전역 onBeforeChange → onChange<br>→ 전역 onAfterChange"]
+    end
+    fatalStop(["치명적 오류: 다음 다이어그램"])
+
+    globalStart --> watchDirs
+    watchDirs --> targetStart
+    targetStart --> receiveEvent
+    receiveEvent -->|"새 디렉터리는 감시 목록에 추가"| filterEvent
+    filterEvent -->|"아니오: 무시"| receiveEvent
+    filterEvent -->|"예"| queueEvent
+    queueEvent -->|"아니오"| fatalStop
+    queueEvent -->|"예"| modeChoice
+    modeChoice -->|"false"| debounceWait
+    modeChoice -->|"true"| orderedRun
+    debounceWait --> interruptChoice
+    orderedRun --> interruptChoice
+    interruptChoice -->|"true"| cancelPrevious
+    interruptChoice -->|"false: 실행 중인 명령이 끝날 때까지 대기"| runChange
+    cancelPrevious --> runChange
+    runChange -->|"다음 이벤트"| receiveEvent
+```
+
+- `interruptible: false`에서는 대상 `onStartWatch`나 변경 명령이 실행되는 동안 들어온 이벤트가 그 명령이 끝날 때까지 대기열에서 기다립니다. `interruptible: true`에서는 실행 중인 대상 `onStartWatch`도 다음 변경이 취소합니다.
+- 한 번의 실행에 속한 명령은 차례대로 실행되며, 실패한 명령이 나오면 그 실행을 멈춥니다.
+
+종료 신호와 치명적 오류는 모두 전체 감시 대상을 멈춘 뒤 종료 명령을 실행합니다.
+
+```mermaid
+flowchart TD
+    shutdownSignal(("SIGINT 또는 SIGTERM"))
+    fatalError(("대상의 치명적 오류:<br>대기열 포화, OS overflow,<br>watcher 오류, 없는 경로"))
+    stopTargets["모든 대상: 새 명령 시작을 멈추고<br>실행 중인 명령 취소"]
+    targetFinish["대상마다: 대기 중인 변경을 버리고<br>실행 중인 명령이 끝나기를 기다린 뒤<br>대상 onFinishWatch 실행"]
+    lossCheck{"이벤트 유실 가능성?<br>대기열 포화 또는 OS overflow"}
+    errorHook["전역 onError 한 번<br>5초 실행 제한, 이어서 최대 20초 정리"]
+    globalFinish["전역 onFinishWatch"]
+    exitCheck{"치명적 오류가 있었는가?"}
+    exitSuccess(("종료 코드 0"))
+    exitFailure(("종료 코드 1"))
+
+    shutdownSignal --> stopTargets
+    fatalError --> stopTargets
+    stopTargets --> targetFinish
+    stopTargets -->|"치명적 오류 뒤"| lossCheck
+    lossCheck -->|"예"| errorHook
+    lossCheck -->|"아니오"| globalFinish
+    targetFinish --> globalFinish
+    errorHook --> globalFinish
+    globalFinish --> exitCheck
+    exitCheck -->|"아니오"| exitSuccess
+    exitCheck -->|"예"| exitFailure
+```
+
+- 대상 종료 명령은 `onError`가 실행되는 동안에도 실행될 수 있습니다. 전역 `onFinishWatch`는 두 쪽이 모두 끝나기를 기다립니다.
+- 종료 명령에는 별도의 실행 제한 시간이 없습니다.
 
 ## 개발 검증
 
 현재 워크트리 소스를 사용하는 macOS·Linux·Windows 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.md)를 확인하세요.
 
-## 라이센스
+## 라이선스
 
-이 프로젝트는 [GPL-3.0 라이센스](LICENSE) 하에 제공됩니다. 자세한 내용은 라이센스 파일을 참조해주세요.
+이 프로젝트는 [GPL-3.0 라이선스](LICENSE)에 따라 제공됩니다. 자세한 내용은 라이선스 파일을 확인하세요.
