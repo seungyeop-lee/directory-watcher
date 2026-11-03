@@ -49,14 +49,29 @@ func (p Path) IsSubDir(input Path) bool {
 }
 
 func (p Path) isSubDirLogical(input Path) bool {
+	_, ok := p.relOf(input)
+	return ok
+}
+
+// Rebase는 from과 같거나 from 아래에 있는 경로를 to 아래의 같은 위치로 바꾸고, 그 밖의 경로는 그대로 돌려준다.
+func (p Path) Rebase(from, to Path) Path {
+	rel, ok := from.relOf(p)
+	if !ok {
+		return p
+	}
+	return Path(filepath.Join(string(to), rel))
+}
+
+// relOf는 input이 p와 같거나 p 아래에 있으면 p 기준 상대 경로를 돌려준다.
+func (p Path) relOf(input Path) (string, bool) {
 	pAbs, _ := filepath.Abs(string(p))
 	inputAbs, _ := filepath.Abs(string(input))
 
 	rel, err := filepath.Rel(pAbs, inputAbs)
-	if err != nil {
-		return false
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
 	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return rel, true
 }
 
 func (p Path) IsDir() bool {

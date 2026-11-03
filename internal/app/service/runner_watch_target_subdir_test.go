@@ -164,3 +164,121 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 		}
 	}
 }
+
+// 감시 대상 path가 폴더를 가리키는 링크이면 watchSubDir와 관계없이 링크가 가리키는 폴더를 감시하고,
+// 링크 경로 아래로 적은 excludeDir도 그 폴더의 같은 하위 폴더를 제외하는지 확인한다.
+func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
+	cases := []struct {
+		name        string
+		watchSubDir bool
+		startDirs   []string // 감시 시작 전에 링크가 가리키는 폴더 안에 만들 폴더
+		laterDirs   []string // 감시 중에 링크가 가리키는 폴더 안에 만들 폴더
+		excludeDir  []string // 링크 경로 기준으로 적는다
+		probe       string
+		want        bool
+	}{
+		{name: "file in linked folder without watchSubDir", probe: "a.txt", want: true},
+		{name: "file in linked folder with watchSubDir", watchSubDir: true, probe: "a.txt", want: true},
+		{name: "existing subfolder", watchSubDir: true, startDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
+		{name: "subfolder created while watching", watchSubDir: true, laterDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
+		{name: "existing excludeDir under link path", watchSubDir: true, startDirs: []string{"ex"}, excludeDir: []string{"ex"}, probe: "ex/a.txt", want: false},
+		{name: "excludeDir under link path created while watching", watchSubDir: true, laterDirs: []string{"ex"}, excludeDir: []string{"ex"}, probe: "ex/a.txt", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			linked, link := filepath.Join(base, "linked"), filepath.Join(base, "link")
+			if err := os.Mkdir(linked, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(linked, link); err != nil {
+				t.Skipf("symlink not available: %v", err)
+			}
+			// 이벤트 경로는 링크를 모두 푼 폴더 기준으로 온다. macOS의 TempDir처럼 상위 경로에 링크가 있어도 맞춘다.
+			resolved, err := filepath.EvalSymlinks(linked)
+			if err != nil {
+				t.Fatal(err)
+			}
+			makeDirs := func(dirs []string) {
+				for _, dir := range dirs {
+					if err := os.MkdirAll(filepath.Join(linked, dir), 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			makeDirs(tc.startDirs)
+
+			var excludeDir domain.Paths
+			for _, dir := range tc.excludeDir {
+				excludeDir = append(excludeDir, domain.Path(filepath.Join(link, dir)))
+			}
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
+				Path: domain.Path(link),
+				Option: domain.WatchTargetsOption{
+					NoWait:      true,
+					WatchSubDir: tc.watchSubDir,
+					ExcludeDir:  excludeDir,
+					WatchEvent:  domain.WatchEvent{Create: true, Update: true},
+				},
+			}, newMockLogger())
+			t.Cleanup(func() {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				r.Stop(&wg)
+			})
+			ready, changed := make(chan struct{}), make(chan domain.Path, dispatchCapacity)
+			r.runStartHook = func() { close(ready) }
+			r.runChangeHook = func(event domain.Event) { changed <- event.Path }
+			r.runFinishHook = func() {}
+			result := make(chan error, 1)
+			go func() { result <- r.Run() }()
+			select {
+			case <-ready:
+			case err := <-result:
+				t.Fatalf("run before registration: %v", err)
+			case <-time.After(5 * time.Second):
+				t.Fatal("native watcher did not become ready")
+			}
+
+			seen := map[string]bool{}
+			write := func(rel string) {
+				if err := os.WriteFile(filepath.Join(linked, rel), []byte("event"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			await := func(rel string) {
+				for !seen[rel] {
+					select {
+					case got := <-changed:
+						gotRel, err := filepath.Rel(resolved, got.String())
+						if err != nil {
+							t.Fatal(err)
+						}
+						seen[filepath.ToSlash(gotRel)] = true
+					case err := <-result:
+						t.Fatalf("run stopped: %v", err)
+					case <-time.After(5 * time.Second):
+						t.Fatalf("change of %s did not reach the hook (seen %v)", rel, seen)
+					}
+				}
+			}
+
+			makeDirs(tc.laterDirs)
+			// 감시 루프는 이벤트를 받은 순서대로 처리하므로, 뒤이어 만든 파일의 hook이 실행됐다면
+			// 앞서 생긴 폴더의 감시 목록 반영도 끝났다.
+			write("zz-registered.txt")
+			await("zz-registered.txt")
+
+			write(tc.probe)
+			if tc.want {
+				await(tc.probe)
+				return
+			}
+			write("zz-after-probe.txt")
+			await("zz-after-probe.txt")
+			if seen[tc.probe] {
+				t.Fatalf("change of %s ran the hook", tc.probe)
+			}
+		})
+	}
+}

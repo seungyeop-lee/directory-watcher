@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -29,6 +30,8 @@ func (e *FatalError) Unwrap() error { return e.Cause }
 
 type watchTargetRunner struct {
 	path domain.Path
+	// watchRoot는 감시 목록에 넣는 감시 대상 폴더의 경로다. path가 폴더 링크이면 링크를 푼 경로다.
+	watchRoot string
 
 	runStartHook  func()
 	runChangeHook func(event domain.Event)
@@ -168,15 +171,42 @@ func (r *watchTargetRunner) addDir() error {
 	if !helper.IsExist(r.path.String()) {
 		return fmt.Errorf("not exist path: %s", r.path)
 	}
+	if err := r.resolveLinkedPath(); err != nil {
+		return err
+	}
 
 	// watchSubDir이 false이면 하위 폴더를 감시하지 않는다.
 	if !r.watchSubDir {
-		path := r.path
-		r.logger.Debug(fmt.Sprint("add path:", path))
-		return r.watcher.Add(path.String())
+		r.logger.Debug(fmt.Sprint("add path:", r.watchRoot))
+		return r.watcher.Add(r.watchRoot)
 	}
 
-	return r.addDirTree(r.path.String())
+	return r.addDirTree(r.watchRoot)
+}
+
+// resolveLinkedPath는 path가 폴더 링크이면 링크를 푼 경로를 watchRoot로 정하고, 링크 경로 아래로 적은
+// excludeDir도 그 경로 아래로 바꾼다. 링크를 그대로 두면 filepath.WalkDir은 시작 경로의 링크를 따라가지
+// 않아 아무 폴더도 감시하지 않고, macOS의 fsnotify는 링크에 적힌 대상 경로로 이벤트를 알려 excludeDir
+// 판정과 경로 기준이 어긋난다.
+func (r *watchTargetRunner) resolveLinkedPath() error {
+	r.watchRoot = r.path.String()
+	info, err := os.Lstat(r.watchRoot)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return nil
+	}
+	resolved, err := filepath.EvalSymlinks(r.watchRoot)
+	if err != nil {
+		return err
+	}
+	excludeDir := make(domain.Paths, len(r.excludeDir))
+	for i, dir := range r.excludeDir {
+		excludeDir[i] = dir.Rebase(r.path, domain.Path(resolved))
+	}
+	r.watchRoot, r.excludeDir = resolved, excludeDir
+	return nil
 }
 
 // addDirTree는 root와 그 아래에서 감시 규칙을 통과한 폴더를 감시 목록에 넣는다.
@@ -197,7 +227,7 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 		}
 		path := domain.Path(p)
 		// 감시 대상 경로는 사용자가 직접 지정했으므로 이름으로 제외하지 않는다.
-		if path != r.path && path.IsDefaultExcludeFile() {
+		if p != r.watchRoot && path.IsDefaultExcludeFile() {
 			return filepath.SkipDir
 		}
 		if r.excludeDir.Equal(path) || r.excludeDir.IsSubFolder(path) {

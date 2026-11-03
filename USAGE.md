@@ -90,6 +90,8 @@ For each change, global `onBeforeChange`, the target's `onChange`, and global `o
 | {{.DirAbsPath}} | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
 | {{.Event}}      | Event type (C: create, U: update, D: delete)            | C                                                            |
 
+If `path` is a link to a folder, the folder it points to is watched. The variables above then hold paths based on the fully resolved path instead of `path`. An `excludeDir` written under the link path excludes the same location in the linked folder.
+
 ## waitMillisecond and noWait
 
 - When an event occurs within `watchTargets.path`, the hook is executed after waiting for waitMillisecond.

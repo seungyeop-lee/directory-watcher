@@ -90,6 +90,8 @@ watchTargets:
 | {{.DirAbsPath}} | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
 | {{.Event}}      | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
 
+`path`가 폴더를 가리키는 링크이면 링크가 가리키는 폴더를 감시합니다. 이때 위 변수에는 `path` 대신 링크를 모두 푼 경로를 기준으로 한 경로가 들어갑니다. `excludeDir`를 링크 경로 아래로 적으면 링크가 가리키는 폴더의 같은 위치를 제외합니다.
+
 ## waitMillisecond와 noWait
 
 - `watchTargets.path` 내부에서 이벤트가 발생하게 되면 waitMillisecond 만큼 대기 후 hook을 실행합니다.
