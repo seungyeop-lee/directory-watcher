@@ -1,8 +1,8 @@
 //go:build darwin
 
-// Command windows runs the Go E2E scenarios in a Windows VM of UTM on a Mac.
-// Booting and stopping the VM take long, so up, test, and down are separate
-// commands; all runs them in order and stops only what it started.
+// Command windows는 Mac의 UTM에 있는 Windows VM에서 Go E2E 시나리오를 실행한다.
+// VM을 부팅하고 멈추는 데 오래 걸리므로 up, test, down을 별도 명령으로 두며, all은
+// 이 명령들을 차례로 실행하되 자신이 시작한 것만 멈춘다.
 package main
 
 import (
@@ -70,8 +70,8 @@ func run(args []string) int {
 		var state upState
 		state, err = r.up()
 		if err != nil && !state.startedVM {
-			// A refused or failed up that started nothing does not leave
-			// behind the UTM it opened. A started VM stays for down.
+			// 거부되었거나 실패한 up이 아무것도 시작하지 않았다면, up이 연 UTM을
+			// 남겨 두지 않는다. 시작한 VM은 down을 위해 남겨 둔다.
 			err = errors.Join(err, r.teardown(state))
 		}
 	case "test":
@@ -111,7 +111,7 @@ func validate(command string, cfg config) error {
 	return nil
 }
 
-// upState records what up changed, so that all stops only those.
+// upState는 up이 바꾼 것을 기록해, all이 그것만 멈추게 한다.
 type upState struct {
 	openedUTM, startedVM bool
 	uuid                 string
@@ -156,17 +156,15 @@ func (r runner) up() (upState, error) {
 	return state, nil
 }
 
-// requireHeadless refuses a VM that has a display device, because UTM opens
-// a window for each display whether start has --hide or not: on 2026-11-03
-// the VM window came up over the user's work at every start of the original
-// VM, while --hide closed at most UTM's main window. UTM's QEMU backend runs
-// a VM without display devices with no window (UTM #6188,
-// https://github.com/utmapp/UTM/issues/6188). A clone with its displays
-// removed booted with no UTM window, no QEMURenderServer, and -vga none in
-// its QEMU arguments. The runner does not change the configuration; the clone
-// is prepared once by hand. Its sound device must be removed too, so that
-// boot makes no sound, but UTM's AppleScript dictionary (UTM.sdef) has no
-// sound setting to check, so only the documentation covers it.
+// requireHeadless는 디스플레이 장치가 있는 VM을 거부한다. start에 --hide를 붙이든
+// 붙이지 않든 UTM은 디스플레이마다 창을 열기 때문이다: 2026-11-03에 원래 VM은
+// 시작할 때마다 VM 창이 사용자의 작업 화면 위로 떴고, --hide는 기껏해야 UTM의 메인
+// 창만 닫았다. UTM의 QEMU 백엔드는 디스플레이 장치가 없는 VM을 창 없이 실행한다
+// (UTM #6188, https://github.com/utmapp/UTM/issues/6188). 디스플레이를 제거한
+// 복제본은 UTM 창도 QEMURenderServer도 없이 부팅했고, QEMU 인자에는 -vga none이
+// 들어 있었다. 실행기는 구성을 바꾸지 않으며, 복제본은 한 번 손으로 준비한다.
+// 부팅할 때 소리가 나지 않도록 사운드 장치도 제거해야 하지만, UTM의 AppleScript
+// 사전(UTM.sdef)에는 확인할 사운드 설정이 없으므로 이 조건은 문서에서만 다룬다.
 func (r runner) requireHeadless(uuid string) error {
 	n, err := r.utm.displays(uuid)
 	if err != nil {
@@ -179,10 +177,10 @@ func (r runner) requireHeadless(uuid string) error {
 	return nil
 }
 
-// startVM restarts UTM once when start does not take effect, but only when
-// every registered VM is stopped. Restarting UTM cleared the unanswered start
-// in the 2026-11-03 experiment and in irgo-windows-vm PR #9
-// (https://github.com/joeblew999/irgo-windows-vm/pull/9).
+// startVM은 start가 효과가 없으면 UTM을 한 번 다시 시작하되, 등록된 VM이 모두
+// stopped일 때만 그렇게 한다. 2026-11-03 실험과 irgo-windows-vm PR #9
+// (https://github.com/joeblew999/irgo-windows-vm/pull/9)에서는 UTM을 다시 시작하자
+// 응답하지 않던 start가 풀렸다.
 func (r runner) startVM(uuid string) error {
 	err := r.utm.start(uuid)
 	if err == nil {
@@ -221,22 +219,20 @@ func (r runner) down() error {
 	return errors.Join(err, r.quitUTMIfIdle())
 }
 
-// stopVM requests the guest OS to shut down and waits for stopped. utmctl
-// stop without --request powers the VM off, so it is never used.
+// stopVM은 게스트 OS에 종료를 요청하고 stopped가 될 때까지 기다린다. --request
+// 없이 utmctl stop을 실행하면 VM의 전원을 끄므로, 그렇게는 호출하지 않는다.
 //
-// The request is repeated every shutdownRetry until the VM stops. On
-// 2026-11-03 the original VM ignored a request twice and logged no shutdown
-// event for it: once while Windows Update was installing updates, and once
-// 20 seconds after a restart that Windows Update had started. A second
-// request stopped it in 60 and 7 seconds. The headless clone ignored the
-// first request once in 18 shutdowns, about a minute after test runs, and
-// the second request stopped it in 8 seconds; its other shutdowns took 4 to
-// 24 seconds. Why requests are ignored is not known. Each completed request
-// was a full shutdown in both VMs: the guest logged a power-off by
-// winlogon.exe (event 1074, reason 0x500ff) and a clean event log stop
-// (6006), the next boot was a cold boot (Kernel-Boot event 27, boot type
-// 0x0), and fast startup was unavailable because hibernation is disabled in
-// that guest.
+// VM이 멈출 때까지 shutdownRetry마다 요청을 되풀이한다. 2026-11-03에 원래 VM은
+// 요청을 두 번 무시했고, 그때마다 종료 이벤트를 기록하지 않았다: 한 번은 Windows
+// Update가 업데이트를 설치하는 동안이었고, 다른 한 번은 Windows Update가 시작한
+// 재시작이 끝나고 20초 뒤였다. 두 번째 요청을 보내자 각각 60초와 7초 만에 멈췄다.
+// headless 복제본은 18번 종료하는 동안 첫 요청을 한 번 무시했는데, 테스트 실행이
+// 끝나고 약 1분 뒤였으며 두 번째 요청으로 8초 만에 멈췄다. 그 밖의 종료에는 4초에서
+// 24초가 걸렸다. 요청이 무시되는 원인은 알려지지 않았다. 두 VM 모두 완료된 요청은
+// 매번 완전한 종료였다: 게스트는 winlogon.exe가 전원을 끈 기록(event 1074, reason
+// 0x500ff)과 이벤트 로그의 정상 중지(6006)를 남겼고, 다음 부팅은 콜드 부팅
+// (Kernel-Boot event 27, boot type 0x0)이었으며, 그 게스트는 최대 절전 모드가 꺼져
+// 있어 빠른 시작을 쓸 수 없었다.
 func (r runner) stopVM(vm vmEntry) error {
 	if vm.status == "stopped" {
 		fmt.Fprintln(r.log, "VM is already stopped")
@@ -272,19 +268,18 @@ const shutdownRetry = 30 * time.Second
 
 var errQEMUAborted = errors.New("QEMU aborted while the VM was stopping")
 
-// qemuCrash reports QEMU crash reports written since the shutdown request,
-// because a VM whose QEMU process aborted is stopped without a confirmed
-// graceful shutdown. On 2026-11-03 QEMULauncher of the original VM, which
-// had a display, aborted (SIGABRT from an assertion in hvf_vcpu_exec) in 7
-// of 11 shutdowns, and macOS showed a dialog saying that it quit
-// unexpectedly. Every abort came at the end of a shutdown, none during
-// start, file transfer, or tests. In the three aborts checked in the guest,
-// it had logged its shutdown (events 1074 and 6006) 2 to 6 seconds before,
-// and the next boot logged no unexpected shutdown (events 41 and 6008). The
-// headless clone did not abort in 18 shutdowns that day, which suggests a
-// link to the display but does not prove it. The cause lies in UTM's QEMU
-// and is not known. A report written by another VM's QEMU in the same
-// interval also fails the check, because reports do not name the VM.
+// qemuCrash는 종료를 요청한 뒤에 기록된 QEMU 충돌 보고서를 알려 준다. QEMU
+// 프로세스가 중단된 VM은 정상 종료가 확인되지 않은 채 stopped가 되기 때문이다.
+// 2026-11-03에는 디스플레이가 있던 원래 VM의 QEMULauncher가 11번 종료하는 동안
+// 7번 중단되었고(hvf_vcpu_exec의 assertion에서 SIGABRT), macOS는 QEMULauncher가
+// 예기치 않게 종료되었다는 대화 상자를 띄웠다. 중단은 모두 종료가 끝날 무렵에
+// 일어났고, 시작이나 파일 전송, 테스트 중에는 일어나지 않았다. 게스트에서 확인한 세
+// 번의 중단에서는 게스트가 2초에서 6초 전에 이미 종료를 기록했고(events 1074와
+// 6006), 다음 부팅에는 예기치 않은 종료 기록(events 41과 6008)이 없었다. headless
+// 복제본은 그날 18번 종료하는 동안 한 번도 중단되지 않았다. 이 결과는 디스플레이와
+// 관련이 있음을 시사하지만 증명하지는 않는다. 원인은 UTM의 QEMU에 있으며 구체적으로
+// 알려지지 않았다. 보고서에는 VM이 적히지 않으므로, 같은 구간에 다른 VM의 QEMU가 쓴
+// 보고서도 검사를 실패시킨다.
 func qemuCrash(since time.Time) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -315,8 +310,8 @@ func (r runner) quitUTMIfIdle() error {
 	return r.utm.quit()
 }
 
-// all stops the VM and quits UTM only when this run started them, and
-// reports a teardown failure without hiding the test result.
+// all은 이번 실행이 VM을 시작하고 UTM을 띄웠을 때만 VM을 멈추고 UTM을 종료하며,
+// 정리 단계의 실패는 테스트 결과를 가리지 않게 함께 알린다.
 func (r runner) all() error {
 	state, err := r.up()
 	if err == nil {

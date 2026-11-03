@@ -11,9 +11,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// TestMain goes through the same Run that e2e/scenarios uses, so this test's
-// subprocesses exercise the real binary build and removal. Only this
-// Windows test needs the binaries; other platforms skip the build.
+// TestMain은 e2e/scenarios가 쓰는 것과 같은 Run을 거치므로, 이 테스트의 하위
+// 프로세스는 실제 바이너리 빌드와 삭제를 거친다. 바이너리가 필요한 것은 이 Windows
+// 테스트뿐이며, 다른 플랫폼은 빌드를 건너뛴다.
 func TestMain(m *testing.M) { os.Exit(Run(m)) }
 
 func TestCleanupReportsLockedResources(t *testing.T) {
@@ -36,7 +36,7 @@ func TestCleanupReportsLockedResources(t *testing.T) {
 			s.cleanup()
 			return
 		}
-		// The subprocess owns this handle until os.Exit, after TestMain cleanup.
+		// 하위 프로세스는 TestMain 정리가 끝난 뒤의 os.Exit까지 이 handle을 소유한다.
 		lockCleanupPath(t, lockPath)
 		if err := os.WriteFile(os.Getenv("DW_E2E_CLEANUP_LOCK_RECORD"), []byte(path), 0600); err != nil {
 			t.Fatal(err)

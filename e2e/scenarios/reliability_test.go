@@ -67,7 +67,7 @@ func TestFastInflowSlowHook(t *testing.T) {
 						t.Errorf("excluded hook: %s", line)
 					}
 				}
-				// Stop while more events arrive and a slow command is running.
+				// 이벤트가 더 들어오고 느린 명령이 실행되는 동안 정지한다.
 				s.Write(filepath.Join(s.Watch, "shutdown.txt"), []byte("stop"))
 				s.Await("shutdown event received", 5*time.Second, func() bool { return strings.Contains(s.Log(), "shutdown.txt") })
 				s.Stop()

@@ -33,7 +33,7 @@ func startProcessTree(cmd *exec.Cmd) (processTree, error) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
-	// The suspended parent cannot create descendants before it belongs to the job.
+	// 일시 중단된 부모는 job에 속하기 전에는 자손을 만들 수 없다.
 	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
 	if err := cmd.Start(); err != nil {
 		_ = windows.CloseHandle(job)
@@ -57,7 +57,7 @@ func startProcessTree(cmd *exec.Cmd) (processTree, error) {
 }
 
 func resumeProcess(pid int) error {
-	// os/exec closes the primary thread handle; find it while the process is suspended.
+	// os/exec는 주 스레드 handle을 닫으므로, 프로세스가 일시 중단된 동안 handle을 찾는다.
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
 	if err != nil {
 		return err

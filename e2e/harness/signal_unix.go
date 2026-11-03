@@ -21,8 +21,8 @@ func forceStop(cmd *exec.Cmd) error {
 	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }
 
-// processObserver keeps no per-process state on Unix: signal 0 and process
-// group kills address recorded PIDs directly.
+// processObserver는 Unix에서 프로세스별 상태를 두지 않는다: signal 0과 프로세스 그룹
+// kill이 기록된 PID를 직접 대상으로 삼는다.
 type processObserver struct{}
 
 func newProcessObserver() *processObserver { return &processObserver{} }

@@ -12,10 +12,10 @@ import (
 
 var errVMBusy = errors.New("another Windows E2E run on this Mac is using the VM")
 
-// lockVM coordinates runs on this Mac that use the same VM. Test runs share
-// the lock; starting or stopping the VM needs it alone, so that down or all
-// never stops the VM under another run's test. The lock is released when the
-// returned file is closed or the process exits.
+// lockVM은 이 Mac에서 같은 VM을 쓰는 실행들을 조율한다. 테스트 실행은 잠금을 함께
+// 잡고, VM을 시작하거나 멈출 때는 잠금을 혼자 잡아야 하므로, down이나 all이 다른
+// 실행의 테스트가 도는 중에 VM을 멈추지 않는다. 잠금은 돌려받은 파일을 닫거나
+// 프로세스가 끝나면 풀린다.
 func lockVM(uuid string, exclusive bool) (*os.File, error) {
 	path := filepath.Join(os.TempDir(), "dw-e2e-windows-"+uuid+".lock")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)

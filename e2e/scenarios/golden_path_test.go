@@ -38,8 +38,8 @@ func TestGoldenPath(t *testing.T) {
 	}
 }
 
-// goldenConfig records every global and target hook with its label and, for
-// change hooks, the seven event variables in changeValues order.
+// goldenConfig는 모든 전역 hook과 대상 hook이 라벨을 기록하게 하고, change hook은
+// 일곱 이벤트 변수도 changeValues 순서대로 기록하게 한다.
 func goldenConfig(s *harness.Scenario) string {
 	change := "{{.Path}}|{{.AbsPath}}|{{.FileName}}|{{.ExtName}}|{{.DirPath}}|{{.DirAbsPath}}|{{.Event}}"
 	command := func(label, suffix string) string {

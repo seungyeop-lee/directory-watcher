@@ -1,9 +1,8 @@
 //go:build windows
 
-// Command guest performs one E2E run inside the Windows guest. The Mac runner
-// in e2e/windows copies it into the run directory, starts it through the UTM
-// Guest Agent with that directory as its only argument, and collects the files
-// named in package guestrun.
+// Command guest는 Windows 게스트 안에서 E2E 실행 한 번을 수행한다. e2e/windows의
+// Mac 실행기는 이 프로그램을 실행 디렉터리에 복사하고, 그 디렉터리를 유일한 인자로
+// 주어 UTM Guest Agent로 시작한 뒤, package guestrun에 정의된 파일을 수집한다.
 package main
 
 import (
@@ -36,8 +35,8 @@ func main() {
 
 func run(dir string) int {
 	result := guestrun.Result{RunID: filepath.Base(dir), ExitCode: -1, Started: time.Now()}
-	// utmctl exec returns 0 without waiting, so this file is the only sign
-	// for the runner that the Guest Agent actually started this program.
+	// utmctl exec는 기다리지 않고 0을 돌려주므로, 실행기에게는 이 파일이 Guest Agent가
+	// 실제로 이 프로그램을 시작했다는 유일한 표시다.
 	if err := os.WriteFile(filepath.Join(dir, guestrun.StartedFile), []byte(result.RunID), 0644); err != nil {
 		return 1
 	}
@@ -117,8 +116,8 @@ func windowsVersion() string {
 	}
 	defer key.Close()
 	product, _, _ := key.GetStringValue("ProductName")
-	// ProductName still reads "Windows 10" on Windows 11, whose builds start
-	// at 22000; the 2026-11-03 guest of build 26100 reported "Windows 10 Home".
+	// Windows 11에서도 ProductName은 "Windows 10"으로 읽히며, Windows 11의 빌드 번호는
+	// 22000부터 시작한다. 2026-11-03에 빌드 26100인 게스트는 "Windows 10 Home"을 보고했다.
 	if v.BuildNumber >= 22000 {
 		product = strings.Replace(product, "Windows 10", "Windows 11", 1)
 	}
@@ -129,9 +128,8 @@ func windowsVersion() string {
 	return strings.TrimSpace(fmt.Sprintf("%s %s (%s)", product, display, version))
 }
 
-// extractSource checks the source archive against the checksum computed on
-// the Mac before extracting it, because utmctl file push reports success even
-// when the transfer fails.
+// extractSource는 소스 아카이브를 풀기 전에 Mac에서 계산한 체크섬과 대조한다. utmctl
+// file push는 전송에 실패해도 성공을 보고하기 때문이다.
 func extractSource(dir, want string) error {
 	data, err := os.ReadFile(filepath.Join(dir, guestrun.SourceFile))
 	if err != nil {
@@ -162,9 +160,9 @@ func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err 
 	cmd := exec.Command(req.Go, req.Args...)
 	cmd.Dir = filepath.Join(dir, "src")
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	// The harness builds with "go" from PATH, and the Guest Agent's PATH does
-	// not include Go. TEMP keeps the test binaries and run directories inside
-	// this run directory, so leftover processes can be found by path.
+	// 하네스는 PATH에 있는 "go"로 빌드하는데, Guest Agent의 PATH에는 Go가 없다. TEMP를
+	// 이 실행 디렉터리 안에 두면 테스트 바이너리와 실행 디렉터리도 그 안에 생기므로,
+	// 남은 프로세스를 경로로 찾을 수 있다.
 	cmd.Env = append(os.Environ(),
 		"PATH="+filepath.Dir(req.Go)+";"+os.Getenv("PATH"),
 		"TEMP="+tmp, "TMP="+tmp,
@@ -183,9 +181,9 @@ func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err 
 		}
 		return cmd.ProcessState.ExitCode(), false, nil
 	case <-time.After(req.Deadline):
-		// taskkill /T follows parent PIDs from go, so it stops only this
-		// run's tree. Orphans whose parent already exited are left to
-		// stopLeftovers.
+		// taskkill /T는 go에서부터 부모 PID를 따라가므로 이번 실행의 프로세스
+		// 트리만 멈춘다. 부모가 이미 끝난 고아 프로세스는 stopLeftovers가
+		// 처리한다.
 		killErr := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
 		<-done
 		if killErr != nil {
@@ -195,9 +193,9 @@ func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err 
 	}
 }
 
-// stopLeftovers terminates processes whose executable is inside dir, other
-// than this program, and reports them. Only this run's test binaries and the
-// watcher and hookrec binaries it built live there.
+// stopLeftovers는 실행 파일이 dir 안에 있는 프로세스 가운데 이 프로그램을 뺀 나머지를
+// 종료하고 알린다. dir 안에는 이번 실행의 테스트 바이너리와, 그 바이너리가 빌드한
+// watcher와 hookrec 바이너리만 있다.
 func stopLeftovers(dir string) []string {
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
@@ -245,8 +243,8 @@ func archiveDiagnostics(dir string) error {
 	return archiveErr
 }
 
-// writeResult renames a complete file into place so that the runner, which
-// polls for the result, never reads a partly written one.
+// writeResult는 완성된 파일을 rename으로 제자리에 옮겨, 결과가 나올 때까지 반복해서
+// 확인하는 실행기가 일부만 쓰인 파일을 읽지 않게 한다.
 func writeResult(dir string, result guestrun.Result) error {
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {

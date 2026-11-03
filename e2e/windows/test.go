@@ -21,9 +21,9 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v2/e2e/worktree"
 )
 
-// test runs the scenarios in a VM that up has prepared. It never opens UTM
-// or starts the VM: it checks UTM's process before any utmctl request,
-// because a request would launch UTM.
+// test는 up이 준비한 VM에서 시나리오를 실행한다. UTM을 열거나 VM을 시작하지는
+// 않는다: utmctl 요청은 UTM을 띄우므로, utmctl 요청을 보내기 전에 UTM 프로세스를
+// 확인한다.
 func (r runner) test() error {
 	if !utmRunning() {
 		return notUp("UTM is not running")
@@ -62,8 +62,8 @@ func notUp(reason string) error {
 	return fmt.Errorf("%s; run make e2e-windows-up first", reason)
 }
 
-// guestTest is one run: its ID names both the guest run directory and the
-// result the runner accepts.
+// guestTest는 실행 한 번을 나타낸다. ID로 게스트 실행 디렉터리와, 실행기가 받아들일
+// 결과를 모두 가리킨다.
 type guestTest struct {
 	runner
 	vm, local, id, dir string
@@ -109,8 +109,8 @@ func (g guestTest) run() error {
 
 func (g guestTest) file(name string) string { return g.dir + `\` + name }
 
-// send builds the guest program, archives the working tree, and pushes both
-// with the request into a new guest run directory.
+// send는 게스트 프로그램을 빌드하고 작업 트리를 아카이브로 묶은 뒤, 둘을 요청과 함께
+// 새 게스트 실행 디렉터리로 보낸다.
 func (g guestTest) send() error {
 	root, err := os.Getwd()
 	if err != nil {
@@ -119,11 +119,11 @@ func (g guestTest) send() error {
 	if root, err = worktree.Root(root); err != nil {
 		return err
 	}
-	// The guest program is built for amd64 so that one binary runs on both
-	// Windows x64 and ARM64; Windows 11 on ARM64 runs it under emulation.
-	// The Guest Agent itself ran as an x64 process in the ARM64 guest of the
-	// 2026-11-03 experiment (PROCESSOR_ARCHITECTURE=AMD64 in its commands).
-	// The tests still run with the guest's own Go toolchain and architecture.
+	// 게스트 프로그램은 amd64용으로 빌드해 바이너리 하나가 Windows x64와 ARM64 양쪽에서
+	// 실행되게 한다. ARM64의 Windows 11은 이 바이너리를 에뮬레이션으로 실행한다.
+	// 2026-11-03 실험의 ARM64 게스트에서는 Guest Agent 자체도 x64 프로세스로
+	// 실행되었다(Guest Agent가 실행한 명령에서 PROCESSOR_ARCHITECTURE=AMD64). 테스트는
+	// 그래도 게스트에 설치된 Go 툴체인으로, 게스트의 아키텍처에서 실행한다.
 	program := filepath.Join(g.local, "guest.exe")
 	build := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", program, "./e2e/windows/guest")
 	build.Dir = root
@@ -170,7 +170,7 @@ func (g guestTest) send() error {
 	return g.push("guest.exe", programData)
 }
 
-// recordSource keeps on the Mac which source and test scope this run used.
+// recordSource는 이번 실행이 쓴 소스와 테스트 범위를 Mac에 남긴다.
 func (g guestTest) recordSource(root string, request guestrun.Request, requestData []byte, size int) error {
 	head, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
 	if err != nil {
@@ -189,10 +189,10 @@ func (g guestTest) recordSource(root string, request guestrun.Request, requestDa
 	return os.WriteFile(filepath.Join(g.local, guestrun.RequestFile), requestData, 0644)
 }
 
-// createGuestDir creates the run directory with mkdir through exec and
-// confirms it by reading the request back. exec does not wait for the
-// command, and push and pull exit with 0 on failure, so reading back is the
-// only confirmation that the directory exists and file transfer works.
+// createGuestDir는 exec로 mkdir를 실행해 실행 디렉터리를 만들고, 요청을 다시 읽어
+// 만들어졌는지 확인한다. exec는 명령을 기다리지 않고 push와 pull은 실패해도 0으로
+// 끝나므로, 디렉터리가 있는지와 파일 전송이 동작하는지는 다시 읽어 보는 방법으로만
+// 확인할 수 있다.
 func (g guestTest) createGuestDir(request []byte) error {
 	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c", "mkdir", g.dir); err != nil {
 		return err
@@ -216,8 +216,8 @@ func (g guestTest) createGuestDir(request []byte) error {
 	}
 }
 
-// push allows 30 seconds plus 128 KiB per second; pushes ran at about
-// 570 KB per second in the experiment.
+// push는 30초에 128 KiB마다 1초를 더한 시간을 허용한다. 실험에서 push는 초당 약
+// 570 KB로 전송되었다.
 func (g guestTest) push(name string, data []byte) error {
 	limit := 30*time.Second + time.Duration(len(data)/(128<<10))*time.Second
 	_, err := g.utm.call(limit, bytes.NewReader(data), "file", "push", g.vm, g.file(name))
@@ -228,7 +228,7 @@ func (g guestTest) pull(name string, limit time.Duration) ([]byte, error) {
 	return g.utm.call(limit, nil, "file", "pull", g.vm, g.file(name))
 }
 
-// awaitStarted confirms that exec actually started the guest program.
+// awaitStarted는 exec가 실제로 게스트 프로그램을 시작했는지 확인한다.
 func (g guestTest) awaitStarted() error {
 	deadline := time.Now().Add(time.Minute)
 	for {
@@ -243,13 +243,12 @@ func (g guestTest) awaitStarted() error {
 	}
 }
 
-// awaitResult polls for the result the guest program writes last. Its
-// deadline stops go test, so the result is due shortly after it. The result
-// file is the only evidence of the outcome: utmctl exec returned 0 within
-// 0.2 seconds on 2026-11-03 without waiting for the guest command or passing
-// on its output or exit code, even for cmd.exe /c "exit 7". run accepts
-// only a result that names this run's ID, so a result left by another run
-// is not taken for this one.
+// awaitResult는 게스트 프로그램이 마지막에 쓰는 결과가 나올 때까지 반복해서
+// 확인한다. 실행의 deadline이 go test를 멈추므로, 결과는 deadline 직후에 나와야
+// 한다. 결과 파일은 실행 결과를 알 수 있는 유일한 근거다: 2026-11-03에 utmctl exec는
+// cmd.exe /c "exit 7"을 실행할 때도 게스트 명령을 기다리지 않고 0.2초 안에 0을
+// 돌려줬고, 명령의 출력이나 종료 코드도 전달하지 않았다. run은 이번 실행의 ID가
+// 적힌 결과만 받아들이므로, 다른 실행이 남긴 결과를 이번 실행의 결과로 받지 않는다.
 func (g guestTest) awaitResult() ([]byte, error) {
 	limit := g.cfg.deadline + 2*time.Minute
 	fmt.Fprintf(g.log, "waiting up to %s for the guest result\n", limit)
@@ -271,8 +270,8 @@ func (g guestTest) awaitResult() ([]byte, error) {
 	}
 }
 
-// collect copies the result, if any, the logs, and the diagnostics to the
-// Mac and prints the go test output.
+// collect는 결과가 있으면 결과와 함께 로그와 진단 자료를 Mac으로 복사하고, go test
+// 출력을 표시한다.
 func (g guestTest) collect(result []byte) error {
 	var problems []error
 	if result != nil {
@@ -301,8 +300,8 @@ func (g guestTest) collect(result []byte) error {
 	return errors.Join(problems...)
 }
 
-// removeGuestDir deletes the guest run directory after its files reached the
-// Mac, and confirms it by the request file becoming unreadable.
+// removeGuestDir는 파일이 Mac에 도착한 뒤 게스트 실행 디렉터리를 지우고, 요청 파일을
+// 더 이상 읽을 수 없게 되었는지로 삭제를 확인한다.
 func (g guestTest) removeGuestDir() error {
 	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c", "rmdir", "/s", "/q", g.dir); err != nil {
 		return fmt.Errorf("remove guest run directory: %w", err)

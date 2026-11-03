@@ -78,7 +78,7 @@ var rootCmd = &cobra.Command{
 		case <-sigs:
 		}
 		r.Stop()
-		// An error already received during shutdown must not become success.
+		// 종료하는 동안 이미 받은 오류를 성공으로 끝내면 안 된다.
 		if fatal == nil {
 			select {
 			case fatal = <-r.Errors():

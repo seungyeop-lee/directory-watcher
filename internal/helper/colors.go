@@ -22,7 +22,7 @@ import (
 	"sync"
 )
 
-// ColorFunc use ANSI codes to render colored text on console
+// ColorFunc는 ANSI 코드로 콘솔에 색을 입힌 텍스트를 만든다.
 type ColorFunc func(s string) string
 
 var names = []string{
@@ -75,7 +75,7 @@ func ansiColor(code, s string, formatOpts ...string) string {
 	return fmt.Sprintf("%s%s%s", ansiColorCode(code, formatOpts...), s, ansiColorCode("0"))
 }
 
-// Everything about ansiColorCode color https://hyperskill.org/learn/step/18193
+// ansiColorCode가 만드는 색 코드는 https://hyperskill.org/learn/step/18193 에 자세히 정리되어 있다.
 func ansiColorCode(code string, formatOpts ...string) string {
 	res := "\033["
 	for _, c := range formatOpts {

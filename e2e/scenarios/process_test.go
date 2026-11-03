@@ -126,8 +126,8 @@ func TestStartHookShutdownModes(t *testing.T) {
 	}
 }
 
-// assertCompletedBeforeRestart requires the old generation's parent, child and
-// grandchild to record complete before the replacement generation starts.
+// assertCompletedBeforeRestart는 대체 generation이 시작되기 전에 이전 generation의
+// 부모, 자식, 손자가 complete를 기록했는지 확인한다.
 func assertCompletedBeforeRestart(t *testing.T, records []harness.ProcessRecord, oldRun string) {
 	t.Helper()
 	complete := map[int]bool{}

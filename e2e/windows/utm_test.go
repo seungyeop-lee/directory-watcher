@@ -49,8 +49,7 @@ func TestRunningVMsCountsEveryVMThatIsNotStopped(t *testing.T) {
 	}
 }
 
-// fakeUTMCtl writes a utmctl replacement that runs script with the
-// arguments in $@.
+// fakeUTMCtl은 $@로 받은 인자로 script를 실행하는 utmctl 대체 파일을 쓴다.
 func fakeUTMCtl(t *testing.T, script string) utm {
 	t.Helper()
 	return utm{ctl: fakeCommand(t, "utmctl", script), log: io.Discard}

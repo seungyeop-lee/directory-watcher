@@ -10,10 +10,9 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// hookrec appends one line per hook to the scenario's records file: the given
-// --line text, BEGIN|PID|line and CANCEL|PID|line around a --delay, and
-// ERROR|JSON for --error-context. Process tree records are read by
-// process_records.go.
+// hookrec은 hook마다 시나리오의 기록 파일에 한 줄을 덧붙인다: 주어진 --line 텍스트,
+// --delay 앞뒤의 BEGIN|PID|line과 CANCEL|PID|line, --error-context의 ERROR|JSON이다.
+// 프로세스 트리 기록은 process_records.go가 읽는다.
 
 func ReadLinesLenient(path string) []string {
 	data, _ := os.ReadFile(path)
@@ -26,8 +25,8 @@ func ReadLinesLenient(path string) []string {
 
 func (s *Scenario) Lines() []string { return ReadLinesLenient(s.Records) }
 
-// Hook returns a single-quoted YAML command that runs hookrec with the given
-// arguments and records into this scenario's records file.
+// Hook은 주어진 인자로 hookrec을 실행해 이 시나리오의 기록 파일에 기록하는 YAML
+// 명령을 작은따옴표로 감싸 돌려준다.
 func (s *Scenario) Hook(arguments ...string) string {
 	return fmt.Sprintf("'%s'", strings.Join(append([]string{hookrecBin, "--file=" + s.Records}, arguments...), " "))
 }
@@ -52,7 +51,7 @@ type delayedHook struct {
 	line string
 }
 
-// delayedHooks returns the delayed hooks that recorded BEGIN, in record order.
+// delayedHooks는 BEGIN을 기록한 지연 hook을 기록 순서대로 돌려준다.
 func delayedHooks(lines []string) []delayedHook {
 	var hooks []delayedHook
 	for _, line := range lines {

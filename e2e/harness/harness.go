@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// Run builds these import paths instead of paths relative to the test
-// package directory, so any test package in the module can call it.
+// Run은 테스트 패키지 디렉터리 기준 상대 경로 대신 이 import 경로로 빌드하므로,
+// 모듈 안의 어느 테스트 패키지에서든 Run을 호출할 수 있다.
 const (
 	watcherPackage = "github.com/seungyeop-lee/directory-watcher/v2"
 	hookrecPackage = watcherPackage + "/e2e/hookrec"
@@ -21,15 +21,15 @@ const (
 
 var watcherBin, hookrecBin string
 
-// WatcherBin returns the directory-watcher binary built by Run.
+// WatcherBin은 Run이 빌드한 directory-watcher 바이너리를 돌려준다.
 func WatcherBin() string { return watcherBin }
 
-// HookrecBin returns the hookrec binary built by Run.
+// HookrecBin은 Run이 빌드한 hookrec 바이너리를 돌려준다.
 func HookrecBin() string { return hookrecBin }
 
-// Run is the body of a TestMain: it prepares the console and builds the
-// watcher and hookrec binaries for the whole test binary run, runs m, and
-// removes the binaries. A removal failure makes the returned code 1.
+// Run은 TestMain의 본문이다: 콘솔을 준비하고, 테스트 바이너리 실행 전체에서 쓸
+// watcher와 hookrec 바이너리를 빌드한 뒤, m을 실행하고 바이너리를 지운다. 바이너리를
+// 지우지 못하면 돌려주는 코드가 1이 된다.
 func Run(m *testing.M) (code int) {
 	if err := prepareConsole(); err != nil {
 		fmt.Fprintln(os.Stderr, "console:", err)
@@ -72,9 +72,9 @@ type lockedLog struct {
 func (l *lockedLog) Write(p []byte) (int, error) { l.Lock(); defer l.Unlock(); return l.data.Write(p) }
 func (l *lockedLog) String() string              { l.Lock(); defer l.Unlock(); return l.data.String() }
 
-// Scenario owns one run directory, its watcher or helper process, and the
-// process observations made for its records. Built binaries and the console
-// belong to the whole test binary run instead.
+// Scenario는 실행 디렉터리 하나와, 그 시나리오의 watcher 또는 도우미 프로세스, 그리고
+// 시나리오 기록에 대해 한 프로세스 관찰을 소유한다. 빌드한 바이너리와 콘솔은
+// 시나리오가 아니라 테스트 바이너리 실행 전체에 속한다.
 type Scenario struct {
 	t                    *testing.T
 	Work, Watch, Records string
@@ -141,8 +141,8 @@ func (s *Scenario) Launch(binary, config string, arguments ...string) {
 	s.StartProcess(cmd)
 }
 
-// StartProcess runs cmd as this scenario's process in its own process group,
-// so stop, cleanup and diagnostics apply to it.
+// StartProcess는 cmd를 이 시나리오의 프로세스로서 별도 프로세스 그룹에서 실행해,
+// 정지와 정리, 진단이 그 프로세스에 적용되게 한다.
 func (s *Scenario) StartProcess(cmd *exec.Cmd) {
 	s.t.Helper()
 	s.cmd = cmd
@@ -156,16 +156,16 @@ func (s *Scenario) StartProcess(cmd *exec.Cmd) {
 	go func() { s.exit = s.cmd.Wait(); close(s.done) }()
 }
 
-// Log returns the combined stdout and stderr of the scenario's process so far.
+// Log는 시나리오 프로세스가 지금까지 낸 stdout과 stderr를 합쳐 돌려준다.
 func (s *Scenario) Log() string { return s.log.String() }
 
-// Done is closed when the scenario's process has exited.
+// Done은 시나리오 프로세스가 끝나면 닫힌다.
 func (s *Scenario) Done() <-chan struct{} { return s.done }
 
-// ExitErr returns the process's Wait result; read it only after Done is closed.
+// ExitErr는 프로세스의 Wait 결과를 돌려준다. Done이 닫힌 뒤에만 읽는다.
 func (s *Scenario) ExitErr() error { return s.exit }
 
-// Alive reports whether a PID recorded by this scenario is still running.
+// Alive는 이 시나리오가 기록한 PID가 아직 실행 중인지 알려 준다.
 func (s *Scenario) Alive(pid int) bool { return s.procs.alive(pid) }
 
 func (s *Scenario) Exited() bool {

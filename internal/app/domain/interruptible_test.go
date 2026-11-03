@@ -35,7 +35,7 @@ func TestReplacementWaitsForCanceledGeneration(t *testing.T) {
 		return original.Err()
 	})
 	hooks := Interruptible(true).BuildHookFuncBuilder("test", HookInfo{hookCommand(emptyHook), command, hookCommand(emptyHook), hookCommand(emptyHook), hookCommand(emptyHook)}, helper.GlobalLogger)(".")
-	// The first command occupies onBeforeChange; a replacement must join it.
+	// 첫 명령이 onBeforeChange를 차지하고 있으므로, 대체 명령은 그 실행에 합류해야 한다.
 	hooks.RunChangeHook(Event{})
 	<-started
 	replaced := make(chan struct{})

@@ -1,7 +1,6 @@
-// Package guestrun defines one E2E run inside the Windows guest: the files
-// that the Mac runner and the guest program exchange in the run directory,
-// how the runner judges the result, and the tar format that carries
-// directories between the two machines.
+// Package guestrun은 Windows 게스트 안에서 하는 E2E 실행 한 번을 정의한다. Mac
+// 실행기와 게스트 프로그램이 실행 디렉터리에서 주고받는 파일, 실행기가 결과를
+// 판정하는 방법, 두 기기 사이에서 디렉터리를 옮기는 tar 형식을 정한다.
 package guestrun
 
 import (
@@ -16,7 +15,7 @@ import (
 	"time"
 )
 
-// Files in the guest run directory. The directory name is the run ID.
+// 게스트 실행 디렉터리 안에 두는 파일이다. 디렉터리 이름은 실행 ID다.
 const (
 	RequestFile     = "request.json"
 	SourceFile      = "source.tar"
@@ -27,9 +26,9 @@ const (
 	DiagnosticsFile = "diagnostics.tar"
 )
 
-// Request tells the guest program what to run. Args and Env are those of the
-// go command; the guest program adds the run-specific temporary and
-// diagnostics directories to Env.
+// Request는 게스트 프로그램에 무엇을 실행할지 알려 준다. Args와 Env는 go 명령에
+// 넘기는 값이며, 게스트 프로그램은 이번 실행 전용 임시 디렉터리와 진단 디렉터리를
+// Env에 더한다.
 type Request struct {
 	Go           string
 	Args         []string
@@ -38,24 +37,24 @@ type Request struct {
 	SourceSHA256 string
 }
 
-// Result is written by the guest program once, after go has exited or been
-// stopped and the diagnostics are archived.
+// Result는 go가 끝나거나 멈춘 뒤 진단 자료를 아카이브로 묶고 나서, 게스트 프로그램이
+// 한 번 쓴다.
 type Result struct {
 	RunID string
-	// ExitCode is -1 when go did not start or was stopped at the deadline.
+	// ExitCode는 go가 시작하지 못했거나 deadline에 멈췄을 때 -1이다.
 	ExitCode int
 	TimedOut bool
-	// Error reports a guest-side failure that is not a test failure, such as
-	// a source checksum mismatch or a run directory outside a fixed disk.
+	// Error는 테스트 실패가 아닌 게스트 쪽 실패를 알린다. 소스 체크섬이
+	// 맞지 않거나 실행 디렉터리가 고정 디스크 밖에 있는 경우가 여기에 해당한다.
 	Error string
-	// Leftovers lists processes started from the run directory that were
-	// still alive after go exited. The guest program terminates them.
+	// Leftovers는 실행 디렉터리에서 시작되어 go가 끝난 뒤에도 살아 있던 프로세스를
+	// 나열한다. 게스트 프로그램은 이 프로세스들을 종료한다.
 	Leftovers         []string
 	Guest             Guest
 	Started, Finished time.Time
 }
 
-// Guest records the environment the tests ran in.
+// Guest는 테스트를 실행한 환경을 기록한다.
 type Guest struct {
 	Windows   string
 	GoVersion string
@@ -64,8 +63,8 @@ type Guest struct {
 	DriveType string
 }
 
-// Check parses a result file and returns an error unless it is the result of
-// runID and the run passed. An empty file means the guest has not finished.
+// Check는 결과 파일을 해석해, 그 파일이 runID의 결과이고 실행이 통과했을 때만 nil을
+// 돌려주고 그 밖에는 오류를 돌려준다. 빈 파일은 게스트가 아직 끝나지 않았다는 뜻이다.
 func Check(data []byte, runID string) (Result, error) {
 	var result Result
 	if len(data) == 0 {
@@ -89,8 +88,8 @@ func Check(data []byte, runID string) (Result, error) {
 	return result, nil
 }
 
-// ArchiveDir writes the regular files under dir as a tar stream with paths
-// relative to dir.
+// ArchiveDir는 dir 아래의 일반 파일을 dir 기준 상대 경로로 담아 tar 스트림으로
+// 쓴다.
 func ArchiveDir(out io.Writer, dir string) error {
 	archive := tar.NewWriter(out)
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
@@ -127,8 +126,8 @@ func ArchiveDir(out io.Writer, dir string) error {
 	return archive.Close()
 }
 
-// Extract writes the regular files of a tar stream under dir. Other entry
-// types and paths that leave dir are rejected.
+// Extract는 tar 스트림에 담긴 일반 파일을 dir 아래에 쓴다. 다른 종류의 항목과 dir
+// 밖으로 나가는 경로는 거부한다.
 func Extract(in io.Reader, dir string) error {
 	archive := tar.NewReader(in)
 	for {

@@ -1,6 +1,5 @@
-// Package worktree archives the current working tree of the repository for
-// runners that build and test it in another machine, such as a container or
-// a virtual machine.
+// Package worktree는 저장소의 현재 작업 트리를, 컨테이너나 가상 머신처럼 다른
+// 기기에서 빌드하고 테스트하는 실행기를 위해 아카이브로 묶는다.
 package worktree
 
 import (
@@ -13,7 +12,7 @@ import (
 	"strings"
 )
 
-// Root returns the top directory of the repository that contains dir.
+// Root는 dir을 포함하는 저장소의 최상위 디렉터리를 돌려준다.
 func Root(dir string) (string, error) {
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
 	if err != nil {
@@ -22,8 +21,8 @@ func Root(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Files lists the tracked files and the untracked files that are not ignored.
-// A tracked file deleted in the working tree is still listed; Archive skips it.
+// Files는 추적 중인 파일과, 추적하지 않지만 무시되지도 않는 파일을 나열한다. 작업
+// 트리에서 지운 추적 파일도 목록에 남으며, Archive가 이 파일을 건너뛴다.
 func Files(root string) ([]string, error) {
 	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
 	if err != nil {
@@ -32,9 +31,9 @@ func Files(root string) ([]string, error) {
 	return strings.Split(string(out), "\x00"), nil
 }
 
-// Archive writes the working tree content of files as a tar stream whose
-// entries are under src/. Files missing from the working tree are skipped, so
-// uncommitted modifications, additions, and deletions are all reflected.
+// Archive는 files의 작업 트리 내용을, 항목이 src/ 아래에 놓이는 tar 스트림으로 쓴다.
+// 작업 트리에 없는 파일은 건너뛰므로, 커밋하지 않은 수정과 추가, 삭제가 모두
+// 반영된다.
 func Archive(out io.Writer, root string, files []string) error {
 	archive := tar.NewWriter(out)
 	for _, name := range files {

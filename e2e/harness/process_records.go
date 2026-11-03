@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-// hookrec --depth=N starts a real parent, child and grandchild chain. Each
-// process records generation|PID|depth|state, where the generation is the
-// root parent's PID and the states are start, ready, signal, complete and
-// parent-exit. Liveness is answered by the scenario's processObserver.
+// hookrec --depth=N은 실제 부모, 자식, 손자 프로세스 사슬을 시작한다. 각 프로세스는
+// generation|PID|depth|state를 기록하는데, generation은 루트 부모의 PID이고 state는
+// start, ready, signal, complete, parent-exit 중 하나다. 프로세스가 살아 있는지는
+// 시나리오의 processObserver가 답한다.
 
 type ProcessRecord struct {
 	Generation string
@@ -39,14 +39,14 @@ func processRecords(file string) []ProcessRecord {
 
 func (s *Scenario) ProcessRecords() []ProcessRecord { return processRecords(s.Records) }
 
-// generationReady reports a root parent's ready record. hookrec records a
-// parent ready only after its child recorded ready, so the whole tree is ready.
+// generationReady는 r이 루트 부모의 ready 기록인지 알려 준다. hookrec은 자식이 ready를
+// 기록한 뒤에야 부모의 ready를 기록하므로, 이 기록이 있으면 트리 전체가 준비된 것이다.
 func generationReady(r ProcessRecord) bool {
 	return r.State == "ready" && r.Generation == strconv.Itoa(r.PID)
 }
 
-// AwaitReadyGenerations waits until at least count process tree generations
-// are ready and returns the records seen at that point.
+// AwaitReadyGenerations는 준비된 프로세스 트리 generation이 count개 이상이 될 때까지
+// 기다리고, 그 시점까지 본 기록을 돌려준다.
 func (s *Scenario) AwaitReadyGenerations(label string, count int) []ProcessRecord {
 	s.t.Helper()
 	var records []ProcessRecord
@@ -86,8 +86,8 @@ func (s *Scenario) AwaitProcessesGone(label string, records []ProcessRecord) {
 	s.Await(label, 5*time.Second, func() bool { return s.ProcessesGone(records) })
 }
 
-// AssertGracefulCompletion requires every ready process to record signal and
-// then complete, which only a handled graceful stop produces.
+// AssertGracefulCompletion은 준비된 모든 프로세스가 signal을 기록한 뒤 complete를
+// 기록했는지 확인한다. 이 순서는 처리된 정상 정지만 남긴다.
 func AssertGracefulCompletion(t *testing.T, records []ProcessRecord) {
 	t.Helper()
 	for _, ready := range records {
@@ -128,8 +128,8 @@ func (s *Scenario) AwaitDelayedHooksGone() {
 	s.t.Logf("slow hook process observations: started=%d alive-after-stop=0", len(hooks))
 }
 
-// SnapshotProcesses records the liveness of every recorded process into
-// <phase>.log in the run directory and the test log.
+// SnapshotProcesses는 기록된 모든 프로세스가 살아 있는지를 실행 디렉터리의
+// <phase>.log와 테스트 로그에 기록한다.
 func (s *Scenario) SnapshotProcesses(phase string) {
 	s.t.Helper()
 	var snapshot strings.Builder
@@ -149,9 +149,9 @@ func (s *Scenario) SnapshotProcesses(phase string) {
 	s.t.Log(snapshot.String())
 }
 
-// rescueRecordedProcesses force-stops only the processes recorded by this
-// scenario, after its graceful-stop evidence was collected, and writes the
-// post-rescue state to cleanup.log. It never counts as a graceful stop.
+// rescueRecordedProcesses는 시나리오의 정상 정지 증거를 모은 뒤에, 이 시나리오가
+// 기록한 프로세스만 강제로 멈추고 구조한 뒤의 상태를 cleanup.log에 쓴다. 이 정지는
+// 정상 정지로 치지 않는다.
 func (s *Scenario) rescueRecordedProcesses() bool {
 	groups := map[int]bool{}
 	records := s.ProcessRecords()

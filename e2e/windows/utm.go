@@ -15,12 +15,11 @@ import (
 	"time"
 )
 
-// Time limits for single utmctl requests. An unanswered request otherwise
-// waits for the Apple Event timeout of 2 minutes: in the 2026-11-03
-// experiment (macOS 27, UTM 5.0.8) start ended with OSStatus error -1712
-// after 2 minutes without starting the VM, and UTM #8006
-// (https://github.com/utmapp/UTM/issues/8006) reports the same stall. The
-// cause is not known.
+// utmctl 요청 하나에 주는 시간 한도다. 한도가 없으면 응답하지 않는 요청은 Apple
+// Event 시간 제한인 2분 동안 기다린다. 2026-11-03 실험(macOS 27, UTM 5.0.8)에서
+// start는 VM을 시작하지 못한 채 2분 뒤 OSStatus error -1712로 끝났고, UTM #8006
+// (https://github.com/utmapp/UTM/issues/8006)도 같은 멈춤을 보고한다. 원인은
+// 알려지지 않았다.
 const (
 	requestLimit = 15 * time.Second
 	startLimit   = 30 * time.Second
@@ -28,31 +27,30 @@ const (
 	pullLimit    = 2 * time.Minute
 )
 
-// startedLimit is how long a VM may take to report started after start. It
-// took 2 to 3 seconds in the experiment.
+// startedLimit는 start 뒤에 VM이 started를 보고하기까지 기다리는 시간이다.
+// 실험에서는 2초에서 3초가 걸렸다.
 var startedLimit = time.Minute
 
-// utm controls UTM through the utmctl inside UTM.app. Calling it through the
-// Homebrew symlink /opt/homebrew/bin/utmctl left start unanswered in the
-// 2026-11-03 experiment, and irgo-windows-vm PR #13
-// (https://github.com/joeblew999/irgo-windows-vm/pull/13) measured the same;
-// neither found the cause. main rejects a symlinked path for this reason.
+// utm은 UTM.app 안에 있는 utmctl로 UTM을 제어한다. Homebrew 심볼릭 링크
+// /opt/homebrew/bin/utmctl로 호출하면 2026-11-03 실험에서 start가 응답하지 않았고,
+// irgo-windows-vm PR #13(https://github.com/joeblew999/irgo-windows-vm/pull/13)도
+// 같은 결과를 측정했다. 두 곳 모두 원인은 찾지 못했다. 그래서 main은 심볼릭 링크
+// 경로를 거부한다.
 type utm struct {
 	ctl, osascript string
 	log            io.Writer
 }
 
-// app returns UTM.app, which contains Contents/MacOS/utmctl.
+// app은 Contents/MacOS/utmctl을 담고 있는 UTM.app을 돌려준다.
 func (u utm) app() string { return filepath.Dir(filepath.Dir(filepath.Dir(u.ctl))) }
 
-// call runs utmctl under limit and judges success by its output. utmctl
-// exited with 0 in every failure seen on 2026-11-03: start that left the VM
-// stopped, file pull and push of a missing path that printed an error, and
-// exec that does not wait for the guest command. Each such failure printed a
-// message to stderr, so any stderr output is an error except the OSStatus
-// error -10004 lines. Those came only from the --hide events, which every
-// command with --hide printed twice, including a start that succeeded; see
-// hideMainWindow.
+// call은 limit 안에서 utmctl을 실행하고 출력으로 성공 여부를 판단한다. 2026-11-03에
+// 본 실패에서 utmctl은 모두 0으로 끝났다: VM을 stopped로 남긴 start, 없는 경로를
+// 지정해 오류를 출력한 file pull과 push, 게스트 명령을 기다리지 않는 exec가 그랬다.
+// 이런 실패는 모두 stderr에 메시지를 출력했으므로, OSStatus error -10004 줄을 뺀
+// stderr 출력은 모두 오류로 본다. 이 줄은 --hide 이벤트에서만 나왔고, --hide를 붙인
+// 명령은 성공한 start까지 포함해 모두 이 줄을 두 번 출력했다. hideMainWindow를
+// 참고한다.
 func (u utm) call(limit time.Duration, stdin io.Reader, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
@@ -100,8 +98,8 @@ func (u utm) list() ([]vmEntry, error) {
 	return parseList(out), nil
 }
 
-// parseList reads the table printed by utmctl list: a header line, then one
-// line per VM with its UUID, status, and name, which may contain spaces.
+// parseList는 utmctl list가 출력하는 표를 읽는다. 표는 머리글 한 줄 뒤에 VM마다
+// UUID, 상태, 이름을 적은 줄이 이어지며, 이름에는 공백이 들어갈 수 있다.
 func parseList(out []byte) []vmEntry {
 	var entries []vmEntry
 	for _, line := range strings.Split(string(out), "\n") {
@@ -114,8 +112,8 @@ func parseList(out []byte) []vmEntry {
 	return entries
 }
 
-// findVM matches the identifier the way utmctl does: a UUID or the complete
-// name.
+// findVM은 utmctl과 같은 방식으로, UUID나 전체 이름이 식별자와 일치하는 VM을
+// 찾는다.
 func findVM(entries []vmEntry, id string) (vmEntry, bool) {
 	for _, entry := range entries {
 		if strings.EqualFold(entry.uuid, id) || entry.name == id {
@@ -125,8 +123,8 @@ func findVM(entries []vmEntry, id string) (vmEntry, bool) {
 	return vmEntry{}, false
 }
 
-// runningVMs counts VMs that are not stopped. Paused and transitional VMs
-// count too, because quitting or restarting UTM would affect them.
+// runningVMs는 stopped가 아닌 VM을 센다. UTM을 종료하거나 다시 시작하면 일시 정지된
+// VM과 상태가 바뀌는 중인 VM도 영향을 받으므로, 이런 VM도 센다.
 func runningVMs(entries []vmEntry) int {
 	count := 0
 	for _, entry := range entries {
@@ -142,8 +140,8 @@ func (u utm) status(vm string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// start requests a stopped VM to start and waits until utmctl status reports
-// started, because start exits with 0 even when the VM stays stopped.
+// start는 stopped 상태인 VM에 시작을 요청하고, utmctl status가 started를 보고할
+// 때까지 기다린다. VM이 stopped로 남아도 start는 0으로 끝나기 때문이다.
 func (u utm) start(vm string) error {
 	if _, err := u.call(startLimit, nil, "start", "--hide", vm); err != nil {
 		fmt.Fprintln(u.log, "start request:", err)
@@ -155,15 +153,14 @@ func (u utm) start(vm string) error {
 	return nil
 }
 
-// hideMainWindow does through AppleScript what utmctl --hide does: it turns
-// off auto terminate and closes the window named "UTM"
-// (https://github.com/utmapp/UTM/blob/main/utmctl/UTMCtl.swift). On
-// 2026-11-03 both events failed from utmctl, which printed OSStatus error
-// -10004 once for each, and the main window stayed on screen; the same
-// events sent by osascript closed it. Why utmctl's events fail is not known.
-// Neither closes a VM's display window; only a VM without display devices
-// runs without one (see up). Auto terminate stays off so that UTM does not
-// quit by itself when its last window closes.
+// hideMainWindow는 utmctl --hide가 하는 일을 AppleScript로 한다: auto terminate를
+// 끄고 이름이 "UTM"인 창을 닫는다
+// (https://github.com/utmapp/UTM/blob/main/utmctl/UTMCtl.swift). 2026-11-03에는
+// utmctl이 보낸 두 이벤트가 모두 실패해 이벤트마다 OSStatus error -10004를 한 번씩
+// 출력했고, 메인 창은 화면에 남았다. 같은 이벤트를 osascript로 보내자 창이 닫혔다.
+// utmctl의 이벤트가 실패하는 원인은 알려지지 않았다. 두 방법 모두 VM의 디스플레이
+// 창은 닫지 못하며, 디스플레이 장치가 없는 VM만 창 없이 실행된다(up 참고). auto
+// terminate를 꺼 둔 채로 두어, 마지막 창이 닫혀도 UTM이 스스로 종료하지 않게 한다.
 func (u utm) hideMainWindow() {
 	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
 	defer cancel()
@@ -176,12 +173,11 @@ end tell`
 	}
 }
 
-// displays returns the number of display devices in the VM's configuration,
-// read through UTM's AppleScript dictionary because utmctl does not show
-// it. The one-line form length of (get displays of (configuration of ...))
-// failed with error -1700 on 2026-11-03; the steps through variables
-// worked. The tell launches UTM when it is not running, so call this only
-// after open.
+// displays는 VM 구성에 있는 디스플레이 장치 수를 돌려준다. utmctl은 이 값을 보여
+// 주지 않으므로 UTM의 AppleScript 사전으로 읽는다. 한 줄로 쓴 length of (get
+// displays of (configuration of ...))는 2026-11-03에 error -1700으로 실패했고,
+// 변수를 거쳐 단계별로 읽는 형태는 동작했다. tell은 UTM이 실행 중이 아니면 UTM을
+// 띄우므로, open 뒤에만 호출한다.
 func (u utm) displays(vm string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
 	defer cancel()
@@ -204,7 +200,7 @@ end run`
 	return n, nil
 }
 
-// await polls utmctl status until it reports want.
+// await는 utmctl status가 want를 보고할 때까지 상태를 반복해서 확인한다.
 func (u utm) await(vm, want string, limit time.Duration) error {
 	deadline := time.Now().Add(limit)
 	for {
@@ -219,9 +215,9 @@ func (u utm) await(vm, want string, limit time.Duration) error {
 	}
 }
 
-// awaitGuestAgent waits until the Guest Agent reports an IPv4 address. A
-// started VM does not mean the guest has booted: in the experiment the agent
-// answered 7 to 10 seconds after started.
+// awaitGuestAgent는 Guest Agent가 IPv4 주소를 보고할 때까지 기다린다. VM이
+// started라고 해서 게스트가 부팅을 마친 것은 아니다: 실험에서 agent는 started 뒤
+// 7초에서 10초가 지나서야 응답했다.
 func (u utm) awaitGuestAgent(vm string, limit time.Duration) error {
 	deadline := time.Now().Add(limit)
 	for {
@@ -249,24 +245,22 @@ func (u utm) guestAgentReady(vm string) error {
 	return fmt.Errorf("no IPv4 address in %q", out)
 }
 
-// utmRunning reports whether the UTM app runs. It is checked before any
-// utmctl request where UTM must not be launched, because a utmctl request
-// launches UTM when it is not running.
+// utmRunning은 UTM 앱이 실행 중인지 알려 준다. utmctl 요청은 UTM이 실행 중이
+// 아니면 UTM을 띄우므로, UTM을 띄우면 안 되는 utmctl 요청을 보내기 전에 이 값을
+// 확인한다.
 var utmRunning = func() bool { return exec.Command("pgrep", "-x", "UTM").Run() == nil }
 
-// open launches UTM in the background with open -g instead of letting utmctl
-// or AppleScript launch it. UTM #8006 reports that UTM 5.0.8 on macOS 27
-// crashes and start stalls when utmctl launches UTM, and irgo-windows-vm PR
-// #13 measured that a request within 0.3 seconds of launch leaves start
-// unanswered. Waiting 2 seconds before the first request made start work in
-// the 2026-11-03 experiment; the cause is not known.
+// open은 utmctl이나 AppleScript가 UTM을 띄우게 두지 않고, open -g로 UTM을
+// 백그라운드에서 띄운다. UTM #8006은 macOS 27의 UTM 5.0.8을 utmctl이 띄우면 UTM이
+// 충돌하고 start가 멈춘다고 보고하고, irgo-windows-vm PR #13은 UTM을 띄우고 0.3초
+// 안에 요청을 보내면 start가 응답하지 않는다고 측정했다. 2026-11-03 실험에서는 첫
+// 요청 전에 2초를 기다리자 start가 동작했지만, 원인은 알려지지 않았다.
 //
-// UTM shows its main window within half a second of launch even with -g,
-// which only keeps it behind the frontmost app, so the window is closed
-// right away rather than after the wait; sending that event early did not
-// leave start unanswered in 8 launches on 2026-11-03. open -j would launch
-// UTM hidden, but start then left the VM stopped in one of two tries that
-// day.
+// -g는 UTM을 맨 앞 앱 뒤에 둘 뿐이어서, UTM은 -g를 붙여도 실행 후 0.5초 안에 메인
+// 창을 띄운다. 그래서 창은 대기가 끝난 뒤가 아니라 곧바로 닫는다. 2026-11-03에 8번
+// 실행하는 동안 이 이벤트를 일찍 보내도 start가 응답하지 않는 일은 없었다. open
+// -j는 UTM을 숨긴 채 띄우지만, 그날 두 번 중 한 번은 start가 VM을 stopped로
+// 남겼다.
 func (u utm) open() error {
 	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
 	defer cancel()
@@ -282,8 +276,8 @@ func (u utm) open() error {
 	return nil
 }
 
-// quit asks UTM to quit normally and waits for it to exit. UTM is never
-// killed; callers quit it only when no VM is running.
+// quit은 UTM에 정상 종료를 요청하고 UTM이 끝날 때까지 기다린다. UTM을 강제로
+// 종료하지는 않으며, 호출하는 쪽은 실행 중인 VM이 없을 때만 quit을 호출한다.
 func (u utm) quit() error {
 	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
 	defer cancel()

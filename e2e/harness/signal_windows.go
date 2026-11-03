@@ -53,10 +53,9 @@ type processObservation struct {
 	observed time.Time
 }
 
-// processObserver belongs to one scenario. It keeps the handle opened at the
-// first observation of each recorded PID until the scenario's cleanup, so a
-// PID reused after that observation cannot be mistaken for, or terminated as,
-// a recorded process.
+// processObserver는 시나리오 하나에 속한다. 기록된 PID마다 처음 관찰할 때 연 handle을
+// 시나리오를 정리할 때까지 유지하므로, 그 관찰 뒤에 재사용된 PID를 기록된 프로세스로
+// 착각하거나 기록된 프로세스로 여겨 종료하지 않는다.
 type processObserver struct {
 	observations map[int]processObservation
 }
