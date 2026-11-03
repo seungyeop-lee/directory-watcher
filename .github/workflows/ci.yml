@@ -13,14 +13,21 @@ jobs:
     timeout-minutes: 15
     env:
       DW_LIFETIME_DIAGNOSTIC: '1'
+      DW_DIAGNOSTIC_DISABLE_GC: '1'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Compare source ownership and registration count
-        run: go test -count=3 -race -v -timeout=5m ./internal/app/service -run '^(TestWindowsOwnerPositiveControl|TestWindowsCleanupDiagnostic)$'
-      - name: Observe existing synthetic consumers and Close results
+      - name: Identify predicate-owned handles around native Close
+        run: go test -count=1 -race -v -timeout=3m ./internal/app/service -run '^(TestWindowsOwnerPositiveControl|TestWindowsPredicateOwnership)$'
+      - name: Observe original consumers without diagnostic finalizer pressure
         if: ${{ !cancelled() }}
         run: go test -count=1 -race -v -timeout=3m ./internal/app/service -run '^(TestStopDiscardsPendingEvents|TestWatcherLossStopsDispatchWhileHookRuns|TestRunnerPreservesOnlyFirstFatalError|TestBoundedDispatchReportsLoss|TestFatalLossCancelsEveryTargetBeforeNotificationCompletes|TestFatalLossNotificationReceivesOriginalContext|TestNotificationFailureAndTimeoutPreserveFirstError)$'
+      - name: RED predicate resource lifetime regression
+        if: ${{ !cancelled() }}
+        run: go test -count=1 -race -v -timeout=3m ./internal/helper -run '^TestFilesystemPredicatesReleaseResources$'
+      - name: RED deletion error observation consumers
+        if: ${{ !cancelled() }}
+        run: go test -count=1 -race -v -timeout=3m ./e2e -run '^TestCleanupReportsLockedResources$'

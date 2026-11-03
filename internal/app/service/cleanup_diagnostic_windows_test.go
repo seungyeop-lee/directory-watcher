@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v2/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v2/internal/helper"
 	"golang.org/x/sys/windows"
 )
 
@@ -27,6 +29,7 @@ type diagnosticHandle struct {
 }
 
 func init() {
+	if os.Getenv("DW_DIAGNOSTIC_DISABLE_GC") == "1" { debug.SetGCPercent(-1) }
 	resourceDeletionDiagnostic = func(t *testing.T, path string) { diagnosticOwners(t, path, true) }
 }
 
@@ -49,6 +52,7 @@ func diagnosticOwners(t *testing.T, path string, all bool) int {
 	count := *(*uintptr)(unsafe.Pointer(&buffer[0]))
 	entries := unsafe.Slice((*diagnosticHandle)(unsafe.Pointer(&buffer[2*unsafe.Sizeof(uintptr(0))])), count)
 	matches, selfMatches, denied, nameFailures := 0, 0, 0, 0
+	name := make([]uint16, 32768)
 	for _, entry := range entries {
 		if !all && entry.PID != uintptr(os.Getpid()) { continue }
 		process, err := windows.OpenProcess(windows.PROCESS_DUP_HANDLE, false, uint32(entry.PID))
@@ -59,7 +63,6 @@ func diagnosticOwners(t *testing.T, path string, all bool) int {
 		if err != nil { continue }
 		kind, err := windows.GetFileType(duplicate)
 		if err == nil && kind == windows.FILE_TYPE_DISK {
-			name := make([]uint16, 32768)
 			n, err := windows.GetFinalPathNameByHandle(duplicate, &name[0], uint32(len(name)), 0)
 			if err != nil { nameFailures++ }
 			if err == nil && n < uint32(len(name)) {
@@ -153,4 +156,48 @@ func TestWindowsCleanupDiagnostic(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestWindowsPredicateOwnership(t *testing.T) {
+	for _, predicate := range []struct {
+		name string
+		call func(string) bool
+	}{
+		{"IsExist", helper.IsExist},
+		{"IsNotExist", helper.IsNotExist},
+		{"IsDir", helper.IsDir},
+		{"Stat", func(path string) bool { _, err := os.Stat(path); return err == nil }},
+	} {
+		t.Run(predicate.name, func(t *testing.T) {
+			oldGC := debug.SetGCPercent(-1)
+			defer debug.SetGCPercent(oldGC)
+			path := t.TempDir()
+			started := time.Now()
+			t.Logf("predicate=%s result=%t", predicate.name, predicate.call(path))
+			diagnosticOwners(t, path, false)
+			w, err := fsnotify.NewWatcher()
+			if err != nil { t.Fatal(err) }
+			if err := w.Add(path); err != nil { t.Fatal(err) }
+			diagnosticOwners(t, path, false)
+			before := time.Now()
+			err = w.Close()
+			t.Logf("CLOSE predicate=%s at=%s duration=%s err=%v", predicate.name, time.Now().UTC().Format(time.RFC3339Nano), time.Since(before), err)
+			diagnosticOwners(t, path, false)
+			diagnosticRemove(t, path, started)
+		})
+	}
+	t.Run("OpenThenClose", func(t *testing.T) {
+		oldGC := debug.SetGCPercent(-1)
+		defer debug.SetGCPercent(oldGC)
+		path := t.TempDir()
+		started := time.Now()
+		file, err := os.Open(path)
+		if err != nil { t.Fatal(err) }
+		if got := diagnosticOwners(t, path, false); got != 1 { t.Fatalf("opened file owner count=%d", got) }
+		before := time.Now()
+		if err := file.Close(); err != nil { t.Fatal(err) }
+		t.Logf("OPEN CONTROL Close at=%s duration=%s err=nil", time.Now().UTC().Format(time.RFC3339Nano), time.Since(before))
+		if got := diagnosticOwners(t, path, false); got != 0 { t.Fatalf("closed file owner count=%d", got) }
+		diagnosticRemove(t, path, started)
+	})
 }
