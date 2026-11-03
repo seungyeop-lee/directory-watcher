@@ -57,9 +57,13 @@ func hookOutput(ctx context.Context) io.Writer {
 	return out
 }
 
+// leftoverOutputWait는 서버를 백그라운드로 띄우는 hook이 변경마다 다음 hook을 오래 늦추지 않게 짧게 둔다.
+const leftoverOutputWait = time.Second
+
 // runPrintingOutput는 명령을 실행하고, 명령이 낸 출력을 out에 모두 쓴 뒤에 돌아온다.
 // 명령이 취소되어도 파이프가 닫힐 때까지 출력을 계속 읽는다. 명령이 남긴 프로세스가
-// 파이프를 계속 열어 두면, 명령이 끝난 뒤 cmd.WaitDelay만큼만 기다리고 파이프를 닫는다.
+// 파이프를 계속 열어 두면, 명령이 끝난 뒤 leftoverOutputWait만큼만 기다리고 파이프를 닫는다.
+// 그 뒤에 남은 프로세스가 쓰는 출력은 버린다.
 func runPrintingOutput(ctx *helper.WatcherContext, cmd *exec.Cmd, out io.Writer) error {
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -79,7 +83,7 @@ func runPrintingOutput(ctx *helper.WatcherContext, cmd *exec.Cmd, out io.Writer)
 	_ = w.Close()
 	select {
 	case <-printed:
-	case <-time.After(cmd.WaitDelay):
+	case <-time.After(leftoverOutputWait):
 	}
 	_ = r.Close()
 	<-printed

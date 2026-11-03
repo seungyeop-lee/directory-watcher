@@ -3,8 +3,10 @@ package cmd_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,6 +23,8 @@ import (
 //   - print N: 표준 출력과 표준 오류에 번갈아 N줄을 쓰고, 마지막 줄은 줄바꿈 없이 끝낸다.
 //   - cancel N: N줄과 ready 줄을 쓰고, 종료 신호를 받으면 N줄을 더 쓴 뒤 끝난다.
 //   - fail N: 아무것도 쓰지 않고 종료 코드 3으로 끝난다.
+//   - leave N: 출력을 물려받아 60초 동안 살아 있는 자식 프로세스를 띄워 그 pid를 쓰고, N줄과 done 줄을 쓴 뒤 끝난다.
+//   - linger N: 60초를 기다린 뒤 끝난다. leave가 남기는 자식 프로세스다.
 func TestHookOutputProcess(t *testing.T) {
 	if os.Getenv("DW_HOOK_OUTPUT_HELPER") != "1" {
 		return
@@ -43,6 +47,18 @@ func TestHookOutputProcess(t *testing.T) {
 		writeLines("canceled", count)
 	case "fail":
 		os.Exit(3)
+	case "leave":
+		child := exec.Command(os.Args[0], "-test.run=^TestHookOutputProcess$", "--", "linger", "0")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
+			os.Exit(2)
+		}
+		fmt.Printf("child=%d\n", child.Process.Pid)
+		writeLines("line", count)
+		fmt.Println()
+		fmt.Println("done")
+	case "linger":
+		time.Sleep(time.Minute)
 	}
 	os.Exit(0)
 }
@@ -134,6 +150,55 @@ func TestCanceledHookPrintsAllOutputUntilPipeCloses(t *testing.T) {
 		if count := strings.Count(got, marker); count != lines {
 			t.Errorf("printed %d of %d %q lines", count, lines, marker)
 		}
+	}
+}
+
+func TestHookEndsSoonAfterCommandWhenLeftoverProcessHoldsOutput(t *testing.T) {
+	const lines = 2000
+	ctx, output := capturedContext(t)
+	t.Cleanup(func() { killLeftoverChild(t, output()) })
+	cmd := command.NewManager(outputCommand(t, "leave", lines))
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		if err := cmd.Run(ctx, ".", nil); err != nil {
+			t.Error(err)
+		}
+	}()
+	// 명령은 done 줄을 쓰자마자 끝나므로, done 줄이 출력된 시각을 명령이 끝난 시각으로 본다.
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(output(), "done") {
+		if time.Now().After(deadline) {
+			t.Fatalf("hook did not print its last line: %q", output())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	commandEnded := time.Now()
+	select {
+	case <-finished:
+	case <-time.After(25 * time.Second):
+		t.Fatal("hook did not finish")
+	}
+	waited := time.Since(commandEnded)
+	t.Logf("hook finished %v after the command ended", waited)
+	if waited > 2*time.Second {
+		t.Errorf("hook finished %v after the command ended, want about 1s", waited)
+	}
+	if got := strings.Count(output(), "line-"); got != lines {
+		t.Errorf("printed %d of %d hook output lines", got, lines)
+	}
+}
+
+var childPID = regexp.MustCompile(`child=(\d+)`)
+
+func killLeftoverChild(t *testing.T, output string) {
+	match := childPID.FindStringSubmatch(output)
+	if match == nil {
+		return
+	}
+	pid, _ := strconv.Atoi(match[1])
+	if process, err := os.FindProcess(pid); err == nil {
+		_ = process.Kill()
 	}
 }
 
