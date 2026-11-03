@@ -269,8 +269,6 @@ func controlledSource(r *watchTargetRunner) (chan fsnotify.Event, chan error) {
 	return events, watchErrors
 }
 
-var resourceDeletionDiagnostic func(*testing.T, string)
-
 func assertWatchDirectoriesRemovable(t *testing.T, targets ...*watchTargetRunner) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -279,9 +277,6 @@ func assertWatchDirectoriesRemovable(t *testing.T, targets ...*watchTargetRunner
 			err := os.RemoveAll(target.path.String())
 			t.Logf("resource removal path=%q at=%s duration=%s err=%v", target.path, time.Now().UTC().Format(time.RFC3339Nano), time.Since(before), err)
 			if err != nil {
-				if resourceDeletionDiagnostic != nil {
-					resourceDeletionDiagnostic(t, target.path.String())
-				}
 				t.Errorf("watch directory remains in use after Stop: %v", err)
 			}
 		}

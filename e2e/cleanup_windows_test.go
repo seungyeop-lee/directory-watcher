@@ -40,7 +40,7 @@ func TestCleanupReportsLockedResources(t *testing.T) {
 		t.Run(tc.mode, func(t *testing.T) {
 			record := filepath.Join(t.TempDir(), "directory")
 			cmd := exec.Command(os.Args[0], "-test.run=^TestCleanupReportsLockedResources$", "-test.v")
-			cmd.Env = append(os.Environ(), "DW_E2E_CLEANUP_LOCK="+tc.mode, "DW_E2E_CLEANUP_LOCK_RECORD="+record)
+			cmd.Env = append(os.Environ(), "DW_E2E_KEEP=0", "DW_E2E_CLEANUP_LOCK="+tc.mode, "DW_E2E_CLEANUP_LOCK_RECORD="+record)
 			out, err := cmd.CombinedOutput()
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) || !strings.Contains(string(out), tc.message) {

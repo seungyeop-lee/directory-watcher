@@ -72,6 +72,8 @@ func TestCreateAnotherFile(t *testing.T) {
 
 로컬 실패 시 `diagnostics retained:` 뒤의 경로에 `config.yml`, `records.log`, `watcher.log`, `watcher.pid`, `cleanup.log`를 남깁니다. 성공 시에도 보존하려면 `DW_E2E_KEEP=1`을 설정합니다. `cleanup.log`에서 보조 프로세스의 `alive=false`를 확인하고 watcher PID도 종료되었는지 확인합니다. Windows golden 실행에는 보조 프로세스 트리 기록이 없습니다.
 
+보존하지 않는 실행 폴더의 삭제 오류는 해당 테스트를 실패시키고, 테스트 바이너리 폴더의 삭제 오류는 최종 종료 코드를 1로 만듭니다. `TestCleanupReportsLockedResources`는 Windows에서 실제 삭제 방지 handle을 열어 두 오류가 성공으로 숨겨지지 않는지 검사합니다. 실패 또는 `DW_E2E_KEEP=1`로 실행 폴더를 보존한 경우에는 그 폴더의 삭제를 검증한 것이 아닙니다.
+
 Linux는 `Linux diagnostics:` 뒤의 호스트 경로에 `runner.log`와 컨테이너 `/tmp`의 진단을 복사합니다. 제한 시간 초과 시 실행기 로그의 `deadline`과 watcher 로그의 마지막 이벤트·hook, 기록의 마지막 `signal`·`complete`를 비교합니다. 컨테이너 ID가 더 이상 `docker inspect <ID>`에 나타나지 않아야 합니다.
 
 정리 경로를 일부러 검사하는 아래 명령은 **실패가 기대 결과**입니다. `failure`는 실제 프로세스 트리 준비 직후 실패하고, `timeout`은 준비 후 충족되지 않는 조건의 제한 시간을 초과합니다. 두 경우 모두 진단 경로와 PID 종료, Linux 컨테이너 제거를 확인합니다.
@@ -96,6 +98,8 @@ go test -race ./...
 `TestStartHookShutdownModes`는 네 조합의 장시간 시작 hook, 변경·종료 경합과 실제 부모·자식·손자 정리를 검사합니다. `TestTargetsRunIndependently`는 한 대상의 800ms hook이 다른 대상의 처리를 막지 않는지 검사합니다. `TestBoundedOverloadCLI`는 시작 hook 실행 중 유효 생성 이벤트 257개 이상을 입력하여 애플리케이션 전달 대기열 포화, 대상·원인 로그, 비정상 종료와 프로세스 트리 정리를 검사합니다.
 
 제어된 내부 테스트는 OS 알림 개수와 무관하게 noWait의 정확한 순서, debounce의 마지막 유효 이벤트, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다. 대상별 대기 상한은 256개이며 실행은 한 세대, debounce 타이머는 하나입니다. 대기열이 가득 차면 버퍼를 무한 확장하거나 무한 대기하지 않고 유실 오류로 종료합니다. 종료는 대기열을 처리 완료하는 동작이 아니라 취소·정리하는 동작입니다.
+
+제어 입력 runner 테스트는 실제 fsnotify watcher와 감시 등록을 유지하고 수신 채널만 바꿉니다. 관련 테스트는 `Stop` 완료 후 임시 디렉터리를 즉시 삭제해 자원 반납을 검사합니다. `TestNativeWatcherStopReleasesDirectory`는 원래 채널로 실제 생성 이벤트를 처리한 뒤 종료 hook과 디렉터리 삭제를 검사합니다. `TestFilesystemPredicatesReleaseResources`는 존재·디렉터리 판별의 기존 bool 결과와 호출 직후 파일·디렉터리 삭제를 함께 검사합니다.
 
 OS E2E는 파일 생성 순서로 마지막 수신 경로를 정하지 않습니다. `harness_observation_test.go`는 `last.txt` 뒤에 `normal-19.txt`를 수신한 경계, 빈 기록·미완료 hook의 거부, noWait의 중복 수신별 완료를 검사합니다. 120ms 안정 구간은 관찰 조건이지 OS가 앞으로 알림을 보내지 않는다는 보장은 아닙니다. 늦은 유효 이벤트가 고립된 변경을 대체하면 테스트는 성공 처리하지 않고 기존 제한 시간 안에 실패합니다. 배치 관찰과 고립된 변경은 기존 10초·30초 완료 대기 예산을 공유합니다.
 

@@ -8,8 +8,8 @@ import (
 
 func TestFilesystemPredicatesReleaseResources(t *testing.T) {
 	for _, predicate := range []struct {
-		name string
-		call func(string) bool
+		name                     string
+		call                     func(string) bool
 		file, directory, missing bool
 	}{
 		{"IsExist", IsExist, true, true, false},

@@ -1,33 +1,29 @@
-name: dw-4rw Windows diagnostic
+name: ci
 
 on:
   push:
-  workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  diagnose:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    env:
-      DW_LIFETIME_DIAGNOSTIC: '1'
-      DW_DIAGNOSTIC_DISABLE_GC: '1'
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Identify predicate-owned handles around native Close
-        run: go test -count=1 -race -v -timeout=3m ./internal/app/service -run '^(TestWindowsOwnerPositiveControl|TestWindowsPredicateOwnership)$'
-      - name: Observe original consumers without diagnostic finalizer pressure
-        if: ${{ !cancelled() }}
-        run: go test -count=1 -race -v -timeout=3m ./internal/app/service -run '^(TestStopDiscardsPendingEvents|TestWatcherLossStopsDispatchWhileHookRuns|TestRunnerPreservesOnlyFirstFatalError|TestBoundedDispatchReportsLoss|TestFatalLossCancelsEveryTargetBeforeNotificationCompletes|TestFatalLossNotificationReceivesOriginalContext|TestNotificationFailureAndTimeoutPreserveFirstError)$'
-      - name: RED predicate resource lifetime regression
-        if: ${{ !cancelled() }}
-        run: go test -count=1 -race -v -timeout=3m ./internal/helper -run '^TestFilesystemPredicatesReleaseResources$'
-      - name: RED deletion error observation consumers
-        if: ${{ !cancelled() }}
-        run: go test -count=1 -race -v -timeout=3m ./e2e -run '^TestCleanupReportsLockedResources$'
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...

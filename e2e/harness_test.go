@@ -19,13 +19,18 @@ var watcherBin, hookrecBin string
 
 func TestMain(m *testing.M) { os.Exit(runTests(m)) }
 
-func runTests(m *testing.M) int {
+func runTests(m *testing.M) (code int) {
 	dir, err := os.MkdirTemp("", "dw-e2e-bin-*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	defer os.RemoveAll(dir)
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Fprintln(os.Stderr, "remove test binaries:", err)
+			code = 1
+		}
+	}()
 	watcherBin = filepath.Join(dir, binName("directory-watcher"))
 	hookrecBin = filepath.Join(dir, binName("hookrec"))
 	for _, build := range []struct{ output, source string }{{watcherBin, ".."}, {hookrecBin, "./hookrec"}} {
@@ -250,7 +255,9 @@ func (s *scenario) cleanup() {
 		_ = os.WriteFile(filepath.Join(s.work, "watcher.log"), []byte(s.log.String()), 0644)
 		s.t.Logf("diagnostics retained: %s", s.work)
 	} else {
-		_ = os.RemoveAll(s.work)
+		if err := os.RemoveAll(s.work); err != nil {
+			s.t.Errorf("remove run directory: %v", err)
+		}
 	}
 }
 

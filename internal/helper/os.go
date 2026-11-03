@@ -9,8 +9,12 @@ func IsNotExist(path string) bool {
 }
 
 func IsExist(path string) bool {
-	_, err := os.Open(path)
-	return err == nil
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	return true
 }
 
 func IsDir(path string) bool {
@@ -18,6 +22,7 @@ func IsDir(path string) bool {
 	if err != nil {
 		return false
 	}
+	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
 		return false
