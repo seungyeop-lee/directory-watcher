@@ -1,4 +1,4 @@
-package e2e
+package harness
 
 import (
 	"fmt"
@@ -13,9 +13,9 @@ import (
 // hookrec appends one line per hook to the scenario's records file: the given
 // --line text, BEGIN|PID|line and CANCEL|PID|line around a --delay, and
 // ERROR|JSON for --error-context. Process tree records are read by
-// process_records_test.go.
+// process_records.go.
 
-func readLinesLenient(path string) []string {
+func ReadLinesLenient(path string) []string {
 	data, _ := os.ReadFile(path)
 	text := strings.TrimRight(string(data), "\r\n")
 	if text == "" {
@@ -24,15 +24,15 @@ func readLinesLenient(path string) []string {
 	return strings.Split(text, "\n")
 }
 
-func (s *scenario) lines() []string { return readLinesLenient(s.records) }
+func (s *Scenario) Lines() []string { return ReadLinesLenient(s.Records) }
 
-// hook returns a single-quoted YAML command that runs hookrec with the given
+// Hook returns a single-quoted YAML command that runs hookrec with the given
 // arguments and records into this scenario's records file.
-func (s *scenario) hook(arguments ...string) string {
-	return fmt.Sprintf("'%s'", strings.Join(append([]string{hookrecBin, "--file=" + s.records}, arguments...), " "))
+func (s *Scenario) Hook(arguments ...string) string {
+	return fmt.Sprintf("'%s'", strings.Join(append([]string{hookrecBin, "--file=" + s.Records}, arguments...), " "))
 }
 
-func countRecord(lines []string, value string) int {
+func CountRecord(lines []string, value string) int {
 	count := 0
 	for _, line := range lines {
 		if line == value {
@@ -42,9 +42,9 @@ func countRecord(lines []string, value string) int {
 	return count
 }
 
-func (s *scenario) awaitLine(label string, timeout time.Duration, line string) {
+func (s *Scenario) AwaitLine(label string, timeout time.Duration, line string) {
 	s.t.Helper()
-	s.await(label, timeout, func() bool { return countRecord(s.lines(), line) > 0 })
+	s.Await(label, timeout, func() bool { return CountRecord(s.Lines(), line) > 0 })
 }
 
 type delayedHook struct {
@@ -67,7 +67,7 @@ func delayedHooks(lines []string) []delayedHook {
 	return hooks
 }
 
-func delayedHookBegun(lines []string, line string) bool {
+func DelayedHookBegun(lines []string, line string) bool {
 	for _, hook := range delayedHooks(lines) {
 		if hook.line == line {
 			return true
@@ -122,7 +122,7 @@ func changesCompleted(received, records []string, prefix string, sequential bool
 		(!sequential || completed == len(received))
 }
 
-func (s *scenario) awaitChangesComplete(prefix string, paths []string, operations fsnotify.Op, sequential bool, timeout time.Duration) {
+func (s *Scenario) AwaitChangesComplete(prefix string, paths []string, operations fsnotify.Op, sequential bool, timeout time.Duration) {
 	s.t.Helper()
 	allowed := make(map[string]bool, len(paths))
 	for _, path := range paths {
@@ -131,10 +131,10 @@ func (s *scenario) awaitChangesComplete(prefix string, paths []string, operation
 	quietSince := time.Now()
 	previous := ""
 	var received, records []string
-	s.await("received inflow completes and settles", timeout, func() bool {
+	s.Await("received inflow completes and settles", timeout, func() bool {
 		log := s.log.String()
 		received = receivedChanges(log, allowed, operations)
-		records = s.lines()
+		records = s.Lines()
 		snapshot := log + strings.Join(records, "\n")
 		if snapshot != previous {
 			previous = snapshot

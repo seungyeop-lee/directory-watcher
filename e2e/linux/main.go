@@ -58,7 +58,7 @@ func run() (code int) {
 	}
 	args = append(args, *image, "go", "test", "-count=1", "-v")
 	args = append(args, flag.Args()...)
-	args = append(args, "./e2e")
+	args = append(args, "./e2e/scenarios")
 	created, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
 	if err != nil {
 		fmt.Fprintln(output, "create:", err, string(created))

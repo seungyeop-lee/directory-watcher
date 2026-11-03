@@ -1,4 +1,4 @@
-package e2e
+package harness
 
 import (
 	"errors"
@@ -11,14 +11,19 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// TestMain goes through the same Run that e2e/scenarios uses, so this test's
+// subprocesses exercise the real binary build and removal. Only this
+// Windows test needs the binaries; other platforms skip the build.
+func TestMain(m *testing.M) { os.Exit(Run(m)) }
+
 func TestCleanupReportsLockedResources(t *testing.T) {
 	if mode := os.Getenv("DW_E2E_CLEANUP_LOCK"); mode != "" {
 		path := filepath.Dir(watcherBin)
 		lockPath := watcherBin
 		if mode == "scenario" {
-			s := newScenario(t)
-			path, lockPath = s.work, s.work
-			for _, entry := range []string{s.watch, s.records} {
+			s := NewScenario(t)
+			path, lockPath = s.Work, s.Work
+			for _, entry := range []string{s.Watch, s.Records} {
 				if err := os.Remove(entry); err != nil {
 					t.Fatal(err)
 				}

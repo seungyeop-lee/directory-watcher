@@ -1,6 +1,6 @@
 //go:build !windows
 
-package e2e
+package harness
 
 import (
 	"os/exec"

@@ -1,4 +1,4 @@
-package e2e
+package scenarios
 
 import (
 	"encoding/json"
@@ -12,22 +12,23 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/seungyeop-lee/directory-watcher/v2/e2e/harness"
 )
 
 func TestEventLossNotificationCLI(t *testing.T) {
 	for _, mode := range []string{"success", "absent", "missing-command", "failure", "timeout", "success-tree"} {
 		t.Run(mode, func(t *testing.T) {
-			s := newScenario(t)
-			notifyDir := filepath.Join(s.work, "notification-workdir")
+			s := harness.NewScenario(t)
+			notifyDir := filepath.Join(s.Work, "notification-workdir")
 			treeMode := mode == "failure" || mode == "timeout" || mode == "success-tree"
-			var guard *scenario
+			var guard *harness.Scenario
 			if treeMode {
-				guard = newScenario(t)
-				guard.startProcess(exec.Command(hookrecBin, "--file="+guard.records, "--depth=2"))
-				guard.assertRunning("protected process", guard.awaitReadyGenerations("protected parent, child and grandchild ready", 1))
-				guard.snapshotProcesses("protected-before")
+				guard = harness.NewScenario(t)
+				guard.StartProcess(exec.Command(harness.HookrecBin(), "--file="+guard.Records, "--depth=2"))
+				guard.AssertRunning("protected process", guard.AwaitReadyGenerations("protected parent, child and grandchild ready", 1))
+				guard.SnapshotProcesses("protected-before")
 			}
-			other := filepath.Join(s.work, "other")
+			other := filepath.Join(s.Work, "other")
 			for _, dir := range []string{notifyDir, other} {
 				if err := os.Mkdir(dir, 0755); err != nil {
 					t.Fatal(err)
@@ -35,7 +36,7 @@ func TestEventLossNotificationCLI(t *testing.T) {
 			}
 			notification := notificationConfig(s, notifyDir, mode)
 			recordsNotification := mode != "absent" && mode != "missing-command"
-			s.launch(watcherBin, fmt.Sprintf(`global:
+			s.Launch(harness.WatcherBin(), fmt.Sprintf(`global:
   lifeCycle:
 %s    onBeforeChange:
       - %s
@@ -65,24 +66,24 @@ watchTargets:
     option:
       noWait: true
       watchEvent: C
-`, notification, s.hook("--line=BEFORE"), s.hook("--line=GLOBAL:FINISH"),
-				s.watch, s.hook("--delay=30s", "--line=START"), s.hook("--line=CHANGE"), s.hook("--line=TARGET:FINISH"),
-				other, s.hook("--line=OTHER:READY"), s.hook("--line=OTHER:CHANGE"), s.hook("--line=OTHER:FINISH")))
-			s.await("startup hooks ready at default ERROR level", 10*time.Second, func() bool {
-				lines := s.lines()
-				return delayedHookBegun(lines, "START") && countRecord(lines, "OTHER:READY") > 0
+`, notification, s.Hook("--line=BEFORE"), s.Hook("--line=GLOBAL:FINISH"),
+				s.Watch, s.Hook("--delay=30s", "--line=START"), s.Hook("--line=CHANGE"), s.Hook("--line=TARGET:FINISH"),
+				other, s.Hook("--line=OTHER:READY"), s.Hook("--line=OTHER:CHANGE"), s.Hook("--line=OTHER:FINISH")))
+			s.Await("startup hooks ready at default ERROR level", 10*time.Second, func() bool {
+				lines := s.Lines()
+				return harness.DelayedHookBegun(lines, "START") && harness.CountRecord(lines, "OTHER:READY") > 0
 			})
 			started := time.Now()
 			producerDone := make(chan error, 1)
 			go func() {
 				for n := range 1000 {
 					select {
-					case <-s.done:
+					case <-s.Done():
 						producerDone <- nil
 						return
 					default:
 					}
-					if err := os.WriteFile(filepath.Join(s.watch, fmt.Sprintf("load-%04d.txt", n)), nil, 0644); err != nil {
+					if err := os.WriteFile(filepath.Join(s.Watch, fmt.Sprintf("load-%04d.txt", n)), nil, 0644); err != nil {
 						producerDone <- err
 						return
 					}
@@ -91,38 +92,38 @@ watchTargets:
 				producerDone <- nil
 			}()
 			if recordsNotification {
-				s.await("one notification starts despite normal-hook cancellation", 10*time.Second, func() bool {
-					return len(errorContexts(t, s.records)) > 0
+				s.Await("one notification starts despite normal-hook cancellation", 10*time.Second, func() bool {
+					return len(errorContexts(t, s.Records)) > 0
 				})
 				if treeMode {
-					s.assertRunning("notification process", s.awaitReadyGenerations("notification parent, child and grandchild ready", 1))
-					s.snapshotProcesses("notification-before")
+					s.AssertRunning("notification process", s.AwaitReadyGenerations("notification parent, child and grandchild ready", 1))
+					s.SnapshotProcesses("notification-before")
 					if mode != "timeout" {
-						s.write(filepath.Join(s.work, "release-notification"), nil)
+						s.Write(filepath.Join(s.Work, "release-notification"), nil)
 					}
 				}
 				for n := range 20 {
-					s.write(filepath.Join(other, fmt.Sprintf("after-fatal-%02d.txt", n)), nil)
+					s.Write(filepath.Join(other, fmt.Sprintf("after-fatal-%02d.txt", n)), nil)
 				}
 			}
-			s.await("fatal CLI exit including bounded notification cleanup", 28*time.Second, s.exited)
+			s.Await("fatal CLI exit including bounded notification cleanup", 28*time.Second, s.Exited)
 			if err := <-producerDone; err != nil {
 				t.Fatal(err)
 			}
-			assertLossExit(s, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error())
-			if !strings.Contains(s.log.String(), "possible event loss") {
-				t.Fatalf("default ERROR diagnostics omitted possible loss: %s", s.log.String())
+			assertLossExit(t, s, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error())
+			if !strings.Contains(s.Log(), "possible event loss") {
+				t.Fatalf("default ERROR diagnostics omitted possible loss: %s", s.Log())
 			}
-			if (mode == "missing-command" || mode == "failure" || mode == "timeout") && !strings.Contains(s.log.String(), "onError notification failed") {
-				t.Fatalf("notification failure diagnostic missing for %s: %s", mode, s.log.String())
+			if (mode == "missing-command" || mode == "failure" || mode == "timeout") && !strings.Contains(s.Log(), "onError notification failed") {
+				t.Fatalf("notification failure diagnostic missing for %s: %s", mode, s.Log())
 			}
-			if mode == "failure" && !strings.Contains(s.log.String(), "exit status 7") {
-				t.Errorf("parent exit 7 was not preserved: %s", s.log.String())
+			if mode == "failure" && !strings.Contains(s.Log(), "exit status 7") {
+				t.Errorf("parent exit 7 was not preserved: %s", s.Log())
 			}
-			if mode == "success-tree" && strings.Contains(s.log.String(), "onError notification failed") {
-				t.Errorf("successful parent reported notification failure: %s", s.log.String())
+			if mode == "success-tree" && strings.Contains(s.Log(), "onError notification failed") {
+				t.Errorf("successful parent reported notification failure: %s", s.Log())
 			}
-			contexts := errorContexts(t, s.records)
+			contexts := errorContexts(t, s.Records)
 			if !recordsNotification {
 				if len(contexts) != 0 {
 					t.Fatalf("notification recorded without a runnable onError: %v", contexts)
@@ -133,18 +134,18 @@ watchTargets:
 				}
 				expectedDir := notifyDir
 				if mode == "success" || mode == "failure" {
-					expectedDir = s.work
+					expectedDir = s.Work
 				}
-				assertErrorContext(t, contexts[0], s.watch, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error(), expectedDir)
+				assertErrorContext(t, contexts[0], s.Watch, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error(), expectedDir)
 			}
-			lines := s.lines()
+			lines := s.Lines()
 			for _, forbidden := range []string{"CHANGE", "OTHER:CHANGE", "BEFORE", "START"} {
-				if countRecord(lines, forbidden) != 0 {
+				if harness.CountRecord(lines, forbidden) != 0 {
 					t.Errorf("normal hook approved or completed after fatal: %s\n%v", forbidden, lines)
 				}
 			}
 			for _, finish := range []string{"TARGET:FINISH", "OTHER:FINISH", "GLOBAL:FINISH"} {
-				if countRecord(lines, finish) != 1 {
+				if harness.CountRecord(lines, finish) != 1 {
 					t.Errorf("finish hook %s count != 1: %v", finish, lines)
 				}
 			}
@@ -152,43 +153,43 @@ watchTargets:
 				if elapsed := time.Since(started); elapsed < 5*time.Second || elapsed > 27*time.Second {
 					t.Errorf("notification timeout outside 5s + 20s cleanup bound: %s", elapsed)
 				}
-				if countRecord(lines, "NOTIFY") != 0 {
+				if harness.CountRecord(lines, "NOTIFY") != 0 {
 					t.Error("timed-out notification completed instead of being canceled")
 				}
-			} else if mode == "success" && countRecord(lines, "NOTIFY") != 1 {
+			} else if mode == "success" && harness.CountRecord(lines, "NOTIFY") != 1 {
 				t.Errorf("notification did not finish: %v", lines)
 			}
-			s.awaitDelayedHooksGone()
-			tree := s.processRecords()
+			s.AwaitDelayedHooksGone()
+			tree := s.ProcessRecords()
 			if treeMode {
-				s.snapshotProcesses("notification-after")
-				if !s.processesGone(tree) {
+				s.SnapshotProcesses("notification-after")
+				if !s.ProcessesGone(tree) {
 					t.Error("notification descendants alive after CLI cleanup completed")
 				}
-				for _, record := range guard.processRecords() {
-					if record.state == "start" && !guard.procs.alive(record.pid) {
+				for _, record := range guard.ProcessRecords() {
+					if record.State == "start" && !guard.Alive(record.PID) {
 						t.Errorf("notification cleanup killed protected process: %+v", record)
 					}
 				}
-				guard.snapshotProcesses("protected-after")
+				guard.SnapshotProcesses("protected-after")
 			}
 			t.Logf("ACTUAL application dispatch saturation, not OS overflow: mode=%s duration=%s exit=1 notifications=%d normal-hook-PIDs-alive=0", mode, time.Since(started), len(contexts))
 			t.Logf("original fatal cause preserved: dispatch queue full (capacity 256): %s", fsnotify.ErrEventOverflow)
-			s.awaitProcessesGone("notification descendants disappear even when parent fails", tree)
+			s.AwaitProcessesGone("notification descendants disappear even when parent fails", tree)
 		})
 	}
 }
 
-func notificationConfig(s *scenario, dir, mode string) string {
+func notificationConfig(s *harness.Scenario, dir, mode string) string {
 	if mode == "absent" {
 		return ""
 	}
 	if mode == "missing-command" {
-		return fmt.Sprintf("    onError:\n      - '%s'\n", filepath.Join(s.work, "missing-notification-executable"))
+		return fmt.Sprintf("    onError:\n      - '%s'\n", filepath.Join(s.Work, "missing-notification-executable"))
 	}
 	arguments := []string{"--error-context", "--line=NOTIFY"}
 	if mode == "failure" || mode == "success-tree" {
-		arguments = append(arguments, "--depth=2", "--release-file="+filepath.Join(s.work, "release-notification"))
+		arguments = append(arguments, "--depth=2", "--release-file="+filepath.Join(s.Work, "release-notification"))
 		if mode == "failure" {
 			arguments = append(arguments, "--exit-code=7")
 		}
@@ -196,7 +197,7 @@ func notificationConfig(s *scenario, dir, mode string) string {
 	if mode == "timeout" {
 		arguments = append(arguments, "--depth=2")
 	}
-	command := s.hook(arguments...)
+	command := s.Hook(arguments...)
 	switch mode {
 	case "success", "failure":
 		return fmt.Sprintf("    onError:\n      - %s\n", command)
@@ -210,7 +211,7 @@ func notificationConfig(s *scenario, dir, mode string) string {
 func errorContexts(t *testing.T, file string) []map[string]string {
 	t.Helper()
 	var contexts []map[string]string
-	for _, line := range readLinesLenient(file) {
+	for _, line := range harness.ReadLinesLenient(file) {
 		if strings.HasPrefix(line, "ERROR|") {
 			var context map[string]string
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "ERROR|")), &context); err != nil {
@@ -242,26 +243,26 @@ func assertErrorContext(t *testing.T, context map[string]string, target, cause, 
 	}
 }
 
-func assertLossExit(s *scenario, cause string) {
-	s.t.Helper()
+func assertLossExit(t *testing.T, s *harness.Scenario, cause string) {
+	t.Helper()
 	var exit *exec.ExitError
-	if !errors.As(s.exit, &exit) || exit.ExitCode() != 1 {
-		s.t.Fatalf("fatal exit = %v, want status 1\n%s", s.exit, s.log.String())
+	if !errors.As(s.ExitErr(), &exit) || exit.ExitCode() != 1 {
+		t.Fatalf("fatal exit = %v, want status 1\n%s", s.ExitErr(), s.Log())
 	}
-	log := s.log.String()
-	if !strings.Contains(log, fmt.Sprintf("watch target %q: %s", s.watch, cause)) {
-		s.t.Fatalf("original fatal target/cause missing at default ERROR level: %s", log)
+	log := s.Log()
+	if !strings.Contains(log, fmt.Sprintf("watch target %q: %s", s.Watch, cause)) {
+		t.Fatalf("original fatal target/cause missing at default ERROR level: %s", log)
 	}
 	if strings.Contains(log, "event:") {
-		s.t.Fatalf("default ERROR test unexpectedly enabled DEBUG logging: %s", log)
+		t.Fatalf("default ERROR test unexpectedly enabled DEBUG logging: %s", log)
 	}
 }
 
 func TestNormalChangesDoNotNotify(t *testing.T) {
 	for _, noWait := range []bool{false, true} {
 		t.Run(fmt.Sprintf("noWait=%t", noWait), func(t *testing.T) {
-			s := newScenario(t)
-			s.start(fmt.Sprintf(`global:
+			s := harness.NewScenario(t)
+			s.Start(fmt.Sprintf(`global:
   lifeCycle:
     onError:
       - %s
@@ -277,23 +278,23 @@ watchTargets:
       waitMillisecond: 50
       watchEvent: C
       excludeSuffix: [.probe]
-`, s.hook("--error-context", "--line=NOTIFY"), s.watch, s.hook("--line=CHANGE:{{.Path}}"), s.hook("--line=FINISH"), noWait))
+`, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--line=CHANGE:{{.Path}}"), s.Hook("--line=FINISH"), noWait))
 			var paths []string
 			for n := range 20 {
-				path := filepath.Join(s.watch, fmt.Sprintf("normal-%02d.txt", n))
+				path := filepath.Join(s.Watch, fmt.Sprintf("normal-%02d.txt", n))
 				paths = append(paths, path)
-				s.write(path, nil)
+				s.Write(path, nil)
 			}
 			deadline := time.Now().Add(10 * time.Second)
-			s.awaitChangesComplete("CHANGE:", paths, fsnotify.Create, noWait, time.Until(deadline))
-			last := filepath.Join(s.watch, "last.txt")
-			s.write(last, nil)
-			s.awaitLine("isolated normal/debounced event completes", time.Until(deadline), "CHANGE:"+last)
-			s.stop()
-			if got := errorContexts(t, s.records); len(got) != 0 {
+			s.AwaitChangesComplete("CHANGE:", paths, fsnotify.Create, noWait, time.Until(deadline))
+			last := filepath.Join(s.Watch, "last.txt")
+			s.Write(last, nil)
+			s.AwaitLine("isolated normal/debounced event completes", time.Until(deadline), "CHANGE:"+last)
+			s.Stop()
+			if got := errorContexts(t, s.Records); len(got) != 0 {
 				t.Fatalf("normal/debounced events invoked onError: %v", got)
 			}
-			if countRecord(s.lines(), "FINISH") != 1 {
+			if harness.CountRecord(s.Lines(), "FINISH") != 1 {
 				t.Fatal("normal finish hook missing")
 			}
 		})

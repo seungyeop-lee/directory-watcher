@@ -28,7 +28,7 @@ rund-docker:
 
 .PHONY: e2e e2e-linux
 e2e:
-	go test -count=1 -v ./e2e
+	go test -count=1 -v ./e2e/scenarios
 
 e2e-linux:
 	go run ./e2e/linux

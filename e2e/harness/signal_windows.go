@@ -1,6 +1,6 @@
 //go:build windows
 
-package e2e
+package harness
 
 import (
 	"context"
@@ -126,8 +126,8 @@ func (o *processObserver) describe(pid int) string {
 func (o *processObserver) writeDiagnostics(file string) error {
 	var diagnostics strings.Builder
 	for _, record := range processRecords(file) {
-		if record.state == "start" {
-			fmt.Fprintf(&diagnostics, "run=%s depth=%d %s\n", record.run, record.depth, o.describe(record.pid))
+		if record.State == "start" {
+			fmt.Fprintf(&diagnostics, "run=%s depth=%d %s\n", record.Generation, record.Depth, o.describe(record.PID))
 		}
 	}
 	return os.WriteFile(file+".processes", []byte(diagnostics.String()), 0644)
