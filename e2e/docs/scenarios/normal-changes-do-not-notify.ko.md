@@ -1,5 +1,7 @@
 # `TestNormalChangesDoNotNotify`: 일반 변경에서 유실 알림 미실행
 
+🇺🇸 [English](normal-changes-do-not-notify.md) | 🇰🇷 한국어
+
 `global.lifeCycle.onError`를 설정한 상태에서 일반 변경과 debounce에 의한 대체가 일어나도 유실 알림이 실행되지 않는지 `noWait` 두 값으로 확인합니다.
 
 ## 확인 내용과 성공 조건

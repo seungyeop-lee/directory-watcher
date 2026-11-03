@@ -1,5 +1,7 @@
 # Windows E2E 실행과 CI 결과 확인
 
+🇺🇸 [English](windows.md) | 🇰🇷 한국어
+
 ## 실행 명령
 
 Go와 콘솔 API를 사용할 수 있는 Windows 호스트의 PowerShell에서 저장소 루트로 이동한 뒤 실행합니다. Mac에서 UTM Windows VM으로 실행하는 방법은 [UTM Windows VM에서 E2E 실행](windows-utm.ko.md)에 있습니다. 임시 경로에 공백이 있으면 공백 없는 `TEMP`·`TMP` 경로를 지정합니다.

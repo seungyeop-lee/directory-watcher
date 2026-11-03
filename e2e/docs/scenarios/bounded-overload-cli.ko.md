@@ -1,5 +1,7 @@
 # `TestBoundedOverloadCLI`: 전달 대기열 포화와 비정상 종료
 
+🇺🇸 [English](bounded-overload-cli.md) | 🇰🇷 한국어
+
 시작 hook이 실행 중이어서 변경 hook을 실행할 수 없는 동안 대기열 상한(256개)보다 많은 유효 생성 이벤트를 넣습니다. 이때 watcher가 감시 대상과 원인을 로그에 남기고 스스로 비정상 종료하며, hook 프로세스 트리를 정리하는지 확인합니다.
 
 ## 확인 내용과 성공 조건

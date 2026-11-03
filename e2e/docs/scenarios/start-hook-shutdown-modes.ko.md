@@ -1,5 +1,7 @@
 # `TestStartHookShutdownModes`: 실행 중인 시작 hook과 변경·종료의 경합
 
+🇺🇸 [English](start-hook-shutdown-modes.md) | 🇰🇷 한국어
+
 시작 hook이 실제 부모·자식·손자 프로세스 트리를 실행하는 동안 변경 이벤트와 종료 신호가 들어올 때, `noWait`·`interruptible` 네 조합에서 시작 hook이 교체되거나 유지되고 종료 시 모든 프로세스가 정상 완료하는지 확인합니다.
 
 ## 확인 내용과 성공 조건

@@ -1,5 +1,7 @@
 # UTM Windows VM에서 E2E 실행
 
+🇺🇸 [English](windows-utm.md) | 🇰🇷 한국어
+
 Mac에서 UTM의 Windows 11 ARM64 VM을 켜고, 현재 작업 트리의 소스로 `./e2e/scenarios` E2E를 게스트 안에서 실행한 뒤 결과를 Mac으로 가져옵니다. 실행기는 `e2e/windows`에 있고 macOS에서만 빌드됩니다.
 
 ## 사전 준비

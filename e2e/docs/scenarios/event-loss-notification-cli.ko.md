@@ -1,5 +1,7 @@
 # `TestEventLossNotificationCLI`: 이벤트 유실 알림 `onError`
 
+🇺🇸 [English](event-loss-notification-cli.md) | 🇰🇷 한국어
+
 실제 전달 대기열 포화로 치명적 오류를 일으켜, CLI가 `global.lifeCycle.onError`를 한 번 실행하고 원래 오류로 비정상 종료하는지 확인합니다. 알림이 없거나, 실행 파일이 없거나, 실패·시간 초과하거나, 부모만 먼저 끝나는 경우에도 원래 오류와 종료 hook이 보존되고 알림의 자손만 정리되는지 여섯 모드로 확인합니다.
 
 이 포화는 애플리케이션 대기열의 유실이며 OS overflow를 관찰한 증거가 아닙니다. 알림의 환경 변수와 실행·정리 제한 시간 계약은 [이벤트 유실 알림](../../../README.ko.md#이벤트-유실-알림)을 따릅니다.

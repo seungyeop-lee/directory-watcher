@@ -1,5 +1,7 @@
 # `TestFastInflowSlowHook`: 느린 hook 실행 중 빠른 파일 유입
 
+🇺🇸 [English](fast-inflow-slow-hook.md) | 🇰🇷 한국어
+
 80ms 걸리는 변경 hook이 실행되는 동안 파일 변경이 10ms 간격으로 몰려 들어올 때, `noWait`·`interruptible` 네 조합에서 마지막으로 수신한 유효 변경까지 처리되는지 확인합니다. 제외 파일이 hook을 실행하지 않는지, 종료 뒤에 hook이 새로 실행되지 않고 hook 프로세스가 사라지는지도 확인합니다.
 
 ## 확인 내용과 성공 조건

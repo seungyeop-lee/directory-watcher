@@ -1,5 +1,7 @@
 # `TestProcessLifecycle`: 프로세스 트리 hook의 교체와 정상 종료
 
+🇺🇸 [English](process-lifecycle.md) | 🇰🇷 한국어
+
 중단 모드(`interruptible: true`)에서 실제 부모·자식·손자 프로세스로 된 hook이 파일 생성으로 교체될 때, 이전 세대가 정상 완료한 뒤에 새 세대가 시작되는지 확인합니다. watcher를 종료할 때 현재 세대가 정상 완료한 뒤 종료 hook이 실행되는지도 확인합니다.
 
 ## 확인 내용과 성공 조건

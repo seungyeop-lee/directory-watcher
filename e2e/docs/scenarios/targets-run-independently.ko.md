@@ -1,5 +1,7 @@
 # `TestTargetsRunIndependently`: 감시 대상 사이의 독립 실행
 
+🇺🇸 [English](targets-run-independently.md) | 🇰🇷 한국어
+
 한 감시 대상의 hook이 800ms 동안 실행되는 동안, 다른 감시 대상의 hook이 그 완료를 기다리지 않고 바로 실행되는지 확인합니다.
 
 ## 확인 내용과 성공 조건

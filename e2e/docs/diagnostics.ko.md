@@ -1,5 +1,7 @@
 # E2E 실패·시간 초과 진단과 격리
 
+🇺🇸 [English](diagnostics.md) | 🇰🇷 한국어
+
 ## 실패·시간 초과 진단
 
 로컬 실패 시 `diagnostics retained:` 뒤의 경로에 `config.yml`, `records.log`, `watcher.log`, `watcher.pid`, `cleanup.log`를 남깁니다. 성공 시에도 보존하려면 `DW_E2E_KEEP=1`을 설정합니다. `cleanup.log`에서 보조 프로세스의 `alive=false`를 확인하고 watcher PID도 종료되었는지 확인합니다. Windows에는 정리 전 `records.log.processes`도 남기며, 분석 방법은 [Windows 실패 분석](windows.ko.md#실패-분석)에 있습니다.
