@@ -50,7 +50,3 @@ watchTargets:
           - "ls -al"
     option:
       watchSubDir: false
-  - path: 'test/not_exist_dir'
-    lifeCycle:
-      onChange:
-        - echo 'not_exist_dir onChange'

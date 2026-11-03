@@ -1,13 +1,21 @@
+# config.example.yml이 감시하는 폴더. test/는 .gitignore 대상이라 clone에는 없으므로
+# 예시를 쓰는 실행 타깃이 먼저 만든다.
+EXAMPLE_WATCH_DIRS := test/dir1 test/dir2 test/dir3
+
+.PHONY: example-watch-dirs
+example-watch-dirs:
+	mkdir -p $(EXAMPLE_WATCH_DIRS)
+
 .PHONY: run
-run:
+run: example-watch-dirs
 	go run main.go -c config.example.yml
 
 .PHONY: runi
-runi:
+runi: example-watch-dirs
 	go run main.go -c config.example.yml --log-level=INFO
 
 .PHONY: rund
-rund:
+rund: example-watch-dirs
 	go run main.go -c config.example.yml --log-level=DEBUG
 
 .PHONY: release-test-snapshot
@@ -20,7 +28,7 @@ release-test:
 
 DOCKER_VERSION ?= latest
 .PHONY: rund-docker
-rund-docker:
+rund-docker: example-watch-dirs
 	docker run --rm \
 	-v $(PWD)/config.example.yml:/config.yml \
 	-v $(PWD)/test:/test \

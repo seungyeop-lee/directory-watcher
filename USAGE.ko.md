@@ -27,7 +27,7 @@ docker run --rm ghcr.io/seungyeop-lee/directory-watcher:latest
 
 ## config.yml
 
-`config.yml` 파일에는 감시할 디렉터리와 각 디렉터리에서 변경이 생겼을 때 실행할 명령을 정의합니다. 감시를 시작하거나 끝낼 때 실행할 명령도 정의할 수 있습니다. 실제 예시는 [`config.example.yml`](config.example.yml)에 있고, 같은 형식을 JSON 스키마로 기술한 파일은 [`directory-watcher.schema.json`](directory-watcher.schema.json)입니다.
+`config.yml` 파일에는 감시할 디렉터리와 각 디렉터리에서 변경이 생겼을 때 실행할 명령을 정의합니다. 감시를 시작하거나 끝낼 때 실행할 명령도 정의할 수 있습니다. 실제 예시는 [`config.example.yml`](config.example.yml)에 있고, 같은 형식을 JSON 스키마로 기술한 파일은 [`directory-watcher.schema.json`](directory-watcher.schema.json)입니다. 저장소 루트에서 `make run`을 실행하면 이 예시가 감시하는 `test/dir1`, `test/dir2`, `test/dir3` 폴더를 먼저 만든 뒤 이 예시로 watcher를 실행합니다.
 
 ```yaml
 global:
