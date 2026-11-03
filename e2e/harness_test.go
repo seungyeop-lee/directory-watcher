@@ -288,3 +288,27 @@ func readLinesLenient(path string) []string {
 	}
 	return strings.Split(text, "\n")
 }
+
+func assertLineProcessesGone(s *scenario) {
+	s.t.Helper()
+	var pids []int
+	for _, line := range readLinesLenient(s.records) {
+		fields := strings.Split(line, "|")
+		if len(fields) >= 3 && fields[0] == "BEGIN" {
+			pid, err := strconv.Atoi(fields[1])
+			if err == nil {
+				pids = append(pids, pid)
+				defer releaseRecordedProcess(pid)
+			}
+		}
+	}
+	s.await("all slow hook processes disappear", 5*time.Second, func() bool {
+		for _, pid := range pids {
+			if processAlive(pid) {
+				return false
+			}
+		}
+		return true
+	})
+	s.t.Logf("slow hook process observations: started=%d alive-after-stop=0", len(pids))
+}
