@@ -126,6 +126,12 @@ After each error-notification command completes, fails, or times out, its remain
 
 The order of these steps is drawn in the [README diagrams](README.md#how-it-works).
 
+## Default exclusion
+
+- Creating a file whose name starts with `.` or `_` does not run hooks. This rule checks only the name of the created file, not the watched path. For example, creating `.env` or `_draft.txt` is excluded, but `a.txt` created inside a watched path that starts with `.`, such as `../src`, runs hooks.
+- A folder whose name starts with `.` or `_` and that is created while watching is not added to the watch list, so changes inside it do not run hooks either. When `watchSubDir` is true, subfolders that already exist when watching starts are watched regardless of their names.
+- This rule applies only to create events. Modifying or deleting an existing `.env` runs hooks.
+
 ## Limitations on folder event detection
 
 - By default, hooks are executed based on **file** events within the monitored folder.

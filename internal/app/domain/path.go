@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Paths []Path
@@ -82,6 +83,11 @@ func (p Path) Abs() string {
 
 func (p Path) FileName() string {
 	return filepath.Base(string(p))
+}
+
+func (p Path) IsDefaultExcludeFile() bool {
+	name := p.FileName()
+	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
 
 func (p Path) ExtName() string {

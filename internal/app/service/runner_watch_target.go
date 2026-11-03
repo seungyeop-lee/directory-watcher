@@ -129,7 +129,7 @@ func (r *watchTargetRunner) Run() error {
 			}
 			r.printEventLog(ev)
 			if ev.Op.Has(fsnotify.Create) {
-				if domain.FileName(ev.Name).IsDefaultExcludeFile() {
+				if domain.Path(ev.Name).IsDefaultExcludeFile() {
 					continue
 				}
 				if r.watchSubDir && domain.Path(ev.Name).IsDir() && !r.excludeDir.Equal(domain.Path(ev.Name)) {
