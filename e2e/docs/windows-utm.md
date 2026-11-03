@@ -136,7 +136,7 @@ If a new `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips` appears after the
 
 `Windows E2E cleanup: guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute. The cause is a guest process that keeps a file in the directory open or uses a directory inside it as its current directory. On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`. `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below. The last line of either warning holds only the command that removes the directory.
 
-The output and exit code that `utmctl exec` returns may not be those of the guest command, so the commands below write their results to a file in the guest and read it with `utmctl file pull`. `C:\dw-e2e` in the commands is the default `-guest-dir`.
+`utmctl exec` does not wait for the guest command to finish, and the output and exit code it returns may belong to another guest command run earlier, so the commands below write their results to a file in the guest and read it with `utmctl file pull`. `C:\dw-e2e` in the commands is the default `-guest-dir`.
 
 1. Check the guest's process list. Look for the `directory-watcher.exe` and `hookrec.exe` that the E2E builds and runs, and for `go.exe` and `*.test.exe`. The output is encoded in the guest's code page.
 
@@ -145,10 +145,11 @@ The output and exit code that `utmctl exec` returns may not be those of the gues
    /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\tasks.txt'
    ```
 
-2. End the remaining processes.
+2. End the remaining processes, then read the result that `taskkill` wrote for each PID.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c taskkill /f /pid <PID>
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'taskkill /f /pid <PID> > C:\dw-e2e\taskkill.txt 2>&1'
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\taskkill.txt'
    ```
 
 The directories of other tests running on the same VM at the same time are also under `C:\dw-e2e`. Remove only the path shown in the warning.

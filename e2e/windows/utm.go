@@ -46,7 +46,7 @@ func (u utm) app() string { return filepath.Dir(filepath.Dir(filepath.Dir(u.ctl)
 
 // call은 limit 안에서 utmctl을 실행하고 출력으로 성공 여부를 판단한다. 2026-11-03에
 // 본 실패에서 utmctl은 모두 0으로 끝났다: VM을 stopped로 남긴 start, 없는 경로를
-// 지정해 오류를 출력한 file pull과 push, 게스트 명령을 기다리지 않는 exec가 그랬다.
+// 지정해 오류를 출력한 file pull과 push, 게스트 명령이 끝나기 전에 돌아온 exec가 그랬다.
 // 이런 실패는 모두 stderr에 메시지를 출력했으므로, OSStatus error -10004 줄을 뺀
 // stderr 출력은 모두 오류로 본다. 이 줄은 --hide 이벤트에서만 나왔고, --hide를 붙인
 // 명령은 성공한 start까지 포함해 모두 이 줄을 두 번 출력했다. hideMainWindow를
@@ -86,6 +86,21 @@ func stderrProblem(stderr string) string {
 		}
 	}
 	return strings.Join(lines, " / ")
+}
+
+// exec는 utmctl exec로 게스트에서 command를 시작하고, utmctl이 돌려준 오류를 돌려준다.
+// 이 오류로는 명령의 성공을 판정할 수 없으므로, 호출하는 쪽은 명령이 게스트에 남긴
+// 파일로 결과를 확인하고 오류는 확인에 실패했을 때 원인을 찾는 단서로만 쓴다.
+//
+// 2026-11-04 실험(UTM 5.0.8)에서 utmctl exec는 3초 걸리는 명령에도 1초 안에 출력 없이
+// 0으로 끝났다. exec는 명령이 끝나기를 기다리지 않고, 응답할 때 명령이 이미 끝나
+// 있으면 그 명령의 종료 코드와 출력을 돌려준다. 결과를 가져가지 않은 명령은 Guest
+// Agent에 남으며, Windows가 그 PID를 새 명령에 다시 쓰면 Guest Agent는 새 명령 대신
+// 남아 있던 명령의 종료 코드와 출력을 돌려준다. 그날 결과를 한 번만 물은 명령 60개 중
+// 3개가 이런 응답을 받았다.
+func (u utm) exec(vm string, command ...string) error {
+	_, err := u.call(requestLimit, nil, append([]string{"exec", vm, "--cmd"}, command...)...)
+	return err
 }
 
 type vmEntry struct{ uuid, status, name string }

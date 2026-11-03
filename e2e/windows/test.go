@@ -81,10 +81,7 @@ func (g guestTest) run() error {
 	if err := g.send(); err != nil {
 		return fmt.Errorf("prepare guest run: %w", err)
 	}
-	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", g.file("guest.exe"), g.dir); err != nil {
-		return fmt.Errorf("start guest program: %w", err)
-	}
-	if err := g.awaitStarted(); err != nil {
+	if err := g.startGuestProgram(); err != nil {
 		return err
 	}
 	data, waitErr := g.awaitResult()
@@ -118,6 +115,14 @@ func report(warn io.Writer, testErr, collectErr, cleanupErr error) error {
 }
 
 func (g guestTest) file(name string) string { return g.dir + `\` + name }
+
+// withExecAnswer는 게스트의 파일로 확인한 실패에 그 명령을 보낸 exec의 오류를 덧붙인다.
+func withExecAnswer(err, answer error) error {
+	if err == nil || answer == nil {
+		return err
+	}
+	return fmt.Errorf("%w (%v; utmctl exec may answer with the result of another guest command)", err, answer)
+}
 
 // send는 게스트 프로그램을 빌드하고 작업 트리를 아카이브로 묶은 뒤, 둘을 요청과 함께
 // 새 게스트 실행 디렉터리로 보낸다.
@@ -199,15 +204,20 @@ func (g guestTest) recordSource(root string, request guestrun.Request, requestDa
 	return os.WriteFile(filepath.Join(g.local, guestrun.RequestFile), requestData, 0644)
 }
 
-// createGuestDir는 exec로 mkdir를 실행해 실행 디렉터리를 만들고, 요청을 다시 읽어
-// 만들어졌는지 확인한다. exec는 명령을 기다리지 않고 push와 pull은 실패해도 0으로
-// 끝나므로, 디렉터리가 있는지와 파일 전송이 동작하는지는 다시 읽어 보는 방법으로만
-// 확인할 수 있다.
+// guestDirLimit은 실행 디렉터리가 만들어졌는지 확인하는 시간이고, programStartLimit은
+// 게스트 프로그램이 시작됐는지 확인하는 시간이다.
+var (
+	guestDirLimit     = 30 * time.Second
+	programStartLimit = time.Minute
+)
+
+// createGuestDir는 exec로 mkdir를 실행해 실행 디렉터리를 만들고, 요청을 보낸 뒤 다시
+// 읽어 만들어졌는지 확인한다. exec의 응답으로는 mkdir의 결과를 알 수 없고(utm.exec
+// 참고) push와 pull은 실패해도 0으로 끝나므로, 디렉터리가 있는지와 파일 전송이
+// 동작하는지는 다시 읽어 보는 방법으로만 확인할 수 있다.
 func (g guestTest) createGuestDir(request []byte) error {
-	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c", "mkdir", g.dir); err != nil {
-		return err
-	}
-	deadline := time.Now().Add(30 * time.Second)
+	answer := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "mkdir", g.dir)
+	deadline := time.Now().Add(guestDirLimit)
 	for {
 		err := g.push(guestrun.RequestFile, request)
 		if err == nil {
@@ -220,7 +230,7 @@ func (g guestTest) createGuestDir(request []byte) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("create guest run directory %s: %w", g.dir, err)
+			return withExecAnswer(fmt.Errorf("create guest run directory %s: %w", g.dir, err), answer)
 		}
 		time.Sleep(time.Second)
 	}
@@ -238,16 +248,22 @@ func (g guestTest) pull(name string, limit time.Duration) ([]byte, error) {
 	return g.utm.call(limit, nil, "file", "pull", g.vm, g.file(name))
 }
 
-// awaitStarted는 exec가 실제로 게스트 프로그램을 시작했는지 확인한다.
+// startGuestProgram은 exec로 게스트 프로그램을 시작하고, 프로그램이 쓰는 시작 표시
+// 파일로 시작했는지 확인한다. exec의 응답으로는 시작 여부를 알 수 없다(utm.exec 참고).
+func (g guestTest) startGuestProgram() error {
+	answer := g.utm.exec(g.vm, g.file("guest.exe"), g.dir)
+	return withExecAnswer(g.awaitStarted(), answer)
+}
+
 func (g guestTest) awaitStarted() error {
-	deadline := time.Now().Add(time.Minute)
+	deadline := time.Now().Add(programStartLimit)
 	for {
 		data, err := g.pull(guestrun.StartedFile, requestLimit)
 		if err == nil && string(data) == g.id {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("guest program did not start within 1m (%v); check that the Guest Agent can run %s", err, g.file("guest.exe"))
+			return fmt.Errorf("guest program did not start within %s (%v); check that the Guest Agent can run %s", programStartLimit, err, g.file("guest.exe"))
 		}
 		time.Sleep(time.Second)
 	}
@@ -255,10 +271,9 @@ func (g guestTest) awaitStarted() error {
 
 // awaitResult는 게스트 프로그램이 마지막에 쓰는 결과가 나올 때까지 반복해서
 // 확인한다. 실행의 deadline이 go test를 멈추므로, 결과는 deadline 직후에 나와야
-// 한다. 결과 파일은 실행 결과를 알 수 있는 유일한 근거다: 2026-11-03에 utmctl exec는
-// cmd.exe /c "exit 7"을 실행할 때도 게스트 명령을 기다리지 않고 0.2초 안에 0을
-// 돌려줬고, 명령의 출력이나 종료 코드도 전달하지 않았다. run은 이번 실행의 ID가
-// 적힌 결과만 받아들이므로, 다른 실행이 남긴 결과를 이번 실행의 결과로 받지 않는다.
+// 한다. exec는 게스트 프로그램이 끝나기를 기다리지 않으므로(utm.exec 참고), 결과
+// 파일은 실행 결과를 알 수 있는 유일한 근거다. run은 이번 실행의 ID가 적힌 결과만
+// 받아들이므로, 다른 실행이 남긴 결과를 이번 실행의 결과로 받지 않는다.
 func (g guestTest) awaitResult() ([]byte, error) {
 	limit := g.cfg.deadline + 2*time.Minute
 	fmt.Fprintf(g.log, "waiting up to %s for the guest result\n", limit)
@@ -316,9 +331,7 @@ var removeLimit = time.Minute
 
 // removeGuestDir는 파일이 Mac에 도착한 뒤 게스트 실행 디렉터리를 지운다. rmdir를 실행한
 // cmd.exe가 디렉터리가 남았는지를 실행 디렉터리 옆의 표시 파일에 적고, 실행기는 그
-// 파일을 읽어 삭제를 확인한다. utmctl exec의 출력은 근거로 쓰지 않는다: 2026-11-03에
-// exec는 대개 rmdir를 기다리지 않고 출력 없이 0으로 끝났고, 앞서 실행한 다른 명령의
-// 출력과 종료 코드를 돌려준 적도 있다.
+// 파일을 읽어 삭제를 확인한다. exec의 응답은 근거로 쓰지 않는다(utm.exec 참고).
 //
 // 삭제를 확인하려고 실행 디렉터리 안의 파일을 읽으면 안 된다. Guest Agent가 file
 // pull로 열어 둔 파일은 rmdir가 지우지 못해서, 그날 rmdir가 지우는 동안 request.json을
@@ -329,7 +342,7 @@ func (g guestTest) removeGuestDir() error {
 	deadline := time.Now().Add(removeLimit)
 	for attempt := 1; ; attempt++ {
 		marker := g.dir + ".rmdir-" + strconv.Itoa(attempt)
-		if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c",
+		if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c",
 			"rmdir", "/s", "/q", g.dir, "&", "(if", "exist", g.dir, "(echo", "kept)", "else", "(echo", "removed))>", marker); err != nil {
 			fmt.Fprintln(g.log, "rmdir request (utmctl exec may answer with the result of another guest command):", err)
 		}
@@ -372,8 +385,8 @@ func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
 // deleteRemovalMarkers는 이번 실행의 표시 파일을 지운다. 지우지 못한 표시 파일은 몇
 // 바이트뿐이므로 확인하지 않는다.
 func (g guestTest) deleteRemovalMarkers() {
-	if _, err := g.utm.call(requestLimit, nil, "exec", g.vm, "--cmd", "cmd.exe", "/d", "/c", "del", "/q", g.dir+".rmdir-*"); err != nil {
-		fmt.Fprintln(g.log, "delete rmdir markers:", err)
+	if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "del", "/q", g.dir+".rmdir-*"); err != nil {
+		fmt.Fprintln(g.log, "delete rmdir markers request (utmctl exec may answer with the result of another guest command):", err)
 	}
 }
 

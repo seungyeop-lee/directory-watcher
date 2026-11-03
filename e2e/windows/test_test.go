@@ -142,3 +142,80 @@ func TestReportKeepsACleanupFailureOutOfTheTestResult(t *testing.T) {
 		t.Fatalf("warning = %q; want the cleanup warning next to a test failure too", warning.String())
 	}
 }
+
+// staleExecAnswer는 fakePreparingGuest의 exec가 돌려주는 오류에 들어가는 종료 상태다.
+const staleExecAnswer = "exit status 13"
+
+// fakePreparingGuest는 exec를 받을 때마다 앞서 실행한 다른 게스트 명령의 응답처럼 그
+// 명령의 출력 BBB-4를 출력하고 13으로 끝나는 utmctl을 만든다. performs가 true면 exec는 응답과 관계없이
+// mkdir로 실행 디렉터리를 만들거나 guest.exe가 시작됐다는 파일을 쓴다. file push와
+// pull은 실행 디렉터리가 없거나 파일이 없으면 stderr에 오류를 출력하고 0으로 끝난다.
+func fakePreparingGuest(t *testing.T, performs bool) guestTest {
+	t.Helper()
+	state := t.TempDir()
+	script := `run='` + state + `/run'
+for last; do :; done
+case "$1" in
+exec)
+	if [ ` + strconv.FormatBool(performs) + ` = true ]; then
+		case "$*" in
+		*mkdir*) mkdir -p "$run" ;;
+		*guest.exe*) mkdir -p "$run"; printf '%s' "${last##*\\}" > "$run/started.txt" ;;
+		esac
+	fi
+	echo 'BBB-4'
+	exit 13 ;;
+file)
+	file="$run/${last##*\\}"
+	case "$2" in
+	push) if [ -d "$run" ]; then cat > "$file"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
+	pull) if [ -f "$file" ]; then cat "$file"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
+	esac ;;
+esac
+exit 0`
+	shortPrepareLimits(t)
+	return guestTest{
+		runner: runner{utm: fakeUTMCtl(t, script), log: io.Discard},
+		vm:     "95B99283-8256-4360-AA1D-0563FCD5CE09",
+		id:     filepath.Base(strings.ReplaceAll(fakeRunDir, `\`, "/")),
+		dir:    fakeRunDir,
+	}
+}
+
+func shortPrepareLimits(t *testing.T) {
+	t.Helper()
+	dir, start := guestDirLimit, programStartLimit
+	t.Cleanup(func() { guestDirLimit, programStartLimit = dir, start })
+	guestDirLimit, programStartLimit = 2*time.Second, 2*time.Second
+}
+
+func TestCreateGuestDirTrustsTheReadBackOverTheExecAnswer(t *testing.T) {
+	g := fakePreparingGuest(t, true)
+	if err := g.createGuestDir([]byte(`{"go":"go"}`)); err != nil {
+		t.Fatalf("createGuestDir = %v; want success because the request was read back", err)
+	}
+}
+
+func TestCreateGuestDirReportsADirectoryThatWasNotCreated(t *testing.T) {
+	g := fakePreparingGuest(t, false)
+	err := g.createGuestDir([]byte(`{"go":"go"}`))
+	if err == nil || !strings.Contains(err.Error(), "create guest run directory "+fakeRunDir) ||
+		!strings.Contains(err.Error(), "failed to open file") || !strings.Contains(err.Error(), staleExecAnswer) {
+		t.Fatalf("createGuestDir = %v; want the failed read-back and the exec answer", err)
+	}
+}
+
+func TestStartGuestProgramTrustsTheStartedFileOverTheExecAnswer(t *testing.T) {
+	g := fakePreparingGuest(t, true)
+	if err := g.startGuestProgram(); err != nil {
+		t.Fatalf("startGuestProgram = %v; want success because the guest program wrote its started file", err)
+	}
+}
+
+func TestStartGuestProgramReportsAProgramThatDidNotStart(t *testing.T) {
+	g := fakePreparingGuest(t, false)
+	err := g.startGuestProgram()
+	if err == nil || !strings.Contains(err.Error(), "guest program did not start") || !strings.Contains(err.Error(), staleExecAnswer) {
+		t.Fatalf("startGuestProgram = %v; want the missing started file and the exec answer", err)
+	}
+}

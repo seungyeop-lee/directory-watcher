@@ -35,8 +35,9 @@ func main() {
 
 func run(dir string) int {
 	result := guestrun.Result{RunID: filepath.Base(dir), ExitCode: -1, Started: time.Now()}
-	// utmctl exec는 기다리지 않고 0을 돌려주므로, 실행기에게는 이 파일이 Guest Agent가
-	// 실제로 이 프로그램을 시작했다는 유일한 표시다.
+	// utmctl exec의 응답으로는 이 프로그램이 시작됐는지 알 수 없으므로(e2e/windows의
+	// utm.exec 참고), 실행기에게는 이 파일이 Guest Agent가 실제로 이 프로그램을 시작했다는
+	// 유일한 표시다.
 	if err := os.WriteFile(filepath.Join(dir, guestrun.StartedFile), []byte(result.RunID), 0644); err != nil {
 		return 1
 	}

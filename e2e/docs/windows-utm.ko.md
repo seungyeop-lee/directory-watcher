@@ -136,7 +136,7 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
 
 `Windows E2E cleanup: guest run directory <경로> is still there after ...`는 실행기가 1분 동안 `rmdir`를 되풀이해도 디렉터리가 남은 경우입니다. 디렉터리 안의 파일을 열어 두었거나 그 안을 현재 디렉터리로 쓰는 게스트 프로세스가 원인입니다. 2026-11-03에는 테스트가 끝난 뒤에도 실행 중이던 `hookrec.exe`가 `src\e2e\scenarios`를 붙잡고 있었습니다. `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다. 두 경고 모두 마지막 줄에는 디렉터리를 지우는 명령만 있습니다.
 
-`utmctl exec`가 돌려주는 출력과 종료 코드는 게스트 명령의 결과가 아닐 수 있으므로, 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다. 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
+`utmctl exec`는 게스트 명령이 끝나기를 기다리지 않고, 돌려주는 출력과 종료 코드가 앞서 실행한 다른 게스트 명령의 것일 수 있습니다. 그래서 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다. 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
 
 1. 게스트의 프로세스 목록을 확인합니다. E2E가 빌드해 실행하는 `directory-watcher.exe`와 `hookrec.exe`, 그리고 `go.exe`와 `*.test.exe`가 남아 있는지 봅니다. 출력은 게스트의 코드 페이지로 인코딩됩니다.
 
@@ -145,10 +145,11 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
    /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\tasks.txt'
    ```
 
-2. 남은 프로세스를 끝냅니다.
+2. 남은 프로세스를 끝내고, `taskkill`이 PID마다 적은 결과를 읽어 확인합니다.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c taskkill /f /pid <PID>
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'taskkill /f /pid <PID> > C:\dw-e2e\taskkill.txt 2>&1'
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\taskkill.txt'
    ```
 
 같은 VM에서 동시에 실행 중인 다른 테스트의 디렉터리도 `C:\dw-e2e` 아래에 있습니다. 경고에 나온 경로만 지웁니다.
