@@ -23,17 +23,17 @@
 
 | 시나리오 | 파일 | 검증 내용 | 사용하는 지원 코드 |
 |---|---|---|---|
-| `TestGoldenPath` | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 7개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
-| `TestProcessLifecycle` | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
-| `TestStartHookShutdownModes` | `scenarios/process_test.go` | `noWait`·`interruptible` 네 조합의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
-| `TestFastInflowSlowHook` | `scenarios/reliability_test.go` | 느린 hook 중 빠른 유입의 네 조합, 제외·debounce, 종료 후 실행 금지 | `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `AwaitDelayedHooksGone` |
-| `TestTargetsRunIndependently` | `scenarios/reliability_test.go` | 한 대상의 느린 hook이 다른 대상을 막지 않음 | `DelayedHookBegun`, `AwaitLine`, `AwaitDelayedHooksGone` |
-| `TestBoundedOverloadCLI` | `scenarios/reliability_test.go` | 전달 대기열 포화의 비정상 종료와 트리 정리 | `AwaitReadyGenerations`, `Exited`, `AwaitProcessesGone` |
-| `TestEventLossNotificationCLI` | `scenarios/error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `Launch`, `StartProcess`, `DelayedHookBegun`, `AwaitReadyGenerations`, `SnapshotProcesses`, `ProcessesGone`, `Alive`, `AwaitDelayedHooksGone` |
-| `TestNormalChangesDoNotNotify` | `scenarios/error_notification_test.go` | 일반 변경·debounce에서 알림 미실행 | `AwaitChangesComplete`, `AwaitLine` |
+| [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 7개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestProcessLifecycle`](scenarios/process-lifecycle.md) | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
+| [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) | `scenarios/process_test.go` | `noWait`·`interruptible` 네 조합의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
+| [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md) | `scenarios/reliability_test.go` | 느린 hook 중 빠른 유입의 네 조합, 제외·debounce, 종료 후 실행 금지 | `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `AwaitDelayedHooksGone` |
+| [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md) | `scenarios/reliability_test.go` | 한 대상의 느린 hook이 다른 대상을 막지 않음 | `DelayedHookBegun`, `AwaitLine`, `AwaitDelayedHooksGone` |
+| [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md) | `scenarios/reliability_test.go` | 전달 대기열 포화의 비정상 종료와 트리 정리 | `AwaitReadyGenerations`, `Exited`, `AwaitProcessesGone` |
+| [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) | `scenarios/error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `Launch`, `StartProcess`, `DelayedHookBegun`, `AwaitReadyGenerations`, `SnapshotProcesses`, `ProcessesGone`, `Alive`, `AwaitDelayedHooksGone` |
+| [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md) | `scenarios/error_notification_test.go` | 일반 변경·debounce에서 알림 미실행 | `AwaitChangesComplete`, `AwaitLine` |
 | `TestCleanupReportsLockedResources` | `harness/cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |
 
-신뢰성 시나리오의 자세한 검증 내용은 [경합·과부하·유실 검증](reliability.md)에, Windows 시나리오의 실행과 CI 확인은 [Windows E2E 실행과 CI 결과 확인](windows.md)에 있습니다.
+시나리오 이름의 링크는 확인 내용과 성공 조건, 진행 순서 다이어그램, 하위 테스트, 실행 명령을 설명하는 시나리오 문서로 이어집니다. 여러 시나리오에 걸친 수신 경계 판정과 유실 검증의 한계는 [경합·과부하·유실 검증](reliability.md)에, Windows 시나리오의 실행과 CI 확인은 [Windows E2E 실행과 CI 결과 확인](windows.md)에 있습니다.
 
 ## 새 시나리오 작성
 
