@@ -3,7 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -132,8 +132,8 @@ func (r *watchTargetRunner) Run() error {
 				if domain.Path(ev.Name).IsDefaultExcludeFile() {
 					continue
 				}
-				if r.watchSubDir && domain.Path(ev.Name).IsDir() && !r.excludeDir.Equal(domain.Path(ev.Name)) {
-					if err := r.watcher.Add(ev.Name); err != nil {
+				if r.watchSubDir {
+					if err := r.addDirTree(ev.Name); err != nil {
 						return &FatalError{Path: r.path, Cause: err}
 					}
 				}
@@ -176,25 +176,37 @@ func (r *watchTargetRunner) addDir() error {
 		return r.watcher.Add(path.String())
 	}
 
-	err := filepath.Walk(r.path.String(), func(p string, info os.FileInfo, err error) error {
+	return r.addDirTree(r.path.String())
+}
+
+// addDirTree는 root와 그 아래에서 감시 규칙을 통과한 폴더를 감시 목록에 넣는다.
+// 감시를 시작할 때와 감시 중에 폴더가 생기거나 옮겨 올 때 모두 이 함수를 써서, 폴더가 언제
+// 생겼는지와 관계없이 같은 규칙을 적용한다.
+func (r *watchTargetRunner) addDirTree(root string) error {
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
+			// 감시 중에 생긴 폴더는 감시 목록에 넣기 전에 지워질 수 있다.
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return err
 		}
-		if !info.IsDir() {
+		// 폴더를 가리키는 링크는 폴더로 보지 않아 따라가지 않는다. 링크 순환과 감시 대상 밖 폴더의 감시를 막는다.
+		if !d.IsDir() {
 			return nil
 		}
-		if r.excludeDir.Equal(domain.Path(p)) {
-			return nil
+		path := domain.Path(p)
+		// 감시 대상 경로는 사용자가 직접 지정했으므로 이름으로 제외하지 않는다.
+		if path != r.path && path.IsDefaultExcludeFile() {
+			return filepath.SkipDir
 		}
-		if r.excludeDir.IsSubFolder(domain.Path(p)) {
-			return nil
+		if r.excludeDir.Equal(path) || r.excludeDir.IsSubFolder(path) {
+			return filepath.SkipDir
 		}
 
 		r.logger.Debug(fmt.Sprint("add path:", p))
 		return r.watcher.Add(p)
 	})
-
-	return err
 }
 
 func (r *watchTargetRunner) selectEventHandler() func(chan domain.Event) {

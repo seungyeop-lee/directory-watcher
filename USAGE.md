@@ -129,8 +129,16 @@ The order of these steps is drawn in the [README diagrams](README.md#how-it-work
 ## Default exclusion
 
 - Creating a file whose name starts with `.` or `_` does not run hooks. This rule checks only the name of the created file, not the watched path. For example, creating `.env` or `_draft.txt` is excluded, but `a.txt` created inside a watched path that starts with `.`, such as `../src`, runs hooks.
-- A folder whose name starts with `.` or `_` and that is created while watching is not added to the watch list, so changes inside it do not run hooks either. When `watchSubDir` is true, subfolders that already exist when watching starts are watched regardless of their names.
-- This rule applies only to create events. Modifying or deleting an existing `.env` runs hooks.
+- When `watchSubDir` is true, a subfolder whose name starts with `.` or `_` is not added to the watch list, whether it exists when watching starts or appears later, so changes inside it and its subfolders do not run hooks. For example, changes inside `.git` or `.idea` do not run hooks. The folder set as `path` is watched regardless of its name.
+- For files, this rule applies only to create events. Modifying or deleting an existing `.env` runs hooks.
+
+## Subfolder watching
+
+When `watchSubDir` is true, these rules decide which subfolders are added to the watch list.
+
+- The same rules apply whether a subfolder exists when watching starts, is created while watching, or is moved in while watching. When a folder is moved in, the folders inside it are watched too.
+- `excludeDir` excludes the specified folder and the folders inside it. A folder whose name only starts with the same text is not excluded: excluding `test/dir1` excludes `test/dir1/sub` but not `test/dir10`.
+- A link that points to a folder is not followed, so the folder it points to is not added to the watch list. On macOS, however, fsnotify follows such a link by itself and reports creating or modifying a file directly inside the linked folder with the path the link points to, so those changes run hooks.
 
 ## Limitations on folder event detection
 

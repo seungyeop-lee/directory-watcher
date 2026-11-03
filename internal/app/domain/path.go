@@ -52,17 +52,11 @@ func (p Path) isSubDirLogical(input Path) bool {
 	pAbs, _ := filepath.Abs(string(p))
 	inputAbs, _ := filepath.Abs(string(input))
 
-	for i := 0; i < len(pAbs); i++ {
-		// 비교대상의 절대 경로가 기준의 절대 경로보다 짦을 경우 서브폴더가 아니다.
-		if len(inputAbs) < i+1 {
-			return false
-		}
-
-		if pAbs[i] != inputAbs[i] {
-			return false
-		}
+	rel, err := filepath.Rel(pAbs, inputAbs)
+	if err != nil {
+		return false
 	}
-	return true
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (p Path) IsDir() bool {
