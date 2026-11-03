@@ -138,7 +138,7 @@ When `watchSubDir` is true, these rules decide which subfolders are added to the
 
 - The same rules apply whether a subfolder exists when watching starts, is created while watching, or is moved in while watching. When a folder is moved in, the folders inside it are watched too.
 - `excludeDir` excludes the specified folder and the folders inside it. A folder whose name only starts with the same text is not excluded: excluding `test/dir1` excludes `test/dir1/sub` but not `test/dir10`.
-- A link that points to a folder is not followed, so the folder it points to is not added to the watch list. On macOS, however, fsnotify follows such a link by itself and reports creating or modifying a file directly inside the linked folder with the path the link points to, so those changes run hooks.
+- A link that points to a folder is not followed, so the folder it points to is not added to the watch list. On macOS, however, fsnotify v1.7.0 follows such a link by itself, both when the link exists when watching starts and when it is created while watching. Creating or modifying a file directly inside the linked folder then runs hooks, and `{{.Path}}` holds the link's target as written in the link, joined with the file name, such as `<link target>/a.txt`, instead of a path under `path`. fsnotify resolves a link written as a relative path from the program's working directory, not from the folder that holds the link; if no folder exists there, those changes run no hooks.
 
 ## Limitations on folder event detection
 
