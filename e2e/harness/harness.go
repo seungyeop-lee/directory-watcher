@@ -188,10 +188,16 @@ func (s *Scenario) Await(label string, timeout time.Duration, condition func() b
 
 func (s *Scenario) Stop() {
 	s.t.Helper()
+	s.StopWithin(10 * time.Second)
+}
+
+// StopWithin은 Stop과 같지만 watcher가 끝나기를 timeout만큼 기다린다.
+func (s *Scenario) StopWithin(timeout time.Duration) {
+	s.t.Helper()
 	if err := gracefulStop(s.cmd); err != nil {
 		s.t.Fatal(err)
 	}
-	s.Await("watcher exit", 10*time.Second, s.Exited)
+	s.Await("watcher exit", timeout, s.Exited)
 	if s.exit != nil {
 		s.t.Fatalf("watcher exit: %v\n%s", s.exit, s.log.String())
 	}

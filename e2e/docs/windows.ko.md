@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 ## 정상 종료 방식
 
-테스트 프로세스에 콘솔이 없으면 `AllocConsole`로 할당하고, watcher와 각 hook을 별도 프로세스 그룹으로 실행합니다. 정상 종료 요청은 같은 콘솔의 해당 그룹에만 `CTRL_BREAK_EVENT`를 보냅니다. [Go는 CTRL+BREAK를 `os.Interrupt`로 전달](https://github.com/golang/go/blob/go1.23.0/src/os/signal/doc.go)하므로 기존 CLI의 SIGINT 수신을 사용합니다. `CTRL_C_EVENT`의 그룹 지정이나 `TASKKILL /F`를 정상 종료 증거로 사용하지 않습니다. 보조 프로세스는 콘솔·그룹을 상속하고 신호를 처리하며 자손 종료를 기다립니다. 새 콘솔을 만들거나 신호를 무시하는 임의의 외부 프로그램에 같은 정상 종료 보장을 적용하지 않습니다.
+테스트 프로세스에 콘솔이 없으면 `AllocConsole`로 할당하고, watcher와 각 hook을 별도 프로세스 그룹으로 실행합니다. 정상 종료 요청은 같은 콘솔의 해당 그룹에만 `CTRL_BREAK_EVENT`를 보냅니다. [Go는 CTRL+BREAK를 `os.Interrupt`로 전달](https://github.com/golang/go/blob/go1.23.0/src/os/signal/doc.go)하므로 기존 CLI의 SIGINT 수신을 사용합니다. `CTRL_C_EVENT`의 그룹 지정이나 `TASKKILL /F`를 정상 종료 증거로 사용하지 않습니다. 보조 프로세스는 콘솔·그룹을 상속하고 신호를 처리하며 자손 종료를 기다립니다. 새 콘솔을 만들거나 신호를 무시하는 임의의 외부 프로그램에 같은 정상 종료 보장을 적용하지 않습니다. watcher는 첫 CTRL+BREAK 뒤 20초가 지나도 남은 hook 프로세스를 그 hook의 Job Object로 강제로 끝내며, 이 종료는 정상 종료가 아닙니다([과부하와 종료](../../USAGE.ko.md#과부하와-종료)).
 
 ## CI 단계
 
@@ -24,11 +24,11 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 `Verify Windows error notification process trees` 단계는 `TestEventLossNotificationCLI`를 실행하고 테스트 출력을 `notification.log`에 저장합니다. `notification.log`에는 알림 1회·최초 오류·소요 시간의 검사 결과가 남고, 이 단계는 `DW_E2E_KEEP=1`로 실행 폴더를 보존하므로 실행별 `watcher.log`에 실제 오류 진단이 남습니다. 모드별 확인 내용과 실행 폴더에 남는 생존 기록 파일은 [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md) 문서에 있습니다.
 
-Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 이 정리를 검사하는 조건은 [트리 모드의 추가 확인](scenarios/event-loss-notification-cli.ko.md#트리-모드의-추가-확인)에 있습니다.
+Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 이 정리를 검사하는 조건은 [트리 모드의 추가 확인](scenarios/event-loss-notification-cli.ko.md#트리-모드의-추가-확인)에 있습니다. 일반 hook도 명령마다 별도 Job Object에서 실행하지만, 취소되지 않고 끝난 hook이 남긴 자손은 끝내지 않습니다.
 
 ## CI 결과 확인
 
-GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다. `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다. `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다. 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다. 해당 커밋의 Windows 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다. UTM VM으로 확인할 수 있는 항목은 [UTM Windows VM에서 E2E 실행](windows-utm.ko.md)으로 실행하고, `-race`와 Windows x64 항목은 이 CI 결과로만 확인합니다.
+GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다. `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`·`TestCanceledCommandListStopsNextProgram`의 세 구분자·`TestCanceledPowershellHookStops`의 열한 시점, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다. `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다. 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다. 해당 커밋의 Windows 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다. UTM VM으로 확인할 수 있는 항목은 [UTM Windows VM에서 E2E 실행](windows-utm.ko.md)으로 실행하고, `-race`와 Windows x64 항목은 이 CI 결과로만 확인합니다.
 
 ## 실패 분석
 

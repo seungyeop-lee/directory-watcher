@@ -4,9 +4,9 @@ package helper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
-	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -14,35 +14,22 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// minRunBeforeBreak는 hook 프로세스가 시작된 뒤 CTRL+BREAK를 보내기까지 기다리는 최소 시간이다.
+// minRunBeforeBreak는 프로세스가 시작된 뒤 CTRL+BREAK를 보내기까지 기다리는 최소 시간이다.
 // Go 런타임은 콘솔 제어 처리기를 등록한 뒤 그 처리기가 쓸 스레드를 준비하는데, 그 사이에 CTRL+BREAK를
 // 받은 Go 프로그램은 0xC0000005로 끝난다. UTM의 Windows 11 ARM64 VM에서 cmd.exe로 Go 프로그램을 시작해
 // 재어 보니, 충돌은 cmd.exe가 시작된 뒤 15–36ms에 보낸 신호에서 나왔고 80ms까지는 신호가 Go 프로그램에
 // 닿지 않고 사라지기도 했다. 100ms 이후에 보낸 370번에서는 둘 다 나오지 않았다.
 const minRunBeforeBreak = 100 * time.Millisecond
 
-// holdEarlyCancel은 cmd.Cancel이 hook 프로세스가 시작된 뒤 minRunBeforeBreak가 지나야 신호를 보내게
-// 감싼다. 프로세스를 시작한 직후 돌려받은 함수를 불러 시작 시각을 알려야 한다. 그 전에 취소되면
-// 취소된 때부터 minRunBeforeBreak를 기다린다.
-func holdEarlyCancel(cmd *exec.Cmd) (markStarted func()) {
-	cancel := cmd.Cancel
-	if cancel == nil {
-		return func() {}
-	}
-	var started atomic.Pointer[time.Time]
-	cmd.Cancel = func() error {
-		wait := minRunBeforeBreak
-		if at := started.Load(); at != nil {
-			wait -= time.Since(*at)
-		}
-		time.Sleep(wait)
-		return cancel()
-	}
-	return func() {
-		now := time.Now()
-		started.Store(&now)
-	}
-}
+// breakGrace는 취소된 명령에 첫 CTRL+BREAK를 보낸 뒤 job의 프로세스를 강제로 끝내기까지 기다리는 시간이다.
+// 테스트만 바꾼다.
+var breakGrace = shutdownGrace
+
+// jobKillWait는 job의 프로세스를 강제로 끝낸 뒤 모두 사라지기를 기다리는 최대 시간이다.
+const jobKillWait = 5 * time.Second
+
+// jobPollInterval은 job에 남은 프로세스와 새로 들어온 프로세스를 확인하는 간격이다.
+const jobPollInterval = 10 * time.Millisecond
 
 func terminateProcess(cmd *exec.Cmd) error {
 	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
@@ -50,16 +37,25 @@ func terminateProcess(cmd *exec.Cmd) error {
 
 type processTree windows.Handle
 
-func startProcessTree(cmd *exec.Cmd) (processTree, error) {
+// startProcessTree는 cmd를 새 job object 안에서 시작해 cmd의 자손도 모두 그 job에 들어가게 하고, cmd.Cancel이
+// job의 프로세스를 모두 멈추게 한다(stopTreeOnCancel). killOnClose이면 job handle을 닫을 때 남은 프로세스도
+// 끝낸다. 아니면 명령이 취소되지 않고 끝난 뒤에 남긴 프로세스는 계속 실행된다.
+func startProcessTree(cmd *exec.Cmd, killOnClose bool) (processTree, error) {
+	markStarted := stopTreeOnCancel(cmd)
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
-		return 0, fmt.Errorf("create notification job: %w", err)
+		return 0, fmt.Errorf("create job object: %w", err)
 	}
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
-	limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	if killOnClose {
+		limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	} else {
+		// 스스로 job을 벗어나려고 CREATE_BREAKAWAY_FROM_JOB로 자식을 만드는 프로그램이 실패하지 않게 한다.
+		limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK
+	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
 		_ = windows.CloseHandle(job)
-		return 0, fmt.Errorf("configure notification job: %w", err)
+		return 0, fmt.Errorf("configure job object: %w", err)
 	}
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -79,12 +75,82 @@ func startProcessTree(cmd *exec.Cmd) (processTree, error) {
 		err = resumeProcess(cmd.Process.Pid)
 	}
 	if err != nil {
+		// cmd.Wait가 cmd.Cancel의 결과를 기다리므로, 그 전에 cmd.Cancel이 job 없이 끝나게 한다.
+		markStarted(0)
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		_ = windows.CloseHandle(job)
-		return 0, fmt.Errorf("start notification job: %w", err)
+		return 0, fmt.Errorf("start in job object: %w", err)
 	}
+	markStarted(job)
 	return processTree(job), nil
+}
+
+func releaseProcessTree(tree processTree) {
+	_ = windows.CloseHandle(windows.Handle(tree))
+}
+
+// stopTreeOnCancel은 cmd.Cancel을 감싸, 취소된 명령이 시작 후 minRunBeforeBreak가 지난 뒤에 첫 CTRL+BREAK를
+// 받고 job의 프로세스가 모두 끝날 때까지 cmd.Cancel이 돌아오지 않게 한다(stopJob). 프로세스를 job에 넣고
+// 다시 실행한 직후, 또는 그러지 못했을 때 돌려받은 함수에 job을 넘겨야 한다. 그러지 못했으면 0을 넘긴다.
+func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(job windows.Handle)) {
+	send := cmd.Cancel
+	if send == nil {
+		return func(windows.Handle) {}
+	}
+	started := make(chan struct{})
+	var job windows.Handle
+	var startedAt time.Time
+	cmd.Cancel = func() error {
+		<-started
+		if job == 0 {
+			return send()
+		}
+		time.Sleep(time.Until(startedAt.Add(minRunBeforeBreak)))
+		return stopJob(job, send)
+	}
+	return func(handle windows.Handle) {
+		job, startedAt = handle, time.Now()
+		close(started)
+	}
+}
+
+// stopJob은 send로 CTRL+BREAK를 보내고 job의 프로세스가 모두 끝날 때까지 기다린 뒤, 첫 send의 오류를 돌려준다.
+// CTRL+BREAK는 보낸 순간 프로세스 그룹에 있던 프로세스에만 가므로, cmd.exe가 명령 목록의 다음 프로그램을
+// 시작하는 것처럼 그 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다. 들어온 프로세스가 minRunBeforeBreak만큼
+// 실행된 뒤에 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상 종료하는 프로그램에는 두 번째
+// 신호가 가지 않는다. 첫 신호 뒤 breakGrace가 지나도 남은 프로세스는 job과 함께 끝낸다. 막 시작한 Go 프로그램처럼
+// 신호를 받지 못한 프로세스와 PowerShell 디버거처럼 신호로 끝나지 않는 프로세스가 여기서 끝난다.
+func stopJob(job windows.Handle, send func() error) error {
+	accounting, err := queryJob(job)
+	if err != nil {
+		return errors.Join(send(), err)
+	}
+	signaled := accounting.totalProcesses
+	sendErr := send()
+	deadline := time.Now().Add(breakGrace)
+	joined, lastJoin := signaled, time.Time{}
+	for {
+		accounting, err := queryJob(job)
+		if err != nil {
+			return errors.Join(sendErr, err)
+		}
+		if accounting.activeProcesses == 0 {
+			return sendErr
+		}
+		now := time.Now()
+		if !now.Before(deadline) {
+			return errors.Join(sendErr, terminateJob(job, now.Add(jobKillWait)))
+		}
+		if accounting.totalProcesses != joined {
+			joined, lastJoin = accounting.totalProcesses, now
+		}
+		if joined != signaled && now.Sub(lastJoin) >= minRunBeforeBreak {
+			signaled = joined
+			_ = send()
+		}
+		time.Sleep(jobPollInterval)
+	}
 }
 
 func resumeProcess(pid int) error {
@@ -126,22 +192,35 @@ type jobAccounting struct {
 func cleanupProcessTree(_ *exec.Cmd, tree processTree, deadline time.Time) error {
 	job := windows.Handle(tree)
 	defer windows.CloseHandle(job)
+	return terminateJob(job, deadline)
+}
+
+// terminateJob은 job의 프로세스를 모두 끝내고, deadline까지 모두 사라지기를 기다린다.
+func terminateJob(job windows.Handle, deadline time.Time) error {
 	if err := windows.TerminateJobObject(job, 1); err != nil {
-		return fmt.Errorf("terminate notification job: %w", err)
+		return fmt.Errorf("terminate job object: %w", err)
 	}
 	for {
-		var accounting jobAccounting
-		if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&accounting)), uint32(unsafe.Sizeof(accounting)), nil); err != nil {
-			return fmt.Errorf("query notification job: %w", err)
+		accounting, err := queryJob(job)
+		if err != nil {
+			return err
 		}
 		if accounting.activeProcesses == 0 {
 			return nil
 		}
 		if !time.Now().Before(deadline) {
-			return fmt.Errorf("wait for notification job cleanup: %w", context.DeadlineExceeded)
+			return fmt.Errorf("wait for job object cleanup: %w", context.DeadlineExceeded)
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(jobPollInterval)
 	}
+}
+
+func queryJob(job windows.Handle) (jobAccounting, error) {
+	var accounting jobAccounting
+	if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&accounting)), uint32(unsafe.Sizeof(accounting)), nil); err != nil {
+		return accounting, fmt.Errorf("query job object: %w", err)
+	}
+	return accounting, nil
 }
 
 func SetupForOs(cmd *exec.Cmd) error {

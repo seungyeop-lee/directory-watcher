@@ -10,8 +10,8 @@
 |---|---|
 | `scenarios/main_test.go` | 시나리오 패키지의 `TestMain`. 테스트 실행 전체의 준비·정리를 `harness.Run`에 맡김 |
 | `scenarios/*_test.go` | 시나리오 테스트. 대응은 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응)에 있음 |
-| `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`), 정상 종료 검사(`Stop`), 진단 보존·정리(`cleanup`) |
-| `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN` 기록(`delayedHooks`·`DelayedHookBegun`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
+| `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
+| `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN`·`CANCEL` 기록(`delayedHooks`·`DelayedHookBegun`·`DelayedHookCanceled`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
 | `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
 | `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 시나리오가 소유하는 `processObserver` |
 | `harness/hook_records_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
@@ -34,6 +34,8 @@
 | [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md) | `scenarios/reliability_test.go` | 전달 대기열 포화의 비정상 종료와 트리 정리 | `AwaitReadyGenerations`, `Exited`, `AwaitProcessesGone` |
 | [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md) | `scenarios/error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `Launch`, `StartProcess`, `DelayedHookBegun`, `AwaitReadyGenerations`, `SnapshotProcesses`, `ProcessesGone`, `Alive`, `AwaitDelayedHooksGone` |
 | [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.ko.md) | `scenarios/error_notification_test.go` | 일반 변경·debounce에서 알림 미실행 | `AwaitChangesComplete`, `AwaitLine` |
+| [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md) | `scenarios/windows_cancel_test.go` | Windows에서 취소된 `cmd` 명령 목록(`&`, `&&`, `\|\|`)의 다음 프로그램 정지 | `Launch`, `Hook`, `DelayedHookBegun`, `DelayedHookCanceled`, `Stop`, `AwaitDelayedHooksGone` |
+| [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md) | `scenarios/windows_cancel_test.go` | Windows에서 시작 후 0–1000ms에 취소한 `powershell` hook의 정지 | `Launch`, `Hook`, `Log`, `StopWithin`, `AwaitDelayedHooksGone` |
 | `TestCleanupReportsLockedResources` | `harness/cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |
 | `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram` | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 쓰는 기록된 PID의 부재 판정 | `NewScenario`, `AwaitDelayedHooksGone` |
 | `TestDelayedHooksGoneFailsWhileHookRuns` | `harness/process_observer_windows_test.go` | Windows에서 실행 중인 기록된 hook이 있을 때 지연 hook 부재 대기의 실패 | `NewScenario`, `Await`, `DelayedHookBegun`, `AwaitDelayedHooksGone` |
@@ -80,4 +82,4 @@ func TestCreateAnotherFile(t *testing.T) {
 
 ## `hookrec` 프로세스 트리와 지연 hook
 
-장시간 프로세스는 `s.Hook("--depth=2")`를 시작·변경 hook에 넣습니다. 부모는 자식, 자식은 손자를 실제로 실행합니다. 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다. 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `AwaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다. 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다. 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다.
+장시간 프로세스는 `s.Hook("--depth=2")`를 시작·변경 hook에 넣습니다. 부모는 자식, 자식은 손자를 실제로 실행합니다. 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다. 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `AwaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다. 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다. 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다. `--cancel-exit-code=<코드>`를 더하면 `CANCEL`을 기록한 뒤 그 코드로 끝나며, 셸의 `||`처럼 앞 프로그램의 실패로 다음 프로그램을 시작하는 명령 목록에 씁니다.

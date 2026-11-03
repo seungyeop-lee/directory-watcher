@@ -40,7 +40,7 @@ Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·�
 > [!WARNING]
 > Windows에서는 다음을 주의하세요.
 > - PowerShell이나 명령 프롬프트에서는 출력이 제대로 보이지 않을 수 있습니다. 이때는 Git Bash에서 실행하세요.
-> - watcher가 hook을 멈출 때, hook이 별도 콘솔이나 프로세스 그룹으로 띄운 프로세스나 CTRL+BREAK를 무시하는 프로세스는 계속 실행될 수 있습니다. 자세한 내용은 [과부하와 종료](USAGE.ko.md#과부하와-종료)에 있습니다.
+> - watcher가 hook을 멈출 때, CTRL+BREAK로 끝나지 않는 hook 프로세스는 20초가 지나서야 강제로 끝냅니다. 이런 hook은 일부 `powershell` hook을 포함해 교체와 종료가 최대 20초 늦어질 수 있습니다. 자세한 내용은 [과부하와 종료](USAGE.ko.md#과부하와-종료)에 있습니다.
 
 ## 설치
 

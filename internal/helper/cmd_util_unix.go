@@ -28,14 +28,15 @@ func terminateProcess(cmd *exec.Cmd) error {
 	return nil
 }
 
-// holdEarlyCancel은 Unix에서 cmd.Cancel을 그대로 둔다. 시작 직후에도 SIGTERM을 바로 보낸다.
-func holdEarlyCancel(*exec.Cmd) (markStarted func()) { return func() {} }
-
 type processTree struct{}
 
-func startProcessTree(cmd *exec.Cmd) (processTree, error) {
+// startProcessTree는 Unix에서 cmd를 그대로 시작한다. 취소된 명령에는 시작 직후에도 SIGTERM을 바로 보내고,
+// 자손은 SetupForOs가 만든 프로세스 그룹으로 함께 신호를 받는다.
+func startProcessTree(cmd *exec.Cmd, _ bool) (processTree, error) {
 	return processTree{}, cmd.Start()
 }
+
+func releaseProcessTree(processTree) {}
 
 func cleanupProcessTree(cmd *exec.Cmd, _ processTree, deadline time.Time) error {
 	// SetupForOs가 명령에 프로세스 그룹을 만들어 주며, 이 그룹은 그룹 리더가 끝난 뒤에도 남는다.

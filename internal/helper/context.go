@@ -36,24 +36,22 @@ func (w *WatcherContext) NewTimeoutRun(timeout time.Duration, environment []stri
 func (w *WatcherContext) Cancel()                  { w.cancel() }
 func (w *WatcherContext) Context() context.Context { return w.ctx }
 
+// shutdownGrace는 취소된 명령이 정상 종료하기를 기다리는 최대 시간이다. 이 시간이 지나도 끝나지 않으면 강제로 끝낸다.
+const shutdownGrace = 20 * time.Second
+
 func (w *WatcherContext) RunCommand(cmd *exec.Cmd) error {
-	markStarted := holdEarlyCancel(cmd)
-	if !w.cleanupTree {
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		markStarted()
-		return cmd.Wait()
-	}
-	tree, err := startProcessTree(cmd)
+	tree, err := startProcessTree(cmd, w.cleanupTree)
 	if err != nil {
 		return err
 	}
-	markStarted()
 	err = cmd.Wait()
-	deadline := time.Now().Add(20 * time.Second)
-	if limit, ok := w.ctx.Deadline(); ok && limit.Add(20*time.Second).Before(deadline) {
-		deadline = limit.Add(20 * time.Second)
+	if !w.cleanupTree {
+		releaseProcessTree(tree)
+		return err
+	}
+	deadline := time.Now().Add(shutdownGrace)
+	if limit, ok := w.ctx.Deadline(); ok && limit.Add(shutdownGrace).Before(deadline) {
+		deadline = limit.Add(shutdownGrace)
 	}
 	cleanupErr := cleanupProcessTree(cmd, tree, deadline)
 	if cleanupErr == nil {
@@ -67,5 +65,5 @@ func (w *WatcherContext) ApplyGracefulShutdown(cmd *exec.Cmd) {
 		cmd.Env = append(cmd.Environ(), w.environment...)
 	}
 	cmd.Cancel = func() error { return terminateProcess(cmd) }
-	cmd.WaitDelay = 20 * time.Second
+	cmd.WaitDelay = shutdownGrace
 }

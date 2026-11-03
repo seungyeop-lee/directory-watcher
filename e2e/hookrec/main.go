@@ -21,6 +21,7 @@ func main() {
 	delay := flag.Duration("delay", 0, "delay before completing a line record")
 	errorContext := flag.Bool("error-context", false, "record error notification environment and working directory")
 	exitCode := flag.Int("exit-code", 0, "exit status after recording")
+	cancelExitCode := flag.Int("cancel-exit-code", 0, "exit status after recording a canceled delay")
 	releaseFile := flag.String("release-file", "", "exit parent when this file appears, leaving descendants running")
 	flag.Parse()
 	if *file == "" {
@@ -65,6 +66,10 @@ func main() {
 			select {
 			case <-signals:
 				appendLine(fmt.Sprintf("CANCEL|%d|%s", os.Getpid(), *line))
+				if *cancelExitCode != 0 {
+					_ = f.Close()
+					os.Exit(*cancelExitCode)
+				}
 				return
 			case <-time.After(*delay):
 			}

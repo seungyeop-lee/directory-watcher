@@ -40,7 +40,7 @@ Directory Watcher runs the commands you define when files are created, modified,
 > [!WARNING]
 > On Windows:
 > - Output may not display correctly in PowerShell or Command Prompt. Run the watcher in Git Bash instead.
-> - When the watcher stops a hook, processes the hook started in a separate console or process group, or that ignore CTRL+BREAK, may keep running. See [Overload and shutdown](USAGE.md#overload-and-shutdown).
+> - When the watcher stops a hook, it ends the hook's processes that do not exit on CTRL+BREAK only 20 seconds later, so replacing or stopping such a hook, including some `powershell` hooks, can take up to 20 seconds. See [Overload and shutdown](USAGE.md#overload-and-shutdown).
 
 ## Installation
 
