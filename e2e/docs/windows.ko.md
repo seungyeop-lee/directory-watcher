@@ -28,7 +28,7 @@ Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중�
 
 ## CI 결과 확인
 
-GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다. `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다. `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다. 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다. 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다.
+GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다. `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다. `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다. 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다. 해당 커밋의 Windows 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다. UTM VM으로 확인할 수 있는 항목은 [UTM Windows VM에서 E2E 실행](windows-utm.ko.md)으로 실행하고, `-race`와 Windows x64 항목은 이 CI 결과로만 확인합니다.
 
 ## 실패 분석
 
