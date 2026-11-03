@@ -210,6 +210,31 @@ func TestEmptyTemplateValueIsOneEmptyArgument(t *testing.T) {
 	}
 }
 
+func TestFailureNamesCommandWithTemplateValuesFilledIn(t *testing.T) {
+	readMissing := map[string]string{"sh": "cat", "cmd": "type", "powershell": "Get-Content"}
+	event := &domain.Event{Path: "missing b.txt", Operation: domain.Operation(fsnotify.Create)}
+	for _, shell := range testedShells(t) {
+		t.Run(shell.String(), func(t *testing.T) {
+			ctx, _ := capturedContext(t)
+			program := readMissing[shell.String()]
+			cmd := command.NewManager(command.SingleCmd{Shell: shell, Cmd: program + " {{.Path}}"})
+			err := cmd.Run(ctx, domain.Path(t.TempDir()), event)
+			if want := "(with values: " + program + " missing b.txt)"; err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("failure %v does not contain %q", err, want)
+			}
+		})
+	}
+}
+
+func TestFailureWithoutTemplatesShowsOnlyTheCommand(t *testing.T) {
+	ctx, _ := capturedContext(t)
+	event := &domain.Event{Path: "b.txt", Operation: domain.Operation(fsnotify.Create)}
+	err := command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: "exit 3"}).Run(ctx, domain.Path(t.TempDir()), event)
+	if err == nil || strings.Contains(err.Error(), "with values") {
+		t.Fatalf("failure of a command without templates = %v, want no filled-in command", err)
+	}
+}
+
 func TestCommandListSkipsRestAfterFailureInEveryShell(t *testing.T) {
 	for _, shell := range testedShells(t) {
 		t.Run(shell.String(), func(t *testing.T) {

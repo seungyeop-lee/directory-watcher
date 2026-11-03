@@ -56,12 +56,10 @@ func (w *WatcherContext) RunCommand(cmd *exec.Cmd) error {
 	return errors.Join(err, cleanupErr)
 }
 
-func (w *WatcherContext) ApplyGracefulShutdown(cmds []*exec.Cmd) {
-	for _, cmd := range cmds {
-		if len(w.environment) != 0 {
-			cmd.Env = append(cmd.Environ(), w.environment...)
-		}
-		cmd.Cancel = func() error { return terminateProcess(cmd) }
-		cmd.WaitDelay = 20 * time.Second
+func (w *WatcherContext) ApplyGracefulShutdown(cmd *exec.Cmd) {
+	if len(w.environment) != 0 {
+		cmd.Env = append(cmd.Environ(), w.environment...)
 	}
+	cmd.Cancel = func() error { return terminateProcess(cmd) }
+	cmd.WaitDelay = 20 * time.Second
 }

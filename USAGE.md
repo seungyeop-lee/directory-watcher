@@ -86,7 +86,7 @@ For each change, global `onBeforeChange`, the target's `onChange`, and global `o
 <target> hook command failed, skipping remaining commands: command <command>: <error>
 ```
 
-`<target>` is the last element of the target's `path`. A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
+`<target>` is the last element of the target's `path`. The form of `<command>` is in [Shell that runs hook commands](#shell-that-runs-hook-commands). A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
 
 If a command of global `onStartWatch` or global `onFinishWatch` fails, the remaining commands of that hook are skipped. The failure is logged as an `[ERROR]` line without the target or hook name:
 
@@ -122,7 +122,11 @@ A configuration file is meant for one OS, so write its hooks in the syntax of th
 - `cmd` runs with delayed expansion (`/v:on`), so a `!` in a command is read as part of a `!name!` variable reference, and an unpaired `!` is removed.
 - Windows PowerShell 5.1 has no `&&`. To run a command only after the previous one succeeded, write `command1; if ($?) { command2 }`.
 
-The `<command>` in a failure log shows how the shell was run together with the command after template variables were replaced with references, for example `/bin/sh -c cat "$DW_PATH"`.
+The `<command>` in a failure log shows how the shell was run together with the command after template variables were replaced with references. For a command with template variables, `(with values: ...)` follows with the command that has the values written in place of the variables, so you can see which file the command failed on. This command is only logged, never run.
+
+```text
+command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit status 1
+```
 
 ### Command execution location
 

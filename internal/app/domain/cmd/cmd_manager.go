@@ -18,7 +18,22 @@ import (
 )
 
 type ExecCmdBuilder interface {
-	Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error)
+	Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]Command, error)
+}
+
+// Command는 실행할 프로세스와, 실패 로그에 함께 보여 줄 템플릿 값을 채운 명령 문자열이다.
+type Command struct {
+	*exec.Cmd
+	// Filled는 템플릿 변수 자리에 값을 그대로 넣은 명령이다. 실행하지 않고 실패 로그에만 쓴다.
+	// 템플릿 변수가 없는 명령이면 비어 있다.
+	Filled string
+}
+
+func (c Command) String() string {
+	if c.Filled == "" {
+		return c.Cmd.String()
+	}
+	return fmt.Sprintf("%s (with values: %s)", c.Cmd, c.Filled)
 }
 
 type Manager struct {
@@ -38,13 +53,12 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 	if err != nil {
 		return err
 	}
-	ctx.ApplyGracefulShutdown(cmds)
-
 	out := hookOutput(ctx.Context())
 	for _, cmd := range cmds {
+		ctx.ApplyGracefulShutdown(cmd.Cmd)
 		err := checkWorkingDir(cmd.Dir)
 		if err == nil {
-			err = runPrintingOutput(ctx, cmd, out)
+			err = runPrintingOutput(ctx, cmd.Cmd, out)
 		}
 		if err != nil {
 			return fmt.Errorf("command %s: %w", cmd, err)

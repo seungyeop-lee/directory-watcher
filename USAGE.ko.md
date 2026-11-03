@@ -86,7 +86,7 @@ watchTargets:
 <대상> hook command failed, skipping remaining commands: command <명령>: <오류>
 ```
 
-`<대상>`은 감시 대상 `path`의 마지막 경로 요소입니다. 새 변경이 실행을 취소했거나(`interruptible: true`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
+`<대상>`은 감시 대상 `path`의 마지막 경로 요소입니다. `<명령>`의 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)에 있습니다. 새 변경이 실행을 취소했거나(`interruptible: true`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
 
 전역 `onStartWatch`나 전역 `onFinishWatch`의 명령이 실패하면 그 hook의 나머지 명령을 건너뜁니다. 이 실패는 대상이나 hook 이름 없이 다음 형태의 `[ERROR]` 로그로 남습니다.
 
@@ -122,7 +122,11 @@ watchTargets:
 - `cmd`는 지연 확장(`/v:on`)을 켜고 실행하므로, 명령에 쓴 `!`는 `!이름!` 형태의 변수 참조로 해석되고 짝이 없는 `!`는 사라집니다.
 - Windows PowerShell 5.1에는 `&&`가 없습니다. 앞 명령이 성공했을 때만 다음 명령을 실행하려면 `명령1; if ($?) { 명령2 }`처럼 씁니다.
 
-실패 로그의 `<명령>`에는 셸 실행 방식과, 템플릿 변수를 참조로 바꾼 명령이 함께 나옵니다(예: `/bin/sh -c cat "$DW_PATH"`).
+실패 로그의 `<명령>`에는 셸 실행 방식과, 템플릿 변수를 참조로 바꾼 명령이 함께 나옵니다. 템플릿 변수를 쓴 명령이면 그 뒤의 `(with values: ...)`에 변수 자리에 값을 그대로 넣은 명령이 붙어, 어느 파일에서 실패했는지 알 수 있습니다. 이 명령은 로그에만 쓰고 실행하지 않습니다.
+
+```text
+command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit status 1
+```
 
 ### 명령 실행 위치
 

@@ -1,7 +1,5 @@
 package helper
 
-import "os/exec"
-
 type EmptyCmdError error
 
 type emptyCmdError struct{}
@@ -16,7 +14,7 @@ func (e *emptyCmdError) Error() string {
 	return ""
 }
 
-func FilterError(cmds []*exec.Cmd, err error) ([]*exec.Cmd, error) {
+func FilterError[T any](cmds []T, err error) ([]T, error) {
 	if err == nil {
 		return cmds, nil
 	}

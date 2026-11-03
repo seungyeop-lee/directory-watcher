@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"text/template"
 
@@ -36,12 +35,12 @@ var eventVariables = []struct {
 	{"Event", "DW_EVENT", func(e *domain.Event) string { return e.Operation.String() }},
 }
 
-func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]*exec.Cmd, error) {
+func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]Command, error) {
 	if c.Cmd == "" {
 		return nil, helper.NewEmptyCmdError()
 	}
 
-	script, err := c.replaceTemplates(event)
+	script, filled, err := c.replaceTemplates(event)
 	if err != nil {
 		return nil, err
 	}
@@ -55,30 +54,45 @@ func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.
 
 	helper.SetupForOs(cmd)
 
-	return []*exec.Cmd{cmd}, nil
+	return []Command{{Cmd: cmd, Filled: filled}}, nil
 }
 
-// replaceTemplates는 템플릿 변수 자리를 값을 담은 환경 변수의 참조로 바꾼다. 값을 명령 문자열에 넣지
-// 않으므로 파일 이름이 셸 명령으로 해석되지 않는다. 이벤트가 없는 hook의 명령은 그대로 둔다.
-func (c SingleCmd) replaceTemplates(event *domain.Event) (string, error) {
+// replaceTemplates는 실행할 명령과, 실패 로그에 보여 줄 명령을 만든다. 실행할 명령은 템플릿 변수 자리를
+// 값을 담은 환경 변수의 참조로 바꾼다. 값을 명령 문자열에 넣지 않으므로 파일 이름이 셸 명령으로 해석되지
+// 않는다. 실패 로그에 보여 줄 명령은 그 자리에 값을 그대로 넣고, 템플릿 변수가 없으면 비워 둔다.
+// 이벤트가 없는 hook의 명령은 그대로 둔다.
+func (c SingleCmd) replaceTemplates(event *domain.Event) (script, filled string, err error) {
 	if event == nil {
-		return c.Cmd, nil
+		return c.Cmd, "", nil
 	}
 
 	t, err := template.New("parser").Parse(c.Cmd)
 	if err != nil {
-		return "", fmt.Errorf("can't parse command: %s", err)
+		return "", "", fmt.Errorf("can't parse command: %s", err)
 	}
 
-	refs := map[string]string{}
+	refs, values := map[string]string{}, map[string]string{}
 	for _, v := range eventVariables {
 		refs[v.template] = c.Shell.templateRef(c.refEnv(v.env))
+		values[v.template] = v.value(event)
 	}
+	if script, err = execute(t, refs); err != nil {
+		return "", "", err
+	}
+	if filled, err = execute(t, values); err != nil {
+		return "", "", err
+	}
+	if script == c.Cmd {
+		filled = ""
+	}
+	return script, filled, nil
+}
+
+func execute(t *template.Template, data map[string]string) (string, error) {
 	b := strings.Builder{}
-	if err := t.Execute(&b, refs); err != nil {
+	if err := t.Execute(&b, data); err != nil {
 		return "", fmt.Errorf("can't execute command: %s", err)
 	}
-
 	return b.String(), nil
 }
 
