@@ -38,9 +38,9 @@ Directory Watcher runs the commands you define when files are created, modified,
 - Go 1.23 or later, only if you install with `go install`.
 
 > [!WARNING]
-> On Windows, standard output may have issues in PowerShell or Command Prompt.
->
-> On Windows, the watcher stops a running command by sending CTRL+BREAK to that command's process group. The Windows E2E (Windows 11 ARM64 on a UTM VM, run on 2026-11-03) runs the watcher without Git Bash and confirms, for `interruptible: true` replacement and for shutdown, that a hook's parent, child, and grandchild processes terminate when they stay in that group and exit on the signal ([`TestProcessLifecycle`](e2e/docs/scenarios/process-lifecycle.md), [`TestStartHookShutdownModes`](e2e/docs/scenarios/start-hook-shutdown-modes.md)). A descendant that creates its own console or process group, or ignores the signal, may keep running.
+> On Windows:
+> - Output may not display correctly in PowerShell or Command Prompt. Run the watcher in Git Bash instead.
+> - When the watcher stops a hook, processes the hook started in a separate console or process group, or that ignore CTRL+BREAK, may keep running. See [Overload and shutdown](USAGE.md#overload-and-shutdown).
 
 ## Installation
 
@@ -55,6 +55,19 @@ brew install seungyeop-lee/tap/directory-watcher
 ```shell
 go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
+
+### Run with Docker
+
+Mount `config.yml` and the directory to watch into the published image:
+
+```shell
+docker run --rm \
+  -v "$PWD/config.yml:/config.yml" \
+  -v "$PWD/src:/src" \
+  ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
+```
+
+The container's working directory is `/`, so `path: src` in `config.yml` refers to the mounted `/src`. Hooks run inside the container, so the files and tools they use must be available there. For a known issue with bind mounts, see [Running with Docker](USAGE.md#running-with-docker).
 
 ### In Dockerfile
 

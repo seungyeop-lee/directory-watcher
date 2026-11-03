@@ -38,9 +38,9 @@ Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·�
 - Go 1.23 이상. `go install`로 설치할 때만 필요합니다.
 
 > [!WARNING]
-> Windows의 PowerShell이나 명령 프롬프트에서는 표준 출력에 문제가 있을 수 있습니다.
->
-> Windows에서 watcher는 실행 중인 명령을 멈출 때 그 명령의 프로세스 그룹에 CTRL+BREAK를 보냅니다. Windows E2E(UTM VM의 Windows 11 ARM64, 2026-11-03 실행)는 Git Bash 없이 watcher를 실행해, `interruptible: true`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 그 그룹에 남아 신호를 받고 끝나는 경우 모두 종료되는 것을 확인합니다([`TestProcessLifecycle`](e2e/docs/scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](e2e/docs/scenarios/start-hook-shutdown-modes.ko.md)). 자기만의 콘솔이나 프로세스 그룹을 만들거나 신호를 무시하는 자손 프로세스는 계속 실행될 수 있습니다.
+> Windows에서는 다음을 주의하세요.
+> - PowerShell이나 명령 프롬프트에서는 출력이 제대로 보이지 않을 수 있습니다. 이때는 Git Bash에서 실행하세요.
+> - watcher가 hook을 멈출 때, hook이 별도 콘솔이나 프로세스 그룹으로 띄운 프로세스나 CTRL+BREAK를 무시하는 프로세스는 계속 실행될 수 있습니다. 자세한 내용은 [과부하와 종료](USAGE.ko.md#과부하와-종료)에 있습니다.
 
 ## 설치
 
@@ -55,6 +55,19 @@ brew install seungyeop-lee/tap/directory-watcher
 ```shell
 go install github.com/seungyeop-lee/directory-watcher/v2@latest
 ```
+
+### Docker로 실행
+
+게시된 이미지에 `config.yml`과 감시할 폴더를 마운트해 실행합니다.
+
+```shell
+docker run --rm \
+  -v "$PWD/config.yml:/config.yml" \
+  -v "$PWD/src:/src" \
+  ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
+```
+
+컨테이너의 작업 폴더가 `/`이므로 `config.yml`의 `path: src`는 마운트한 `/src`를 가리킵니다. hook은 컨테이너 안에서 실행되므로, hook이 쓰는 파일과 도구가 컨테이너에 있어야 합니다. bind mount의 알려진 이슈는 [Docker로 실행하기](USAGE.ko.md#docker로-실행하기)에 있습니다.
 
 ### Dockerfile에서 설치
 
