@@ -26,31 +26,32 @@ rund-docker:
 	-v $(PWD)/test:/test \
 	ghcr.io/seungyeop-lee/directory-watcher:$(DOCKER_VERSION) -c /config.yml -l DEBUG
 
-.PHONY: e2e e2e-linux e2e-windows-up e2e-windows e2e-windows-down e2e-windows-all
-e2e:
+.PHONY: e2e-local
+e2e-local:
 	go test -count=1 -v ./e2e/scenarios
 
+.PHONY: e2e-linux
 e2e-linux:
 	go run ./e2e/linux
 
 # ARGS holds runner flags, then -- and go test flags. $(value) keeps the $ of
 # a -run pattern from being expanded by make.
+.PHONY: e2e-windows-up
 e2e-windows-up:
 	go run ./e2e/windows up $(value ARGS)
 
+.PHONY: e2e-windows
 e2e-windows:
 	go run ./e2e/windows test $(value ARGS)
 
+.PHONY: e2e-windows-down
 e2e-windows-down:
 	go run ./e2e/windows down $(value ARGS)
 
+.PHONY: e2e-windows-all
 e2e-windows-all:
 	go run ./e2e/windows all $(value ARGS)
 
 .PHONY: test
 test:
 	go test -race ./...
-
-.PHONY: beads-ui
-beads-ui:
-	bdui start --open
