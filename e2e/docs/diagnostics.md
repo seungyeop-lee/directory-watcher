@@ -23,7 +23,7 @@ DW_E2E_FAULT=timeout go run ./e2e/linux -- -run '^TestProcessLifecycle$'
 
 ## Parallel runs across worktrees and isolation
 
-In separate terminals, move to each worktree root and run the commands in the [setup and run section of the E2E README](../README.md#준비와-실행). Local and Linux runs may run at the same time.
+In separate terminals, move to each worktree root and run the commands in the [setup and run section of the E2E README](../README.md#setup-and-run). Local and Linux runs may run at the same time.
 
 - Binaries, configuration, watch targets, and records are created in a temporary directory per run.
 - The Linux runner copies the current files tracked by Git and new files that are not ignored. It reflects uncommitted modifications, additions, and deletions, and does not copy ignored files or the Git repository itself.

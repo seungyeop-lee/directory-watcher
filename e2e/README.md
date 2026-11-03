@@ -1,25 +1,27 @@
-# 자동 E2E 실행
+# Automated E2E runs
 
-실제 현재 소스의 watcher와 Go 보조 프로그램을 빌드하고 파일 이벤트·hook 기록·프로세스 종료를 검사합니다. macOS 로컬·Linux Docker·Windows는 `e2e/scenarios`의 같은 Go E2E 시나리오를 실행합니다. Windows에서만 실행하는 하네스 검증 `TestCleanupReportsLockedResources`는 `e2e/harness` 패키지에 있어 `make e2e-local`이 아닌 `go test ./...`로 실행됩니다. 시나리오별 검증 내용과 코드 위치는 [시나리오와 지원 코드의 대응](docs/harness.ko.md#시나리오와-지원-코드의-대응)에 있습니다.
+🇺🇸 English | 🇰🇷 [한국어](README.ko.md)
 
-## 준비와 실행
+These runs build the watcher and the Go helper programs from the actual current source and check file events, hook records, and process termination. macOS local, Linux Docker, and Windows runs execute the same Go E2E scenarios in `e2e/scenarios`. The Windows-only harness check `TestCleanupReportsLockedResources` is in the `e2e/harness` package, so it runs with `go test ./...`, not with `make e2e-local`. What each scenario checks and where its code is are in [Scenarios and their supporting code](docs/harness.md#scenarios-and-their-supporting-code).
 
-저장소 루트에서 실행합니다. 로컬은 `go.mod`에 지정된 버전 이상의 Go가 필요합니다. Linux 실행에는 Docker CLI와 실행 중인 Linux Docker 엔진도 필요합니다. Java·Gradle은 사용하지 않습니다.
+## Setup and run
+
+Run these from the repository root. Local runs need Go at or above the version in `go.mod`. Linux runs also need the Docker CLI and a running Linux Docker engine. Java and Gradle are not used.
 
 ```sh
 make e2e-local
 make e2e-linux
 ```
 
-Mac에서 UTM Windows VM으로 실행하려면 [UTM Windows VM에서 E2E 실행](docs/windows-utm.ko.md)의 사전 준비를 마친 뒤 다음 명령을 사용합니다.
+To run on a UTM Windows VM from a Mac, finish the prerequisites in [Running E2E on a UTM Windows VM](docs/windows-utm.md), then use the following command.
 
 ```sh
 DW_E2E_UTM_VM=Windows-E2E make e2e-windows-all
 ```
 
-성공하면 각 테스트에 `PASS`가 표시되고 명령이 0으로 종료합니다. 실패·시간 초과는 0이 아닌 종료 코드로 전달합니다. Linux 기본 이미지는 `golang:1.23-bookworm`이며, 다른 Go 이미지는 `go run ./e2e/linux -image=<이미지>`로 지정합니다.
+On success, each test shows `PASS` and the command exits with 0. Failures and timeouts are reported as a non-zero exit code. The default Linux image is `golang:1.23-bookworm`; specify another Go image with `go run ./e2e/linux -image=<image>`.
 
-### 특정 시나리오 선택·반복
+### Selecting and repeating specific scenarios
 
 ```sh
 go test -count=3 -v -run '^TestGoldenPath$' ./e2e/scenarios
@@ -28,15 +30,15 @@ go run ./e2e/linux -- -count=3 -run '^TestGoldenPath$'
 go run ./e2e/linux -- -count=3 -run '^TestProcessLifecycle$'
 ```
 
-모든 실행에 `-count`를 지정해 Go 결과 캐시를 사용하지 않습니다. Linux 실행기는 기본 `-count=1` 뒤에 전달 인자를 붙이므로 위의 반복 횟수가 적용됩니다. 컨테이너 전체 제한 시간은 `go run ./e2e/linux -deadline=10m -- -run TestProcessLifecycle`처럼 지정합니다. Go 테스트 자체의 제한 시간은 `--` 뒤의 `-timeout=2m`으로 지정할 수 있습니다.
+Every run specifies `-count` so that the Go test result cache is not used. The Linux runner appends the passed arguments after its default `-count=1`, so the repeat counts above apply. Set the time limit for the whole container as in `go run ./e2e/linux -deadline=10m -- -run TestProcessLifecycle`. Set the time limit for the Go tests themselves with `-timeout=2m` after `--`.
 
-## 세부 문서
+## Detailed documents
 
-| 문서 | 내용 |
+| Document | Contents |
 |---|---|
-| [하네스 구조와 시나리오 추가](docs/harness.ko.md) | 책임별 코드 위치, 시나리오와 지원 코드의 대응, 새 시나리오 작성 절차와 예시, `hookrec` 프로세스 트리·지연 hook |
-| 시나리오별 문서: [`TestGoldenPath`](docs/scenarios/golden-path.ko.md), [`TestProcessLifecycle`](docs/scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](docs/scenarios/start-hook-shutdown-modes.ko.md), [`TestFastInflowSlowHook`](docs/scenarios/fast-inflow-slow-hook.ko.md), [`TestTargetsRunIndependently`](docs/scenarios/targets-run-independently.ko.md), [`TestBoundedOverloadCLI`](docs/scenarios/bounded-overload-cli.ko.md), [`TestEventLossNotificationCLI`](docs/scenarios/event-loss-notification-cli.ko.md), [`TestNormalChangesDoNotNotify`](docs/scenarios/normal-changes-do-not-notify.ko.md) | 시나리오마다 확인 내용과 성공 조건, 설정, 진행 순서 다이어그램, 하위 테스트, 실행 명령, 관련 코드 |
-| [UTM Windows VM에서 E2E 실행](docs/windows-utm.ko.md) | Mac의 UTM Windows VM 사전 준비와 E2E 전용 VM, `make e2e-windows-up`·`e2e-windows`·`e2e-windows-down`·`e2e-windows-all`, 결과 위치, 종료 동작, 문제 해결 |
-| [Windows 실행과 CI 결과 확인](docs/windows.ko.md) | Windows 실행 명령, CTRL+BREAK 정상 종료 방식, CI 단계와 artifact 확인, Windows 실패 분석 |
-| [실패·시간 초과 진단과 격리](docs/diagnostics.ko.md) | 진단 파일 위치, `DW_E2E_FAULT` 의도적 실패·시간 초과, Linux 진단, 워크트리 병렬 실행과 컨테이너 정리 |
-| [경합·과부하·유실 검증](docs/reliability.ko.md) | 경합·과부하·유실 알림 시나리오의 반복 실행 명령, 내부 테스트의 검증 범위, OS E2E의 수신 경계 판정, 유실 검증의 구분과 주입 스모크 |
+| [Harness structure and adding scenarios](docs/harness.md) | Code locations by responsibility, scenarios and their supporting code, steps and an example for writing a new scenario, `hookrec` process trees and delayed hooks |
+| Per-scenario documents: [`TestGoldenPath`](docs/scenarios/golden-path.md), [`TestProcessLifecycle`](docs/scenarios/process-lifecycle.md), [`TestStartHookShutdownModes`](docs/scenarios/start-hook-shutdown-modes.md), [`TestFastInflowSlowHook`](docs/scenarios/fast-inflow-slow-hook.md), [`TestTargetsRunIndependently`](docs/scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](docs/scenarios/bounded-overload-cli.md), [`TestEventLossNotificationCLI`](docs/scenarios/event-loss-notification-cli.md), [`TestNormalChangesDoNotNotify`](docs/scenarios/normal-changes-do-not-notify.md) | For each scenario, what it checks and success criteria, configuration, sequence diagram, subtests, run commands, and related code |
+| [Running E2E on a UTM Windows VM](docs/windows-utm.md) | UTM Windows VM prerequisites on a Mac and the dedicated E2E VM, `make e2e-windows-up`, `e2e-windows`, `e2e-windows-down`, and `e2e-windows-all`, result locations, shutdown behavior, troubleshooting |
+| [Running Windows E2E and checking CI results](docs/windows.md) | Windows run commands, graceful shutdown with CTRL+BREAK, CI steps and checking artifacts, Windows failure analysis |
+| [Failure and timeout diagnostics and isolation](docs/diagnostics.md) | Diagnostics file locations, intentional failures and timeouts with `DW_E2E_FAULT`, Linux diagnostics, parallel runs across worktrees and container cleanup |
+| [Race, overload, and loss verification](docs/reliability.md) | Repeat commands for the race, overload, and loss notification scenarios, scope of the internal tests, receive boundary checks in OS E2E, kinds of loss verification and the injection smoke test |
