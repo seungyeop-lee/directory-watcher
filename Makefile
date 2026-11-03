@@ -1,6 +1,7 @@
 # config.example.yml이 감시하는 폴더. test/는 .gitignore 대상이라 clone에는 없으므로
 # 예시를 쓰는 실행 타깃이 먼저 만든다.
-EXAMPLE_WATCH_DIRS := test/dir1 test/dir2 test/dir3
+# 목록은 config.example.yml의 `  - path: '...'` 줄에서 읽는다(두 칸 들여쓰기, 작은따옴표, 같은 줄 주석 없음).
+EXAMPLE_WATCH_DIRS := $(shell sed -n "s/^  - path: '\(.*\)'/\1/p" config.example.yml)
 
 .PHONY: example-watch-dirs
 example-watch-dirs:
