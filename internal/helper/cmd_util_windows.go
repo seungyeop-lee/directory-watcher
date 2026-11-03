@@ -51,6 +51,7 @@ func startProcessTree(cmd *exec.Cmd, killOnClose bool) (processTree, error) {
 		limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
 	} else {
 		// 스스로 job을 벗어나려고 CREATE_BREAKAWAY_FROM_JOB로 자식을 만드는 프로그램이 실패하지 않게 한다.
+		// 이렇게 job을 벗어난 프로세스는 취소된 명령의 job을 끝낼 때 함께 끝나지 않는다.
 		limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK
 	}
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
@@ -120,7 +121,8 @@ func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(job windows.Handle)) {
 // 시작하는 것처럼 그 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다. 들어온 프로세스가 minRunBeforeBreak만큼
 // 실행된 뒤에 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상 종료하는 프로그램에는 두 번째
 // 신호가 가지 않는다. 첫 신호 뒤 breakGrace가 지나도 남은 프로세스는 job과 함께 끝낸다. 막 시작한 Go 프로그램처럼
-// 신호를 받지 못한 프로세스와 PowerShell 디버거처럼 신호로 끝나지 않는 프로세스가 여기서 끝난다.
+// 신호를 받지 못한 프로세스와 PowerShell처럼 신호로 끝나지 않는 프로세스가 여기서 끝난다. Windows PowerShell은
+// 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지 않고 디버거로 들어가며, 표준 입력이 콘솔이면 거기서 입력을 기다린다.
 func stopJob(job windows.Handle, send func() error) error {
 	accounting, err := queryJob(job)
 	if err != nil {

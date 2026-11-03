@@ -18,6 +18,14 @@ What each test checks is in the [`TestGoldenPath`](scenarios/golden-path.md), [`
 
 If the test process has no console, it allocates one with `AllocConsole` and runs the watcher and each hook in a separate process group. A graceful shutdown request sends `CTRL_BREAK_EVENT` only to that group on the same console. [Go delivers CTRL+BREAK as `os.Interrupt`](https://github.com/golang/go/blob/go1.23.0/src/os/signal/doc.go), so the existing SIGINT handling of the CLI is used. Neither a group-targeted `CTRL_C_EVENT` nor `TASKKILL /F` is used as evidence of graceful shutdown. Helper processes inherit the console and group, handle the signal, and wait for their descendants to exit. The same graceful shutdown guarantee does not apply to arbitrary external programs that create a new console or ignore the signal. The watcher forcibly ends hook processes that are still running 20 seconds after the first CTRL+BREAK through that hook's Job Object, and this termination is not a graceful shutdown ([Overload and shutdown](../../USAGE.md#overload-and-shutdown)).
 
+## Hook cancellation checks
+
+The Windows E2E runs the watcher without Git Bash and checks that the watcher stops canceled hooks. The dates are when each check was confirmed on the UTM VM (Windows 11 ARM64).
+
+- For `interruptible: true` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-03).
+- The next program of a canceled `cmd` command list ends: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) (2026-11-04).
+- A `powershell` hook canceled 0–1000 ms after it starts does not run its program to completion: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) (2026-11-04).
+
 ## CI steps
 
 `test (windows-latest)` in `.github/workflows/ci.yml` runs `go test -count=1 -race ./...`, then the error notification process verification and the `-count=3` repeat of the three tests above. It then checks the intentional failure and timeout of `DW_E2E_FAULT=failure` and `timeout`, the diagnostics files, and cleanup of the three PIDs, and confirms that a separately started Go parent, child, and grandchild tree is still alive. The Windows-only steps run even if an earlier step failed, as long as the job was not cancelled. The earlier failure remains, so the job still fails in the end, and the diagnostics upload step always runs. Apart from the Go build cache, **the test result cache is not reused**.

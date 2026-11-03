@@ -18,6 +18,14 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 테스트 프로세스에 콘솔이 없으면 `AllocConsole`로 할당하고, watcher와 각 hook을 별도 프로세스 그룹으로 실행합니다. 정상 종료 요청은 같은 콘솔의 해당 그룹에만 `CTRL_BREAK_EVENT`를 보냅니다. [Go는 CTRL+BREAK를 `os.Interrupt`로 전달](https://github.com/golang/go/blob/go1.23.0/src/os/signal/doc.go)하므로 기존 CLI의 SIGINT 수신을 사용합니다. `CTRL_C_EVENT`의 그룹 지정이나 `TASKKILL /F`를 정상 종료 증거로 사용하지 않습니다. 보조 프로세스는 콘솔·그룹을 상속하고 신호를 처리하며 자손 종료를 기다립니다. 새 콘솔을 만들거나 신호를 무시하는 임의의 외부 프로그램에 같은 정상 종료 보장을 적용하지 않습니다. watcher는 첫 CTRL+BREAK 뒤 20초가 지나도 남은 hook 프로세스를 그 hook의 Job Object로 강제로 끝내며, 이 종료는 정상 종료가 아닙니다([과부하와 종료](../../USAGE.ko.md#과부하와-종료)).
 
+## hook 취소 검증
+
+Windows E2E는 Git Bash 없이 watcher를 실행해, watcher가 취소된 hook을 멈추는지 확인합니다. 날짜는 UTM VM(Windows 11 ARM64)에서 각 항목을 확인한 날입니다.
+
+- `interruptible: true`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 신호를 받고 끝납니다: [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) (2026-11-03).
+- 취소된 `cmd` 명령 목록의 다음 프로그램이 끝납니다: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md) (2026-11-04).
+- 시작 후 0–1000ms에 취소한 `powershell` hook은 프로그램을 끝까지 실행하지 않습니다: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md) (2026-11-04).
+
 ## CI 단계
 
 `.github/workflows/ci.yml`의 `test (windows-latest)`는 `go test -count=1 -race ./...` 뒤 오류 알림 프로세스 검증과 위 세 테스트의 `-count=3` 반복을 실행합니다. 이어 `DW_E2E_FAULT=failure`, `timeout`의 의도적인 실패·시간 초과, 진단 파일과 세 PID 정리를 검사하고 별도로 실행한 Go 부모·자식·손자 트리가 살아 있는지 확인합니다. Windows 전용 단계는 앞 단계가 실패해도 job이 취소되지 않았다면 실행합니다. 앞 단계의 실패는 그대로 남아 최종 job도 실패하며, 진단 업로드 단계는 항상 실행됩니다. Go 빌드 캐시와 별개로 테스트 **결과 캐시는 재사용하지 않습니다**.

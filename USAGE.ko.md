@@ -177,7 +177,7 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 
 ## 이벤트 유실 알림
 
-`global.lifeCycle.onError`는 선택 항목이며 다른 hook과 같은 명령 목록 및 구조화된 `dir`/`cmd` 형식을 사용합니다. runner별 최대 한 번, 최초 치명적 오류가 `errors.Is(err, fsnotify.ErrEventOverflow)`를 만족할 때만 실행합니다. 전달 대기열 포화와 OS가 보고한 overflow가 여기에 해당합니다. 다른 치명적 오류, 정상 종료, debounce에 의한 대체는 알림을 실행하지 않습니다.
+`global.lifeCycle.onError`는 선택 항목이며 다른 hook과 같은 명령 목록 및 구조화된 `dir`/`cmd` 형식을 사용합니다. watcher를 한 번 실행하는 동안 최대 한 번, 최초 치명적 오류가 이벤트 유실일 때만 실행합니다. 대상의 전달 대기열이 가득 찬 경우(`dispatch queue full`)와 OS가 이벤트 overflow를 보고한 경우가 여기에 해당합니다. 다른 치명적 오류, 정상 종료, debounce에 의한 대체는 알림을 실행하지 않습니다.
 
 오류 정보는 명령 템플릿에 삽입하지 않고 환경 변수로 전달합니다.
 
@@ -186,28 +186,26 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 | `DW_ERROR_TARGET` | 치명적 오류가 발생한 감시 대상 |
 | `DW_ERROR_KIND` | `event_loss` |
 | `DW_ERROR_CAUSE` | 원래 원인 문자열 |
-| `DW_ERROR_MESSAGE` | `FatalError.Error()`의 전체 메시지 |
+| `DW_ERROR_MESSAGE` | `watch target "<대상>": <원인>` 형태의 치명적 오류 전체 메시지 |
 | `DW_ERROR_POSSIBLE_LOSS` | `true` (유실 가능성이며 유실 개수가 아님) |
 
 알림 명령도 설정한 셸이 실행하므로 환경 변수를 셸 문법으로 읽습니다. 예를 들어 `sh`에서는 `printf '%s\n' "$DW_ERROR_MESSAGE"`, `cmd`에서는 `echo !DW_ERROR_MESSAGE!`, `powershell`에서는 `Write-Output $env:DW_ERROR_MESSAGE`처럼 씁니다. `cmd`에서 `%DW_ERROR_MESSAGE%`로 읽으면 값에 든 `&`가 명령을 나누므로 `!DW_ERROR_MESSAGE!`를 씁니다. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다. 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
 
-최초 치명적 오류가 발생하면 모든 대상에서 새로운 일반 hook 실행 승인을 즉시 중단합니다. 알림은 일반 hook 취소와 독립적으로 고정 5초 실행 제한을 적용하고, 취소 정리에 최대 20초를 더 사용합니다(총 최대 25초). 알림 실패나 시간 초과는 로그에 남기며 원래 치명적 오류를 대체하지 않습니다. CLI는 원래 오류로 비정상 종료합니다. 취소 후에도 정상 종료 hook은 기존 규칙대로 실행합니다.
+최초 치명적 오류가 발생하면 어느 대상에서도 일반 hook의 새 실행을 시작하지 않습니다. 알림은 일반 hook 취소와 독립적으로 고정 5초 실행 제한을 적용하고, 취소 정리에 최대 20초를 더 사용합니다(총 최대 25초). 알림 실패나 시간 초과는 로그에 남기며 원래 치명적 오류를 대체하지 않습니다. CLI는 원래 오류로 비정상 종료합니다. 취소 후에도 정상 종료 hook은 기존 규칙대로 실행합니다.
 
-각 오류 알림 명령이 완료·실패·시간 초과되면 같은 정리 시간 한도 안에서 남은 자손을 종료합니다. Windows에서는 알림 명령마다 별도 Job Object를 만들고, 일시 중단된 부모를 Job에 배정한 뒤 실행하므로 부모 PID의 생존 여부에 의존하지 않습니다. Job을 설정하지 못하면 알림 명령을 실행하지 않습니다. 일반 hook은 이 알림 Job이 아닌 자기만의 Job Object에서 실행하며, 그 자손은 hook이 취소될 때만 끝냅니다([과부하와 종료](#과부하와-종료)).
+각 알림 명령이 완료·실패·시간 초과되면, 그 명령이 시작해 아직 실행 중인 프로세스를 같은 정리 시간 한도 안에서 끝냅니다. Windows에서 이 프로세스들을 끝낼 수 있게 알림 명령을 준비하지 못하면, watcher는 그 명령을 실행하지 않고 실패를 로그에 남깁니다. 일반 hook이 시작한 프로세스는 hook이 취소될 때만 끝냅니다([과부하와 종료](#과부하와-종료)).
 
 ## 과부하와 종료
 
-- 대상별 대기 이벤트는 최대 256개, 실행 중인 hook 세대는 최대 1개입니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외 suffix는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
+- 대상마다 대기 이벤트는 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외 suffix는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
 - 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
-- 중단 모드는 이전 세대를 취소하고 완료를 기다린 뒤 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리기를 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
-- Windows에서 watcher는 hook 명령을 하나씩 별도 Job Object에서 실행하고, 그 명령이 시작한 프로세스도 모두 같은 Job Object에 둡니다. 실행 중인 명령을 멈출 때는 그 명령의 프로세스 그룹에 CTRL+BREAK를 보냅니다. CTRL+BREAK는 보낸 순간 실행 중인 프로세스에만 갑니다. `cmd`가 `a & b`의 다음 프로그램을 시작하는 것처럼 명령이 그 뒤에 프로세스를 새로 시작하면, watcher는 그 프로세스가 100ms 동안 실행된 뒤 CTRL+BREAK를 다시 보냅니다. 새 프로세스가 없으면 다시 보내지 않으므로, 첫 CTRL+BREAK를 받고 종료하는 중인 프로그램은 두 번째 신호를 받지 않습니다.
-- Windows에서 취소된 명령의 프로세스가 첫 CTRL+BREAK 뒤 20초가 지나도 남아 있으면, watcher는 Job Object로 그 명령의 프로세스를 함께 끝냅니다. 신호를 무시하거나 자기만의 콘솔이나 프로세스 그룹을 쓰는 자손도 여기서 끝납니다. 교체와 종료는 명령의 프로세스가 모두 끝날 때까지 기다리므로, CTRL+BREAK로 끝나지 않는 명령은 교체와 종료를 최대 20초 늦춥니다. `CREATE_BREAKAWAY_FROM_JOB`로 자식을 시작해 Job Object를 벗어난 프로세스는 끝내지 않습니다. 취소되지 않고 끝난 명령이 시작한 프로세스는 계속 실행됩니다.
-- `shell: powershell`에서는 hook을 취소하는 데 최대 20초가 걸릴 수 있습니다. Windows PowerShell은 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지 않고 디버거로 들어가며, hook의 표준 입력이 콘솔이면 그 자리에서 입력을 기다립니다. Windows E2E VM(2026-11-04)에서는 시작하는 중에 CTRL+BREAK를 받은 PowerShell이 비정상 종료했고, Windows 오류 보고가 5초쯤 실행된 뒤에야 hook이 끝났습니다.
-- Windows E2E(UTM VM의 Windows 11 ARM64)는 Git Bash 없이 watcher를 실행해 다음을 확인합니다. `interruptible: true`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 신호를 받고 끝나는 것([`TestProcessLifecycle`](e2e/docs/scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](e2e/docs/scenarios/start-hook-shutdown-modes.ko.md), 2026-11-03), 취소된 `cmd` 명령 목록의 다음 프로그램이 끝나는 것([`TestCanceledCommandListStopsNextProgram`](e2e/docs/scenarios/canceled-command-list-stops-next-program.ko.md), 2026-11-04), 시작 후 0–1000ms에 취소한 `powershell` hook이 프로그램을 끝까지 실행하지 않는 것([`TestCanceledPowershellHookStops`](e2e/docs/scenarios/canceled-powershell-hook-stops.ko.md), 2026-11-04)입니다.
-- Windows에서 명령이 시작된 지 100ms가 지나기 전에 취소되면, watcher는 시작 후 100ms가 될 때까지 기다렸다가 CTRL+BREAK를 보냅니다. Go 런타임이 시작되는 중에 CTRL+BREAK를 받은 Go 프로그램은 신호를 처리하지 못하고 종료 코드 0xC0000005로 끝나기 때문에, 명령이 시작된 직후의 교체와 종료는 최대 100ms 늦어집니다. 100ms는 명령을 실행하는 셸이 시작된 때부터 세므로, 셸이 첫 CTRL+BREAK 직전에 시작한 Go 프로그램은 신호를 놓칠 수 있고, watcher는 이 프로그램을 20초 뒤에 명령의 다른 프로세스와 함께 끝냅니다.
-- 경로 판별 중 연 파일은 디렉터리 정보 조회 실패를 포함해 함수가 반환하기 전에 닫습니다. 이 handle의 반납은 가비지 컬렉션에 의존하지 않습니다.
-- 파일 조작과 OS 알림은 일대일이 아닙니다. fsnotify v1.7.0의 inotify는 `ErrEventOverflow`를 보고하지만 macOS kqueue는 이 오류를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. [E2E 시나리오와 한계](e2e/docs/reliability.ko.md#경합과-과부하-검증)를 확인하세요.
+- `interruptible: true`에서는 취소한 이전 실행이 끝난 뒤에 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리가 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
+- Windows에서 취소된 hook은 CTRL+BREAK를 받고, `cmd`에서 `a & b`의 다음 프로그램처럼 hook이 취소 뒤에 시작한 프로그램도 CTRL+BREAK를 받습니다. 첫 CTRL+BREAK 뒤 20초가 지나도 실행 중인 hook의 프로세스는 함께 끝내며, 신호를 무시하거나 자기만의 콘솔이나 프로세스 그룹을 쓰는 프로세스도 여기서 끝납니다. 교체와 종료는 hook의 프로세스가 모두 끝날 때까지 기다리므로, 일부 `powershell` hook처럼 CTRL+BREAK로 끝나지 않는 hook은 교체와 종료를 최대 20초 늦춥니다.
+- Windows에서 시작한 지 100ms가 지나기 전에 취소된 hook은 시작 후 100ms가 지났을 때 CTRL+BREAK를 받으므로, hook이 시작된 직후의 교체와 종료는 최대 100ms 늦어집니다.
+- Windows에서 취소되지 않고 끝난 hook이 시작한 프로세스는 계속 실행됩니다.
+- Windows E2E가 취소된 hook의 종료에 대해 확인하는 내용은 [Windows E2E](e2e/docs/windows.ko.md#hook-취소-검증)에 있습니다.
+- 파일 조작과 OS 알림은 일대일이 아닙니다. Linux는 OS 이벤트 overflow를 보고하며, 이때도 전달 대기열이 가득 찼을 때처럼 처리를 중단합니다. macOS는 overflow를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. [E2E 시나리오와 한계](e2e/docs/reliability.ko.md#경합과-과부하-검증)를 확인하세요.
 
 이 단계들의 순서는 [README의 동작 다이어그램](README.ko.md#동작-다이어그램)에 있습니다.
 
