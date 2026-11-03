@@ -53,6 +53,18 @@ homebrew_casks:
             run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/directory-watcher"]
           end
 
+# scoop-bucket에는 TAP_GITHUB_TOKEN이 아니라, 그 저장소에만 쓰기 권한이 있는 SSH deploy key로 push한다.
+# 개인키는 tag workflow가 저장소 비밀값 SCOOP_BUCKET_SSH_KEY에서 넘긴다.
+scoops:
+  - repository:
+      owner: seungyeop-lee
+      name: scoop-bucket
+      git:
+        url: "git@github.com:seungyeop-lee/scoop-bucket.git"
+        private_key: "{{ .Env.SCOOP_BUCKET_SSH_KEY }}"
+    homepage: "https://github.com/seungyeop-lee/directory-watcher"
+    description: "Watch directories and run commands when files change"
+
 # Dockerfile은 goreleaser가 빌드 컨텍스트의 <TARGETPLATFORM>/ 아래에 둔 바이너리를 복사한다.
 dockers_v2:
   - images:

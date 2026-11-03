@@ -59,6 +59,15 @@ brew uninstall --formula directory-watcher
 brew install --cask seungyeop-lee/tap/directory-watcher
 ```
 
+### Scoop
+
+On Windows:
+
+```shell
+scoop bucket add seungyeop-lee https://github.com/seungyeop-lee/scoop-bucket
+scoop install seungyeop-lee/directory-watcher
+```
+
 ### `go install`
 
 ```shell
