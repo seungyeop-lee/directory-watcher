@@ -52,14 +52,23 @@ type processObservation struct {
 	err    error
 }
 
-var observedProcesses = map[int]processObservation{}
+// processObserver belongs to one scenario. It keeps the handle opened at the
+// first observation of each recorded PID until the scenario's cleanup, so a
+// reused PID cannot be mistaken for, or terminated as, a recorded process.
+type processObserver struct {
+	observations map[int]processObservation
+}
 
-func processAlive(pid int) bool {
-	observation, known := observedProcesses[pid]
+func newProcessObserver() *processObserver {
+	return &processObserver{observations: map[int]processObservation{}}
+}
+
+func (o *processObserver) alive(pid int) bool {
+	observation, known := o.observations[pid]
 	if !known {
 		handle, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_TERMINATE, false, uint32(pid))
 		observation = processObservation{handle, err}
-		observedProcesses[pid] = observation
+		o.observations[pid] = observation
 	}
 	if errors.Is(observation.err, windows.ERROR_INVALID_PARAMETER) {
 		return false
@@ -71,15 +80,15 @@ func processAlive(pid int) bool {
 	return err != nil || state != windows.WAIT_OBJECT_0
 }
 
-func killRecordedGroup(pid int) {
-	killRecordedProcess(pid)
+func (o *processObserver) killGroup(pid int) {
+	o.kill(pid)
 }
 
-func killRecordedProcess(pid int) {
-	if !processAlive(pid) {
+func (o *processObserver) kill(pid int) {
+	if !o.alive(pid) {
 		return
 	}
-	observation := observedProcesses[pid]
+	observation := o.observations[pid]
 	if observation.err == nil {
 		var path [32768]uint16
 		size := uint32(len(path))
@@ -92,18 +101,18 @@ func killRecordedProcess(pid int) {
 	}
 }
 
-func releaseRecordedProcess(pid int) {
-	if observation, ok := observedProcesses[pid]; ok {
+func (o *processObserver) close() {
+	for pid, observation := range o.observations {
 		if observation.err == nil {
 			_ = windows.CloseHandle(observation.handle)
 		}
-		delete(observedProcesses, pid)
+		delete(o.observations, pid)
 	}
 }
 
-func processDiagnostics(pid int) string {
-	alive := processAlive(pid)
-	observation := observedProcesses[pid]
+func (o *processObserver) describe(pid int) string {
+	alive := o.alive(pid)
+	observation := o.observations[pid]
 	var created, exited, kernel, user windows.Filetime
 	if observation.err == nil {
 		if err := windows.GetProcessTimes(observation.handle, &created, &exited, &kernel, &user); err != nil {
@@ -114,11 +123,11 @@ func processDiagnostics(pid int) string {
 	return fmt.Sprintf("pid=%d alive=%t created=%d open-error=%v wait-state=%d wait-error=%v", pid, alive, created.Nanoseconds(), observation.err, state, waitErr)
 }
 
-func writeProcessDiagnostics(file string) error {
+func (o *processObserver) writeDiagnostics(file string) error {
 	var diagnostics strings.Builder
 	for _, record := range processRecords(file) {
 		if record.state == "start" {
-			fmt.Fprintf(&diagnostics, "run=%s depth=%d %s\n", record.run, record.depth, processDiagnostics(record.pid))
+			fmt.Fprintf(&diagnostics, "run=%s depth=%d %s\n", record.run, record.depth, o.describe(record.pid))
 		}
 	}
 	return os.WriteFile(file+".processes", []byte(diagnostics.String()), 0644)

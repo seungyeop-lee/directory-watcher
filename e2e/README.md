@@ -1,6 +1,6 @@
 # 자동 E2E 실행
 
-실제 현재 소스의 watcher와 Go 보조 프로그램을 빌드하고 파일 이벤트·hook 기록·프로세스 종료를 검사합니다. macOS 로컬·Linux Docker와 Windows는 생성·수정·삭제, hook 순서·이벤트 변수, 정상 종료와 실제 부모·자식·손자 프로세스 시나리오를 공유합니다.
+실제 현재 소스의 watcher와 Go 보조 프로그램을 빌드하고 파일 이벤트·hook 기록·프로세스 종료를 검사합니다. macOS 로컬·Linux Docker·Windows는 같은 Go E2E 시나리오를 실행하며, Windows에서만 실행하는 시나리오는 `TestCleanupReportsLockedResources`입니다. 시나리오별 검증 내용과 코드 위치는 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응)에 있습니다.
 
 ## 준비와 실행
 
@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 Windows 알림 실행기는 부모가 자손을 생성하기 전에 일시 중단 상태로 별도 Job Object에 배정합니다. 부모의 exit 7·exit 0 뒤에도 해당 Job의 자손을 종료하고 활성 프로세스가 0이 될 때까지 기존 정리 한도 안에서 기다립니다. 검증은 CLI 종료 직후 자손 부재를 검사하며 테스트 자체의 rescue 정리 결과를 제품의 정리 성공으로 세지 않습니다.
 
-GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다. 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다. `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다. 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다. 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다.
+GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다. `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다. `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다. 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다. 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다.
 
 Windows 실패 시 먼저 `records.log.processes`의 **정리 전** 세대·깊이·PID·생존·생성 시각·프로세스 접근 오류와 `records.log`의 마지막 `signal`·`complete`를 비교합니다. `cleanup.log`는 **정리 후** 상태이며 정상 종료 판정을 대신하지 않습니다. `GenerateConsoleCtrlEvent`·`AllocConsole` 오류는 콘솔 연결과 동일 콘솔의 프로세스 그룹을 확인합니다. 접근 거부·대기 API 오류는 생존으로 취급하여 실패시키며, PID 재사용 혼동을 막기 위해 준비 시 연 프로세스 handle을 정리 후까지 유지합니다. 실패 정리는 기록된 해당 실행의 보조 바이너리 handle만 종료하며, watcher가 아직 살아 있으면 해당 watcher의 트리에만 `TASKKILL /T /F`를 적용합니다.
 
@@ -65,40 +65,66 @@ Remove-Item Env:DW_E2E_FAULT
 - 컨테이너는 매번 새 ID를 사용합니다. 호스트 bind mount·공유 볼륨·고정 컨테이너 이름이 없으며, 빌드·파일 변경·hook 검증은 컨테이너 내부에서 수행합니다.
 - 컨테이너의 테스트 종료·실패·실행기 제한 시간 초과 후 로그를 복사하고 컨테이너를 제거합니다. 실행 중 터미널을 강제 종료하거나 실행기를 SIGKILL로 죽이면 정리 코드를 실행할 수 없습니다. 이때 출력된 컨테이너 ID로 `docker rm --force <컨테이너 ID>`를 실행합니다. 다른 실행의 컨테이너를 일괄 삭제하지 마세요.
 
-## 시나리오 추가
+## 코드 구성과 시나리오 추가
 
-| 구성 | 책임 |
+### 책임별 코드 위치
+
+| 파일 | 책임 |
 |---|---|
-| `harness_test.go` | 실행별 데이터, 실제 watcher 빌드·시작, 관찰 기반 대기, 종료 상태 검사, 진단 보존·정리 |
-| `golden_path_test.go` | 생성·수정·삭제, hook 순서, 7개 이벤트 변수 |
-| `process_test.go` | 시작 hook의 장시간 작업, 종료 처리 후 재시작, 부모·자식·손자 종료 |
-| `hookrec/main.go` | 한 줄 기록 또는 실제 하위 프로세스 생성, 세대·PID·시작·준비·신호·종료 완료 기록 |
-| `linux/main.go` | 현재 소스 사본을 독립 Linux 컨테이너로 전달, 종료 코드·로그·컨테이너 수명 관리 |
+| `harness_test.go` | 테스트 실행 전체의 콘솔 준비, watcher·`hookrec` 빌드와 바이너리 삭제. 시나리오별 실행 폴더, watcher 실행(`start`·`launch`), 보조 프로세스 실행(`startProcess`), 관찰 기반 대기(`await`), 정상 종료 검사(`stop`), 진단 보존·정리(`cleanup`) |
+| `hook_records_test.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`lines`), hook 명령 조립(`hook`), 기록 대기(`awaitLine`), 지연 hook의 `BEGIN` 기록(`delayedHooks`·`delayedHookBegun`), 수신 이벤트의 완료 경계(`awaitChangesComplete`) |
+| `process_records_test.go` | 프로세스 트리 기록 해석. 세대 준비 대기(`awaitReadyGenerations`), 생존·부재 확인(`assertRunning`·`processesGone`·`awaitProcessesGone`·`awaitDelayedHooksGone`), 정상 완료 판정(`assertGracefulCompletion`), 단계별 생존 기록(`snapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
+| `signal_unix.go`, `signal_windows_test.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 시나리오가 소유하는 `processObserver` |
+| `harness_observation_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
+| `cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증 |
+| `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램 |
+| `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
 
-1. 새 `*_test.go`에 설정·행동·기대 결과를 작성합니다. macOS·Linux 전용이면 `//go:build !windows`를 붙입니다.
-2. `s := newScenario(t)`로 실행을 만들고 `s.start(config)`를 호출합니다. 설정에는 `excludeSuffix: [.probe]`를 넣습니다. 공통 시작 함수는 제외된 probe 파일을 변경하고 실제 watcher 이벤트 로그를 관찰해 감시 준비를 확인합니다. 시작 hook 기록이나 고정 sleep은 준비 판정에 쓰지 않습니다.
-3. `s.write`, `s.waitLines`, `s.await`로 실제 행동과 제한 시간 내 결과를 확인하고 `s.stop()`으로 정상 종료 코드까지 검사합니다. 공통 준비·정리 코드를 복제하지 않습니다.
+바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다. 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다. Windows의 `processObserver`는 기록된 PID를 처음 관찰할 때 연 handle을 해당 시나리오의 정리가 끝날 때까지 유지하고, 강제 정리는 그 시나리오의 기록에 있는 `hookrec` handle만 종료합니다. 따라서 다른 시나리오나 다른 워크트리의 보호 트리는 정리 대상이 아닙니다.
 
-예를 들어, golden 설정의 기존 함수와 보조 프로그램을 재사용하는 새 시나리오는 다음과 같습니다.
+### 시나리오와 지원 코드의 대응
+
+| 시나리오 | 파일 | 검증 내용 | 사용하는 지원 코드 |
+|---|---|---|---|
+| `TestGoldenPath` | `golden_path_test.go` | 생성·수정·삭제, hook 순서, 7개 이벤트 변수 | `start`, `hook`, `awaitLine`, `stop` |
+| `TestProcessLifecycle` | `process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `awaitReadyGenerations`, `assertRunning`, `awaitProcessesGone`, `assertGracefulCompletion` |
+| `TestStartHookShutdownModes` | `process_test.go` | `noWait`·`interruptible` 네 조합의 시작 hook 종료·교체 | `awaitReadyGenerations`, `assertRunning`, `awaitProcessesGone`, `assertGracefulCompletion` |
+| `TestFastInflowSlowHook` | `reliability_test.go` | 느린 hook 중 빠른 유입의 네 조합, 제외·debounce, 종료 후 실행 금지 | `delayedHookBegun`, `awaitChangesComplete`, `awaitLine`, `awaitDelayedHooksGone` |
+| `TestTargetsRunIndependently` | `reliability_test.go` | 한 대상의 느린 hook이 다른 대상을 막지 않음 | `delayedHookBegun`, `awaitLine`, `awaitDelayedHooksGone` |
+| `TestBoundedOverloadCLI` | `reliability_test.go` | 전달 대기열 포화의 비정상 종료와 트리 정리 | `awaitReadyGenerations`, `exited`, `awaitProcessesGone` |
+| `TestEventLossNotificationCLI` | `error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `launch`, `startProcess`, `delayedHookBegun`, `awaitReadyGenerations`, `snapshotProcesses`, `processesGone`, `awaitDelayedHooksGone` |
+| `TestNormalChangesDoNotNotify` | `error_notification_test.go` | 일반 변경·debounce에서 알림 미실행 | `awaitChangesComplete`, `awaitLine` |
+| `TestCleanupReportsLockedResources` | `cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |
+
+### 새 시나리오 작성
+
+1. 새 `*_test.go`에 설정·입력 순서·성공 조건을 작성합니다. 특정 OS 전용 build tag는 해당 OS에서 실제로 실행해 원인을 확인한 경우에만 붙입니다.
+2. `s := newScenario(t)`로 실행을 만들고, 설정 YAML의 hook 명령은 `s.hook("--line=...")`으로 조립합니다. 설정에 `excludeSuffix: [.probe]`를 넣고 `s.start(config)`를 호출합니다. `start`는 DEBUG 로그에서 제외된 probe 파일의 실제 이벤트를 관찰해 감시 준비를 확인합니다. 기본 ERROR 로그 수준을 검증하려면 `s.launch(watcherBin, config)`로 실행하고 시작 hook 기록으로 준비를 확인합니다. 고정 sleep은 준비·완료 판정에 쓰지 않습니다.
+3. `s.write`로 행동하고, 기록 개수 대신 기다리는 hook·경로·세대를 `s.awaitLine`, `s.awaitReadyGenerations`, `s.await`의 조건으로 지정합니다. 정확한 개수·순서는 대기 뒤 테스트에서 직접 검사합니다.
+4. `s.stop()`으로 정상 종료와 종료 코드 0을 검사한 뒤 프로세스 기록을 판정합니다. 시나리오 정리의 강제 종료는 테스트가 끝난 뒤 실행되며 정상 종료 증거가 아닙니다.
 
 ```go
 func TestCreateAnotherFile(t *testing.T) {
-    s := newScenario(t)
-    s.start(buildConfig(hookrecBin, s.records, s.watch))
-    s.waitLines(2)
-    path := filepath.Join(s.watch, "another.txt")
-    f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY|os.O_EXCL, 0644)
-    if err != nil { t.Fatal(err) }
-    if err := f.Close(); err != nil { t.Fatal(err) }
-    s.waitLines(5)
-    s.stop()
-    if !strings.Contains(strings.Join(readLinesLenient(s.records), "\n"), "TARGET:onChange:"+path+"|") {
-        t.Fatal("created file was not reported")
-    }
+	s := newScenario(t)
+	s.start(fmt.Sprintf(`watchTargets:
+  - path: '%s'
+    lifeCycle:
+      onChange:
+        - %s
+    option:
+      watchEvent: C
+      excludeSuffix: [.probe]
+`, s.watch, s.hook("--line=CHANGE:{{.FileName}}")))
+	s.write(filepath.Join(s.watch, "another.txt"), nil)
+	s.awaitLine("create hook", 10*time.Second, "CHANGE:another.txt")
+	s.stop()
+	if got := countRecord(s.lines(), "CHANGE:another.txt"); got != 1 {
+		t.Fatalf("create hook count = %d, want 1", got)
+	}
 }
 ```
 
-장시간 프로세스는 `hookrec --file=<기록 경로> --depth=2`를 시작·변경 hook에 넣습니다. 부모는 자식, 자식은 손자를 실제로 실행합니다. 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다. 종료 신호를 받은 뒤 150ms 처리 지연과 자식의 정상 종료를 기다리고 `complete`를 남깁니다. 새 세대의 `start` 전에 이전 세대 전체의 신호·완료 기록이 있어야 하며, 종료 후 기록된 PID가 살아 있지 않아야 합니다.
+장시간 프로세스는 `s.hook("--depth=2")`를 시작·변경 hook에 넣습니다. 부모는 자식, 자식은 손자를 실제로 실행합니다. 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다. 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `awaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다. 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다. 지연 hook은 `s.hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다.
 
 ## 실패·시간 초과 진단
 
@@ -127,7 +153,7 @@ go test -race ./...
 
 `TestFastInflowSlowHook`는 noWait·interruptible의 네 조합을 검사합니다. 80ms hook 실행 중 10ms 간격으로 고유 파일 24개 생성, 같은 파일 24회 변경, 제외 파일 24회 변경을 약 0.3초 동안 입력합니다. 유입 배치의 실제 마지막 수신 유효 경로와 완료 기록을 대조하고, 수신·기록이 120ms 동안 변하지 않으며 시작된 hook이 모두 완료 또는 취소된 뒤 별도 `last.txt`를 생성합니다. 그 뒤 제외 파일을 한 번 더 변경하고 고립된 유효 변경의 완료를 기다립니다. 비중단 noWait에서는 생성 호출 횟수가 아니라 관찰된 유효 수신 이벤트 수만큼의 완료와 고유 파일 전체의 완료를 모두 검사합니다. 종료 시 대기 작업을 실행하지 않고 프로세스가 사라지는지도 검사합니다. `hookrec --delay=80ms`의 `BEGIN|PID|기록`, `CANCEL|PID|기록`과 완료 기록으로 실행·취소·잔존 PID를 관찰합니다.
 
-`TestStartHookShutdownModes`는 세 OS에서 네 조합의 장시간 시작 hook, 변경·종료 경합과 실제 부모·자식·손자 정리를 검사합니다. macOS·Linux 전용인 `TestTargetsRunIndependently`는 한 대상의 800ms hook이 다른 대상의 처리를 막지 않는지 검사합니다. `TestBoundedOverloadCLI`는 시작 hook 실행 중 유효 생성 이벤트 257개 이상을 입력하여 애플리케이션 전달 대기열 포화, 대상·원인 로그, 비정상 종료와 프로세스 트리 정리를 검사합니다.
+`TestStartHookShutdownModes`는 세 OS에서 네 조합의 장시간 시작 hook, 변경·종료 경합과 실제 부모·자식·손자 정리를 검사합니다. `TestTargetsRunIndependently`는 한 대상의 800ms hook이 다른 대상의 처리를 막지 않는지 검사합니다. `TestBoundedOverloadCLI`는 시작 hook 실행 중 유효 생성 이벤트 257개 이상을 입력하여 애플리케이션 전달 대기열 포화, 대상·원인 로그, 비정상 종료와 프로세스 트리 정리를 검사합니다.
 
 제어된 내부 테스트는 OS 알림 개수와 무관하게 noWait의 정확한 순서, debounce의 마지막 유효 이벤트, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다. 대상별 대기 상한은 256개이며 실행은 한 세대, debounce 타이머는 하나입니다. 대기열이 가득 차면 버퍼를 무한 확장하거나 무한 대기하지 않고 유실 오류로 종료합니다. 종료는 대기열을 처리 완료하는 동작이 아니라 취소·정리하는 동작입니다.
 
@@ -146,7 +172,7 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 
 내부 YAML 설정 테스트 `go test -count=1 -run '^TestDecoded' ./internal/config/yaml`은 디코딩된 구조화 명령을 실제로 실행하여 환경 변수의 원문 전달과 `dir` 작업 디렉토리, 기존 설정 호환성을 검사합니다. 알림의 환경 변수 및 고정 5초 실행 제한·최대 20초 취소 정리 계약은 [이벤트 유실 알림](../README.ko.md#이벤트-유실-알림)을 따릅니다.
 
-macOS·Linux 알림 실패·시간 초과 시나리오는 부모가 먼저 실패한 뒤 남은 자손까지 정리되는지 검사합니다. 알림의 프로세스 그룹에는 TERM 후 필요 시 KILL을 적용하며, 5초 실행·20초 정리 상한을 공유합니다. 이 추가 프로세스 정리 시나리오는 Windows에서 실행하지 않습니다.
+macOS·Linux 알림 실패·시간 초과 시나리오는 부모가 먼저 실패한 뒤 남은 자손까지 정리되는지 검사합니다. 알림의 프로세스 그룹에는 TERM 후 필요 시 KILL을 적용하며, 5초 실행·20초 정리 상한을 공유합니다. Windows의 같은 시나리오는 Job Object로 자손을 정리하며, 확인 방법은 [Windows 실행과 CI 결과 확인](#windows-실행과-ci-결과-확인)에 있습니다.
 
 ### 유실 검증의 구분
 

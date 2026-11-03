@@ -1,11 +1,10 @@
-//go:build !windows
-
 package e2e
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,19 +21,19 @@ func TestFastInflowSlowHook(t *testing.T) {
   - path: '%s'
     lifeCycle:
       onChange:
-        - '%s --file=%s --delay=80ms --line=DONE:{{.Path}}'
+        - %s
       onFinishWatch:
-        - '%s --file=%s --line=FINISH'
+        - %s
     option:
       noWait: %t
       interruptible: %t
       waitMillisecond: 30
       watchEvent: CU
       excludeSuffix: [.probe, .swp]
-`, s.watch, hookrecBin, s.records, hookrecBin, s.records, noWait, interruptible))
+`, s.watch, s.hook("--delay=80ms", "--line=DONE:{{.Path}}"), s.hook("--line=FINISH"), noWait, interruptible))
 				initial := filepath.Join(s.watch, "initial.txt")
 				s.write(initial, []byte("initial"))
-				s.await("slow hook starts", 5*time.Second, func() bool { return strings.Contains(strings.Join(readLinesLenient(s.records), "\n"), "BEGIN|") })
+				s.await("slow hook starts", 5*time.Second, func() bool { return delayedHookBegun(s.lines(), "DONE:"+initial) })
 				started := time.Now()
 				var paths []string
 				shared := filepath.Join(s.watch, "shared.txt")
@@ -53,19 +52,11 @@ func TestFastInflowSlowHook(t *testing.T) {
 				last := filepath.Join(s.watch, "last.txt")
 				s.write(last, []byte("last"))
 				s.write(filepath.Join(s.watch, "excluded.swp"), []byte("after isolated valid event"))
-				s.await("isolated valid change completes after inflow", time.Until(deadline), func() bool {
-					return countRecord(readLinesLenient(s.records), "DONE:"+last) > 0
-				})
-				lines := readLinesLenient(s.records)
+				s.awaitLine("isolated valid change completes after inflow", time.Until(deadline), "DONE:"+last)
+				lines := s.lines()
 				if noWait && !interruptible {
 					for _, path := range paths {
-						found := false
-						for _, line := range lines {
-							if line == "DONE:"+path {
-								found = true
-							}
-						}
-						if !found {
+						if countRecord(lines, "DONE:"+path) == 0 {
 							t.Errorf("sequential accepted change not completed: %s", path)
 						}
 					}
@@ -79,7 +70,7 @@ func TestFastInflowSlowHook(t *testing.T) {
 				s.write(filepath.Join(s.watch, "shutdown.txt"), []byte("stop"))
 				s.await("shutdown event received", 5*time.Second, func() bool { return strings.Contains(s.log.String(), "shutdown.txt") })
 				s.stop()
-				lines = readLinesLenient(s.records)
+				lines = s.lines()
 				finish := -1
 				for n, line := range lines {
 					if line == "FINISH" {
@@ -94,7 +85,7 @@ func TestFastInflowSlowHook(t *testing.T) {
 						t.Fatalf("hook after finish: %s", line)
 					}
 				}
-				assertLineProcessesGone(s)
+				s.awaitDelayedHooksGone()
 				t.Logf("load: 24 unique creates + 24 shared writes + 25 excluded writes; interval=10ms duration=%s hook=80ms debounce=30ms records=%d", elapsed, len(lines))
 			})
 		}
@@ -111,7 +102,7 @@ func TestTargetsRunIndependently(t *testing.T) {
   - path: '%s'
     lifeCycle:
       onChange:
-        - '%s --file=%s --delay=800ms --line=SLOW'
+        - %s
     option:
       noWait: true
       watchEvent: C
@@ -119,27 +110,26 @@ func TestTargetsRunIndependently(t *testing.T) {
   - path: '%s'
     lifeCycle:
       onChange:
-        - '%s --file=%s --line=FAST'
+        - %s
     option:
       noWait: true
       watchEvent: C
       excludeSuffix: [.probe]
-`, s.watch, hookrecBin, s.records, other, hookrecBin, s.records))
+`, s.watch, s.hook("--delay=800ms", "--line=SLOW"), other, s.hook("--line=FAST")))
+	otherProbe := filepath.Join(other, "readiness.probe")
 	s.await("second target readiness", 5*time.Second, func() bool {
-		s.write(filepath.Join(other, "readiness.probe"), nil)
-		return strings.Contains(s.log.String(), filepath.Join(other, "readiness.probe"))
+		s.write(otherProbe, nil)
+		return strings.Contains(s.log.String(), strconv.Quote(otherProbe))
 	})
 	s.write(filepath.Join(s.watch, "slow.txt"), nil)
-	s.await("slow target executing", 5*time.Second, func() bool { return strings.Contains(strings.Join(readLinesLenient(s.records), "\n"), "BEGIN|") })
+	s.await("slow target executing", 5*time.Second, func() bool { return delayedHookBegun(s.lines(), "SLOW") })
 	s.write(filepath.Join(other, "fast.txt"), nil)
-	s.await("independent target completes", 500*time.Millisecond, func() bool { return strings.Contains(strings.Join(readLinesLenient(s.records), "\n"), "FAST") })
-	for _, line := range readLinesLenient(s.records) {
-		if line == "SLOW" {
-			t.Fatal("fast target waited for slow target")
-		}
+	s.awaitLine("independent target completes", 500*time.Millisecond, "FAST")
+	if countRecord(s.lines(), "SLOW") != 0 {
+		t.Fatal("fast target waited for slow target")
 	}
 	s.stop()
-	assertLineProcessesGone(s)
+	s.awaitDelayedHooksGone()
 }
 
 func TestBoundedOverloadCLI(t *testing.T) {
@@ -148,40 +138,26 @@ func TestBoundedOverloadCLI(t *testing.T) {
   - path: '%s'
     lifeCycle:
       onStartWatch:
-        - '%s --file=%s --depth=2'
+        - %s
     option:
       noWait: true
       watchEvent: C
       excludeSuffix: [.probe]
-`, s.watch, hookrecBin, s.records))
-	s.await("startup tree occupies sequential worker", 10*time.Second, func() bool {
-		for _, r := range processRecords(s.records) {
-			if r.depth == 2 && r.state == "ready" {
-				return true
-			}
-		}
-		return false
-	})
+`, s.watch, s.hook("--depth=2")))
+	s.awaitReadyGenerations("startup tree occupies sequential worker", 1)
 	started := time.Now()
 	for n := range 300 {
 		s.write(filepath.Join(s.watch, fmt.Sprintf("load-%03d.txt", n)), nil)
 	}
-	s.await("bounded overload exits", 10*time.Second, func() bool {
-		select {
-		case <-s.done:
-			return true
-		default:
-			return false
-		}
-	})
+	s.await("bounded overload exits", 10*time.Second, s.exited)
 	if s.exit == nil {
 		t.Fatal("queue saturation exited successfully")
 	}
 	log := s.log.String()
-	if !strings.Contains(log, "dispatch queue full (capacity 256)") || !strings.Contains(log, s.watch) {
+	if !strings.Contains(log, "dispatch queue full (capacity 256)") || !strings.Contains(log, strconv.Quote(s.watch)) {
 		t.Fatalf("queue loss target/cause missing: %s", log)
 	}
-	records := processRecords(s.records)
-	s.await("overloaded process tree disappears", 5*time.Second, func() bool { return recordsGone(records) })
+	records := s.processRecords()
+	s.awaitProcessesGone("overloaded process tree disappears", records)
 	t.Logf("actual application overload: 300 creates duration=%s pending-bound=256 active-generation=1 descendants-alive=0 exit=%v", time.Since(started), s.exit)
 }

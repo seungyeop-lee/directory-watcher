@@ -201,7 +201,7 @@ watchTargets:
 
 ## 개발 검증
 
-현재 워크트리 소스를 사용하는 macOS·Linux 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.md)를 확인하세요.
+현재 워크트리 소스를 사용하는 macOS·Linux·Windows 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.md)를 확인하세요.
 
 ## 라이센스
 

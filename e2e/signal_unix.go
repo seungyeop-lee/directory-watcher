@@ -21,18 +21,24 @@ func forceStop(cmd *exec.Cmd) error {
 	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }
 
-func processAlive(pid int) bool {
+// processObserver keeps no per-process state on Unix: signal 0 and process
+// group kills address recorded PIDs directly.
+type processObserver struct{}
+
+func newProcessObserver() *processObserver { return &processObserver{} }
+
+func (*processObserver) alive(pid int) bool {
 	return syscall.Kill(pid, 0) == nil
 }
 
-func killRecordedGroup(pid int) {
+func (*processObserver) killGroup(pid int) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
-func killRecordedProcess(pid int) {
+func (*processObserver) kill(pid int) {
 	_ = syscall.Kill(pid, syscall.SIGKILL)
 }
 
-func releaseRecordedProcess(pid int) {}
+func (*processObserver) writeDiagnostics(file string) error { return nil }
 
-func writeProcessDiagnostics(file string) error { return nil }
+func (*processObserver) close() {}

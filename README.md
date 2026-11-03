@@ -201,7 +201,7 @@ The following diagram illustrates how `Directory Watcher` works:
 
 ## Development checks
 
-See the [E2E guide (Korean)](e2e/README.md) for automated macOS/Linux checks against the current worktree and instructions for adding scenarios.
+See the [E2E guide (Korean)](e2e/README.md) for automated macOS, Linux, and Windows checks against the current worktree and instructions for adding scenarios.
 
 ## License
 
