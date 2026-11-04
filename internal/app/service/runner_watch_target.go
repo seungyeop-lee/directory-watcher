@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -18,6 +20,9 @@ import (
 type watchTargetRunners []*watchTargetRunner
 
 const dispatchCapacity = 256
+
+// kqueueOS는 fsnotify가 kqueue로 감시하는 운영체제인지 나타낸다.
+var kqueueOS = slices.Contains([]string{"darwin", "dragonfly", "freebsd", "netbsd", "openbsd"}, runtime.GOOS)
 
 // FatalError는 종료가 필요한 실패가 일어난 감시 대상과 그 원인을 보존한다.
 type FatalError struct {
@@ -34,6 +39,8 @@ type watchTargetRunner struct {
 	watchRoot string
 	// watching은 감시를 시작했는지를 나타낸다. Run이 done을 닫기 전에만 쓰므로 Stop은 done을 기다린 뒤 읽는다.
 	watching bool
+	// dirsToReAdd는 감시 루프가 다음 이벤트를 받을 때 감시 목록에 다시 넣을 폴더다. reAddDirs를 본다.
+	dirsToReAdd []string
 
 	runStartHook  func()
 	runChangeHook func(event domain.Event)
@@ -130,6 +137,9 @@ func (r *watchTargetRunner) Run() error {
 		case ev, ok := <-r.watchEvents:
 			if !ok {
 				return &FatalError{Path: r.path, Cause: errors.New("watcher event channel closed unexpectedly")}
+			}
+			if err := r.reAddDirs(); err != nil {
+				return &FatalError{Path: r.path, Cause: err}
 			}
 			r.printEventLog(ev)
 			// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
@@ -230,8 +240,35 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 		}
 
 		r.logger.Debug(fmt.Sprint("add path:", p))
-		return r.watcher.Add(p)
+		if err := r.watcher.Add(p); err != nil {
+			return err
+		}
+		// reAddDirs가 막는 경합은 fsnotify의 kqueue 구현에만 있다.
+		if kqueueOS {
+			r.dirsToReAdd = append(r.dirsToReAdd, p)
+		}
+		return nil
 	})
+}
+
+// reAddDirs는 addDirTree가 감시 목록에 넣은 폴더를 다시 넣는다.
+//
+// fsnotify의 kqueue 구현은 감시 중인 폴더의 항목이 바뀔 때마다 그 폴더 안의 하위 폴더를 내부에서 다시
+// 등록한다. 이 등록은 하위 폴더의 감시 설정을 먼저 읽고 나중에 등록하므로, 그 사이에 같은 하위 폴더를 Add하면
+// Add 전에 읽은 설정이 Add의 등록을 덮어쓴다. 그러면 그 하위 폴더 안에 새로 생기는 파일의 이벤트가 오지 않는다.
+// fsnotify는 이벤트를 한 goroutine에서 차례로 보내므로, Add 뒤에 다음 이벤트를 받았다면 Add와 겹친 내부
+// 등록은 이미 끝났다. 그래서 다음 이벤트를 받을 때 같은 폴더를 한 번 더 Add해 덮어쓴 등록을 되돌린다.
+// 이 두 번째 Add와 다시 겹친 내부 등록은 되돌리지 못한다.
+func (r *watchTargetRunner) reAddDirs() error {
+	dirs := r.dirsToReAdd
+	r.dirsToReAdd = nil
+	for _, dir := range dirs {
+		// 다시 넣기 전에 폴더가 지워졌거나 옮겨졌으면 넣지 않는다.
+		if err := r.watcher.Add(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // isExcluded는 감시 대상 안의 경로 name이 기본 제외 규칙이나 option.exclude에 따라 감시와 hook 실행에서

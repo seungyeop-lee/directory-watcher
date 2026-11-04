@@ -190,6 +190,9 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 		{name: "file in linked folder with watchSubDir", watchSubDir: true, probe: "a.txt", want: true},
 		{name: "existing subfolder", watchSubDir: true, startDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
 		{name: "subfolder created while watching", watchSubDir: true, laterDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
+		// exclude 패턴이 있으면 감시 루프가 새 폴더를 감시 목록에 넣기까지 시간이 늘어, macOS에서 reAddDirs가
+		// 되돌리는 fsnotify의 등록 경합이 자주 일어난다.
+		{name: "subfolder created while watching with exclude", watchSubDir: true, laterDirs: []string{"sub"}, exclude: []string{"other/**"}, probe: "sub/a.txt", want: true},
 		{name: "existing excluded folder", watchSubDir: true, startDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
 		{name: "excluded folder created while watching", watchSubDir: true, laterDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
 		{name: "excluded file", watchSubDir: true, exclude: []string{"skip.txt"}, probe: "skip.txt", want: false},
