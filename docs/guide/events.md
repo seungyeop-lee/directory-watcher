@@ -44,7 +44,8 @@ A hook can rely on the following:
 
 - A folder `C` means that the folder appeared together with everything in it. The hook reads what is inside the folder itself: the watcher sends no file events for the files a folder brings with it, even when the folder is moved in.
 - A folder `D` means that the folder and everything in it are gone.
-  - After deleting a path known to be a folder, duplicate deletion notifications and late write notifications while the path is absent are discarded. This also applies when folder collection is disabled or split across batches; changes to a new file or folder at the same path are handled separately.
+  - For 2 seconds after deleting a path known to be a folder, duplicate deletion notifications and late write notifications while the path is absent are discarded. This also applies when folder collection is disabled or split across batches; changes to a new file or folder at the same path are handled separately.
+    - Windows sends these notifications, and macOS sometimes sends the duplicate deletion. In measurements on 2026-11-04 they arrived within 7 ms of the deletion. Linux sends neither.
 - Events of the files and subfolders inside a folder that arrive while its folder event is being collected are absorbed into that folder event. They are absorbed in the same way with `watch.dirEvent: none`, so a change of a whole folder then runs no hook.
 - Among the events collected in one wait, `hookBatch.deliver: lastPerPath` drops the `D` of each path under a folder whose final change is `D`. A folder deletion split across several collections of folder events therefore reaches the hook as one folder `D` when one wait collects it.
   - These `D`s are dropped in the same way with `watch.dirEvent: none`, so that folder deletion then runs no hook.

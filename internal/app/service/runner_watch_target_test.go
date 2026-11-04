@@ -57,7 +57,16 @@ func flushDeletionRuns(t *testing.T, r *watchTargetRunner) []domain.Event {
 	return runs
 }
 
+// setDirRemoveRepeat은 테스트 동안 지운 폴더의 REMOVE가 한 번 더 올 수 있는 운영체제인지를 repeat로 정한다.
+func setDirRemoveRepeat(t *testing.T, repeat bool) {
+	t.Helper()
+	saved := dirRemoveRepeatOS
+	dirRemoveRepeatOS = repeat
+	t.Cleanup(func() { dirRemoveRepeatOS = saved })
+}
+
 func TestDeletedFolderLifecycleAcrossBatches(t *testing.T) {
+	setDirRemoveRepeat(t, true)
 	for _, separated := range []bool{false, true} {
 		for _, deliver := range []domain.Deliver{domain.DeliverLast, domain.DeliverLastPerPath, domain.DeliverEach} {
 			for _, filter := range []string{"all", "files", "folders"} {
@@ -126,7 +135,7 @@ func TestDeletedFolderLifecycleAcrossBatches(t *testing.T) {
 					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
 					sendDeletionEvent(t, r, fsnotify.Write, "pkg.v2")
 					if late := flushDeletionRuns(t, r); len(late) != 0 {
-						t.Fatalf("late notifications after hook flush = %v", late)
+						t.Fatalf("late notifications within removedDirTTL after hook flush = %v", late)
 					}
 				})
 			}
@@ -135,6 +144,7 @@ func TestDeletedFolderLifecycleAcrossBatches(t *testing.T) {
 }
 
 func TestDeletedFolderRecreationStartsNewLifecycle(t *testing.T) {
+	setDirRemoveRepeat(t, true)
 	for _, subDir := range []bool{false, true} {
 		for _, replacement := range []string{"file", "folder", "file without create"} {
 			t.Run(fmt.Sprintf("subDir=%v/%s", subDir, replacement), func(t *testing.T) {
@@ -174,6 +184,54 @@ func TestDeletedFolderRecreationStartsNewLifecycle(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// 이름이 매번 다른 폴더를 지워도, 지운 폴더의 기록은 중복 REMOVE가 올 수 있는 운영체제에서 removedDirTTL 안에 지운
+// 폴더만 남고 그 밖의 운영체제에서는 생기지 않는지 확인한다. 어느 쪽이든 폴더마다 폴더 삭제 하나만 hook에 간다.
+func TestRemovedFolderRecordsExpire(t *testing.T) {
+	for _, repeat := range []bool{false, true} {
+		t.Run(fmt.Sprintf("repeat=%v", repeat), func(t *testing.T) {
+			setDirRemoveRepeat(t, repeat)
+			root := t.TempDir()
+			const folders = 50
+			for i := range folders {
+				mkdir(t, filepath.Join(root, fmt.Sprintf("tmp-%04d", i)))
+			}
+			option := hookBatchOption(0, 0, domain.DeliverEach)
+			option.DirBatch = domain.DirBatchOption{}
+			r := deletionRunner(t, root, option)
+			remove := func(i int) {
+				name := fmt.Sprintf("tmp-%04d", i)
+				removeAll(t, filepath.Join(root, name))
+				sendDeletionEvent(t, r, fsnotify.Remove, name)
+				if repeat {
+					sendDeletionEvent(t, r, fsnotify.Remove, name)
+				}
+			}
+			for i := range folders - 1 {
+				remove(i)
+			}
+			want := 0
+			if repeat {
+				want = folders - 1
+			}
+			if got := len(r.removedDirs); got != want {
+				t.Fatalf("records within removedDirTTL = %d, want %d", got, want)
+			}
+			time.Sleep(removedDirTTL + 100*time.Millisecond)
+			remove(folders - 1)
+			if repeat {
+				want = 1
+			}
+			if got := len(r.removedDirs); got != want {
+				t.Fatalf("records after removedDirTTL = %d, want %d", got, want)
+			}
+			runs := flushDeletionRuns(t, r)
+			if len(runs) != folders || slices.ContainsFunc(runs, func(run domain.Event) bool { return !run.IsDir }) {
+				t.Fatalf("runs = %v, want one folder deletion per folder", runs)
+			}
+		})
 	}
 }
 
