@@ -208,3 +208,20 @@ func sameSet(got, want []string) bool {
 	slices.Sort(want)
 	return slices.Equal(got, want)
 }
+
+// setDifference는 want에만 있는 값을 missing으로, got에만 있는 값을 extra로, 정렬하고 중복을 없애 돌려준다.
+func setDifference(got, want []string) (missing, extra []string) {
+	for _, value := range want {
+		if !slices.Contains(got, value) {
+			missing = append(missing, value)
+		}
+	}
+	for _, value := range got {
+		if !slices.Contains(want, value) {
+			extra = append(extra, value)
+		}
+	}
+	slices.Sort(missing)
+	slices.Sort(extra)
+	return slices.Compact(missing), slices.Compact(extra)
+}

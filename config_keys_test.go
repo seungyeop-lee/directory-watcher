@@ -2,7 +2,6 @@ package main
 
 import (
 	"reflect"
-	"slices"
 	"testing"
 
 	yamlconfig "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
@@ -61,20 +60,7 @@ func guideConfigKeys(t *testing.T, file string, parents map[string]bool) []strin
 // checkSameKeys는 got이 want와 다르면, want에만 있는 키와 got에만 있는 키를 location과 함께 알린다.
 func checkSameKeys(t *testing.T, location string, got, want []string) {
 	t.Helper()
-	var missing, unknown []string
-	for _, key := range want {
-		if !slices.Contains(got, key) {
-			missing = append(missing, key)
-		}
-	}
-	for _, key := range got {
-		if !slices.Contains(want, key) {
-			unknown = append(unknown, key)
-		}
-	}
-	if len(missing) > 0 || len(unknown) > 0 {
-		slices.Sort(missing)
-		slices.Sort(unknown)
+	if missing, unknown := setDifference(got, want); len(missing) > 0 || len(unknown) > 0 {
 		t.Errorf("%s: missing keys %q, keys not in yaml tags %q", location, missing, unknown)
 	}
 }
