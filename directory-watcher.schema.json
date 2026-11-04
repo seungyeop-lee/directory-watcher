@@ -56,19 +56,13 @@
             "type": "object",
             "description": "Options for monitoring this directory.",
             "properties": {
-              "excludeDir": {
+              "exclude": {
                 "type": "array",
-                "description": "List of directory paths to exclude from monitoring.",
+                "description": "Path patterns, relative to path, of files and folders to exclude from watching. Patterns are globs with ** and are checked in order; a pattern starting with ! watches a path excluded by an earlier pattern again. A matched folder and everything below it are not watched.",
                 "items": {
                   "type": "string"
-                }
-              },
-              "excludeSuffix": {
-                "type": "array",
-                "description": "List of file suffixes to exclude from monitoring.",
-                "items": {
-                  "type": "string"
-                }
+                },
+                "examples": [["dist/**", "**/*.log", "!important.log"]]
               },
               "waitMillisecond": {
                 "type": "integer",

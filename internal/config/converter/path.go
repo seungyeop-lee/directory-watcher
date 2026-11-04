@@ -16,19 +16,3 @@ func NewPathConverter(path config.Path) *PathConverter {
 func (c PathConverter) Convert() domain.Path {
 	return domain.Path(c.path)
 }
-
-type PathsConverter struct {
-	paths config.Paths
-}
-
-func NewPathsConverter(paths config.Paths) *PathsConverter {
-	return &PathsConverter{paths: paths}
-}
-
-func (c PathsConverter) Convert() domain.Paths {
-	result := domain.Paths{}
-	for _, p := range c.paths {
-		result = append(result, domain.Path(p))
-	}
-	return result
-}

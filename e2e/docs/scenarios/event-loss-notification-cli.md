@@ -56,7 +56,7 @@ Liveness records are left in `notification-before.log` and `notification-after.l
 | Location | Hooks and options |
 |---|---|
 | Global | `onError` (per mode), `onBeforeChange`: `BEFORE`, `onFinishWatch`: `GLOBAL:FINISH` |
-| Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `noWait: true`, `watchEvent: C`, `excludeSuffix: [.probe]` |
+| Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `noWait: true`, `watchEvent: C`, `exclude: ['*.probe']` |
 | Target 2: `other` in the run folder | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `noWait: true`, `watchEvent: C` |
 
 The watcher is launched with `Launch` at the default ERROR log level. With no DEBUG log, watch readiness is judged from the `BEGIN` record of `START` and the `OTHER:READY` record instead of probe events.

@@ -14,7 +14,7 @@ With `global.lifeCycle.onError` configured, checks for both values of `noWait` t
 
 - The global `onError` is `hookrec --error-context --line=NOTIFY`. When it runs, it records `ERROR|<JSON>`.
 - The target `onChange` records `CHANGE:{{.Path}}`, and `onFinishWatch` records `FINISH`.
-- The target options are the per-subtest `noWait`, plus `waitMillisecond: 50`, `watchEvent: C`, and `excludeSuffix: [.probe]`.
+- The target options are the per-subtest `noWait`, plus `waitMillisecond: 50`, `watchEvent: C`, and `exclude: ['*.probe']`.
 
 ## Subtests
 

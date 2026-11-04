@@ -15,19 +15,20 @@ import (
 // 관계없이 같은 규칙으로 감시되는지 확인한다.
 func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 	cases := []struct {
-		name       string
-		dirs       []string // 감시 대상 안에 만들 폴더
-		absLink    string   // 감시 대상 밖 폴더를 절대 경로로 가리키는 링크의 이름
-		relLink    string   // 감시 대상 밖 폴더를 상대 경로로 가리키는 링크의 이름
-		excludeDir []string
-		probe      string // 내용을 쓸 파일
-		want       bool   // probe의 변경으로 hook이 실행되어야 하는지
+		name    string
+		dirs    []string // 감시 대상 안에 만들 폴더
+		absLink string   // 감시 대상 밖 폴더를 절대 경로로 가리키는 링크의 이름
+		relLink string   // 감시 대상 밖 폴더를 상대 경로로 가리키는 링크의 이름
+		exclude []string
+		probe   string // 내용을 쓸 파일
+		want    bool   // probe의 변경으로 hook이 실행되어야 하는지
 	}{
 		{name: "plain nested folder", dirs: []string{"plain/sub"}, probe: "plain/sub/a.txt", want: true},
 		{name: "default-excluded folder", dirs: []string{".cache/sub"}, probe: ".cache/sub/a.txt", want: false},
 		{name: "default-excluded nested folder", dirs: []string{"plain/_tmp"}, probe: "plain/_tmp/a.txt", want: false},
-		{name: "excludeDir sibling with same prefix", dirs: []string{"dir1", "dir10"}, excludeDir: []string{"dir1"}, probe: "dir10/a.txt", want: true},
-		{name: "excludeDir subfolder", dirs: []string{"parent/sub/deep"}, excludeDir: []string{"parent/sub"}, probe: "parent/sub/deep/a.txt", want: false},
+		{name: "exclude sibling with same prefix", dirs: []string{"dir1", "dir10"}, exclude: []string{"dir1/**"}, probe: "dir10/a.txt", want: true},
+		{name: "exclude subfolder", dirs: []string{"parent/sub/deep"}, exclude: []string{"parent/sub/**"}, probe: "parent/sub/deep/a.txt", want: false},
+		{name: "exclude folder at any depth", dirs: []string{"a/node_modules/pkg"}, exclude: []string{"**/node_modules/**"}, probe: "a/node_modules/pkg/a.txt", want: false},
 		{name: "absolute symlink to folder", absLink: "link", probe: "link/a.txt", want: false},
 		{name: "relative symlink to folder", relLink: "link", probe: "link/a.txt", want: false},
 		{name: "absolute and relative symlinks to folder", absLink: "abs", relLink: "rel", probe: "abs/a.txt", want: false},
@@ -79,16 +80,12 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 					build(target)
 				}
 
-				var excludeDir domain.Paths
-				for _, dir := range tc.excludeDir {
-					excludeDir = append(excludeDir, domain.Path(filepath.Join(target, dir)))
-				}
 				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 					Path: domain.Path(target),
 					Option: domain.WatchTargetsOption{
 						NoWait:      true,
 						WatchSubDir: true,
-						ExcludeDir:  excludeDir,
+						Exclude:     tc.exclude,
 						WatchEvent:  domain.WatchEvent{Create: true, Update: true},
 					},
 				}, newMockLogger())
@@ -178,14 +175,14 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 }
 
 // 감시 대상 path가 폴더를 가리키는 링크이면 watchSubDir와 관계없이 링크가 가리키는 폴더를 감시하고,
-// 링크 경로 아래로 적은 excludeDir도 그 폴더의 같은 하위 폴더를 제외하는지 확인한다.
+// exclude 패턴도 그 폴더의 같은 위치를 빼는지 확인한다.
 func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 	cases := []struct {
 		name        string
 		watchSubDir bool
 		startDirs   []string // 감시 시작 전에 링크가 가리키는 폴더 안에 만들 폴더
 		laterDirs   []string // 감시 중에 링크가 가리키는 폴더 안에 만들 폴더
-		excludeDir  []string // 링크 경로 기준으로 적는다
+		exclude     []string
 		probe       string
 		want        bool
 	}{
@@ -193,8 +190,9 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 		{name: "file in linked folder with watchSubDir", watchSubDir: true, probe: "a.txt", want: true},
 		{name: "existing subfolder", watchSubDir: true, startDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
 		{name: "subfolder created while watching", watchSubDir: true, laterDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
-		{name: "existing excludeDir under link path", watchSubDir: true, startDirs: []string{"ex"}, excludeDir: []string{"ex"}, probe: "ex/a.txt", want: false},
-		{name: "excludeDir under link path created while watching", watchSubDir: true, laterDirs: []string{"ex"}, excludeDir: []string{"ex"}, probe: "ex/a.txt", want: false},
+		{name: "existing excluded folder", watchSubDir: true, startDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
+		{name: "excluded folder created while watching", watchSubDir: true, laterDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
+		{name: "excluded file", watchSubDir: true, exclude: []string{"skip.txt"}, probe: "skip.txt", want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -220,16 +218,12 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 			}
 			makeDirs(tc.startDirs)
 
-			var excludeDir domain.Paths
-			for _, dir := range tc.excludeDir {
-				excludeDir = append(excludeDir, domain.Path(filepath.Join(link, dir)))
-			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path: domain.Path(link),
 				Option: domain.WatchTargetsOption{
 					NoWait:      true,
 					WatchSubDir: tc.watchSubDir,
-					ExcludeDir:  excludeDir,
+					Exclude:     tc.exclude,
 					WatchEvent:  domain.WatchEvent{Create: true, Update: true},
 				},
 			}, newMockLogger())

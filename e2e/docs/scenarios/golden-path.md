@@ -24,7 +24,7 @@ The watcher must exit with exit code 0 within 10 seconds of receiving the shutdo
 
 - All of the global hooks `onStartWatch`, `onBeforeChange`, `onAfterChange`, and `onFinishWatch` and the target hooks `onStartWatch`, `onChange`, and `onFinishWatch` are configured.
 - Each hook records its own label, such as `GLOBAL:onBeforeChange`, with `hookrec --line=<label>`. Change hooks append `:<variables>` after the label. The variables are written outside quotes so that each value is passed as one argument even with spaces, and they are separated by commas, which sh and cmd do not interpret.
-- The target options are `waitMillisecond: 100`, `watchEvent: CDU`, and `excludeSuffix: [.probe]`.
+- The target options are `waitMillisecond: 100`, `watchEvent: CDU`, and `exclude: ['*.probe']`.
 
 ## Sequence
 

@@ -41,7 +41,8 @@ func TestWatchTargetRunner_Debounce_Bug(t *testing.T) {
 
 	runner := &watchTargetRunner{
 		runChangeHook:   mockRunChangeHook,
-		excludeSuffix:   domain.PathSuffixes{".swp"},
+		watchRoot:       "/test",
+		exclude:         domain.ExcludePatterns{"**/*.swp"},
 		waitMillisecond: 100, // 100ms 대기
 		noWait:          false,
 		logger:          newMockLogger(),

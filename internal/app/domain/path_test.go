@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -68,25 +67,6 @@ func TestPath_Contains(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.p.Contains(tt.args.input); got != tt.want {
 				t.Errorf("Contains() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestPath_Rebase(t *testing.T) {
-	tests := []struct {
-		name string
-		p    Path
-		want Path
-	}{
-		{name: "from과 같은 경로", p: "./link", want: Path(filepath.FromSlash("/real"))},
-		{name: "from 아래 경로", p: "./link/sub/deep", want: Path(filepath.FromSlash("/real/sub/deep"))},
-		{name: "from 밖 경로 (이름 앞부분만 같음)", p: "./link2/sub", want: "./link2/sub"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.p.Rebase("./link", "/real"); got != tt.want {
-				t.Errorf("Rebase() = %v, want %v", got, tt.want)
 			}
 		})
 	}

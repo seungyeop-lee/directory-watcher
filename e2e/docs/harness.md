@@ -45,7 +45,7 @@ Each scenario name links to a scenario document that describes what it checks an
 ## Writing a new scenario
 
 1. Create a new `*_test.go` in `scenarios/` (`package scenarios`, importing the `harness` package) and write the configuration, the input order, and the success criteria. Add an OS-specific build tag only after you have run the test on that OS and confirmed the cause.
-2. Create the run with `s := harness.NewScenario(t)`, and build the hook commands in the configuration YAML with `s.Hook("--line=...")`. The default shell (sh or cmd) interprets hook commands. `Hook` wraps each argument without a template in double quotes and leaves an argument with a template unquoted so that its value is passed as one argument, so do not put characters that shells interpret, such as `|` or `&`, in an argument with a template. Put `excludeSuffix: [.probe]` in the configuration and call `s.Start(config)`. `Start` confirms that watching is ready by observing the actual event of the excluded probe file in the DEBUG log. To verify the default ERROR log level, launch with `s.Launch(harness.WatcherBin(), config)` and confirm readiness from a start hook record. Do not use a fixed sleep to judge readiness or completion.
+2. Create the run with `s := harness.NewScenario(t)`, and build the hook commands in the configuration YAML with `s.Hook("--line=...")`. The default shell (sh or cmd) interprets hook commands. `Hook` wraps each argument without a template in double quotes and leaves an argument with a template unquoted so that its value is passed as one argument, so do not put characters that shells interpret, such as `|` or `&`, in an argument with a template. Put `exclude: ['*.probe']` in the configuration and call `s.Start(config)`. `Start` confirms that watching is ready by observing the actual event of the excluded probe file in the DEBUG log. To verify the default ERROR log level, launch with `s.Launch(harness.WatcherBin(), config)` and confirm readiness from a start hook record. Do not use a fixed sleep to judge readiness or completion.
 3. Act with `s.Write`, and instead of a record count, specify the hook, path, or generation to wait for as the condition of `s.AwaitLine`, `s.AwaitReadyGenerations`, or `s.Await`. Check exact counts and order directly in the test after waiting.
 4. Check graceful shutdown and exit code 0 with `s.Stop()`, then judge the process records. The forced termination in scenario cleanup runs after the test ends and is not evidence of graceful shutdown.
 
@@ -59,7 +59,7 @@ func TestCreateAnotherFile(t *testing.T) {
         - %s
     option:
       watchEvent: C
-      excludeSuffix: [.probe]
+      exclude: ['*.probe']
 `, s.Watch, s.Hook("--line=CHANGE:{{.FileName}}")))
 	s.Write(filepath.Join(s.Watch, "another.txt"), nil)
 	s.AwaitLine("create hook", 10*time.Second, "CHANGE:another.txt")

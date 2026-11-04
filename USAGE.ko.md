@@ -69,10 +69,8 @@ watchTargets:
       onFinishWatch: # onFinishWatch hook
         [ global onStartWatch hook의 사양과 동일 ]
     option:
-      excludeDir:
-        - [ 감시 제외대상 폴더 path ]
-      excludeSuffix:
-        - [ 감시 제외대상 파일 접미사 ]
+      exclude:
+        - [ 감시하지 않을 파일과 폴더의 경로 패턴, path 기준 ]
       waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
       watchSubDir: [ 하위 디렉토리 감시 여부, default는 true ]
       watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제), default는 "CUD" ]
@@ -167,7 +165,7 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 - `powershell`은 값에 공백이 있어 Windows PowerShell 5.1이 인자를 큰따옴표로 감쌀 때만 끝의 `\`를 두 번 씁니다. 공백이 있고 `\`로 끝나는 값을 cmdlet이나 문자열에 쓰면 끝에 `\`가 하나 더 보입니다.
 - Windows PowerShell 5.1은 빈 문자열 인자를 프로그램에 넘기지 않습니다. `powershell`에서 확장자가 없는 파일의 `{{.ExtName}}`처럼 빈 값을 따옴표 밖에 쓰면 프로그램이 받는 인자가 하나 줄어듭니다.
 
-`path`가 폴더를 가리키는 링크이면 링크가 가리키는 폴더를 감시합니다. 이때 위 변수에는 `path` 대신 링크를 모두 푼 경로를 기준으로 한 경로가 들어갑니다. `excludeDir`를 링크 경로 아래로 적으면 링크가 가리키는 폴더의 같은 위치를 제외합니다.
+`path`가 폴더를 가리키는 링크이면 링크가 가리키는 폴더를 감시합니다. 이때 위 변수에는 `path` 대신 링크를 모두 푼 경로를 기준으로 한 경로가 들어갑니다. `exclude` 패턴도 링크가 가리키는 폴더의 같은 위치를 제외합니다.
 
 ## waitMillisecond와 noWait
 
@@ -197,7 +195,7 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 
 ## 과부하와 종료
 
-- 대상마다 대기 이벤트는 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외 suffix는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
+- 대상마다 대기 이벤트는 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외된 경로는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
 - 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
 - `interruptible: true`에서는 취소한 이전 실행이 끝난 뒤에 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리가 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
@@ -213,6 +211,73 @@ watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자
 
 - 이름이 `.`이나 `_`로 시작하는 파일과 폴더는 감시하지 않습니다. 예를 들어 `.env`를 만들거나 수정하거나 삭제해도, `.git`, `.idea` 안에서 변경이 일어나도 hook이 실행되지 않습니다. `path`로 지정한 폴더는 이름과 관계없이 감시합니다.
 - 감시 대상 폴더 안에 있는 폴더 링크는 따라가지 않습니다. 감시 대상 폴더 안의 링크가 감시 대상 밖 폴더를 가리켜도, 그 폴더에서 일어난 변경으로는 hook이 실행되지 않습니다.
+
+## exclude로 경로 제외하기
+
+`option.exclude`에는 경로 패턴을 적습니다. 패턴에 맞는 파일과 폴더는 감시하지 않습니다.
+
+- 패턴에 맞는 폴더는 그 아래 전체와 함께 감시 목록에 넣지 않습니다. 감시를 시작할 때 있던 폴더든 감시 중에 생긴 폴더든 같습니다. 그래서 `node_modules`처럼 큰 폴더를 빼면 그 안의 항목은 하나도 감시 목록에 들어가지 않습니다.
+- 패턴에 맞는 파일은 만들거나 수정하거나 삭제해도 hook이 실행되지 않습니다.
+
+```yaml
+watchTargets:
+  - path: site
+    option:
+      exclude:
+        - '**/node_modules/**'
+        - '**/*.log'
+        - '!important.log'
+```
+
+- 패턴은 감시 대상 `path`를 기준으로 한 상대 경로에 맞춥니다. 폴더 구분자는 OS와 관계없이 `/`로 씁니다. `**`가 없는 패턴은 `path` 바로 아래부터 맞추므로, `build.log`는 `site/build.log`에는 맞지만 `site/logs/build.log`에는 맞지 않습니다.
+- `*`는 이름의 일부, `?`는 글자 하나, `**`는 폴더 여러 단계에 맞습니다. `dist/**`는 `dist` 폴더와 그 아래 전체에 맞고, `**/*.log`는 어느 깊이에 있든 `.log` 파일에 맞습니다. `[abc]` 같은 문자 집합과 `{js,css}` 같은 선택지도 쓸 수 있습니다.
+- 패턴은 위에서부터 차례로 맞춰 보고, 마지막으로 맞은 패턴이 결과를 정합니다. `!`로 시작하는 패턴에 맞으면 앞선 패턴이 뺀 경로를 다시 감시합니다. 위 예시에서는 `site` 바로 아래의 `important.log`만 hook을 실행하고, 다른 `.log` 파일은 hook을 실행하지 않습니다.
+- 뺀 폴더는 감시하지 않으므로, 그 안의 경로는 `!`로 다시 감시하게 할 수 없습니다. 폴더 안의 일부만 남기려면 폴더 대신 폴더 안의 항목을 빼는 패턴을 씁니다. `dist/*`와 `!dist/keep.txt`를 쓰면 `dist` 안에서 `keep.txt`만 hook을 실행합니다. `dist/**`와 `!dist/keep.txt`를 쓰면 `dist`를 감시하지 않으므로 `keep.txt`도 hook을 실행하지 않습니다.
+- [기본 제외 규칙](#기본-제외-규칙)으로 빠지는 이름도 `!`로 다시 감시하게 할 수 없습니다.
+- 패턴은 따옴표로 감쌉니다. 따옴표가 없으면 YAML은 `*`나 `!`로 시작하는 값을 YAML 문법으로 읽습니다.
+
+패턴 문법이 잘못되면 watcher는 hook을 하나도 실행하지 않고 `Error: watchTargets[0].option.exclude[1]: invalid pattern "[a"` 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+### hook이 자기 결과로 다시 실행되지 않게 하기
+
+hook이 감시 대상 `path` 안에 파일을 쓰면 그 쓰기도 변경이므로, hook이 다시 실행되고 또 파일을 쓰면서 끝없이 반복됩니다. hook이 쓰는 경로를 `exclude`에 적어 이 반복을 막습니다. 다음 예시에서 `onChange`는 `site/build.log`에 쓰고, `exclude: ['build.log']`가 그 쓰기로 hook이 실행되는 것을 막습니다.
+
+```yaml
+watchTargets:
+  - path: site
+    lifeCycle:
+      onChange:
+        - dir: .
+          cmd: make build > site/build.log
+    option:
+      exclude:
+        - 'build.log'
+```
+
+`interruptible: false`에서는 hook이 실행되는 동안 바뀐 다른 파일도 hook이 끝난 뒤 hook을 실행합니다.
+
+### excludeDir와 excludeSuffix에서 옮기기
+
+버전 3에서 `excludeDir`와 `excludeSuffix`를 없앴습니다. 감시 대상의 `option`에 둘 중 하나가 남아 있으면 watcher는 hook을 하나도 실행하지 않고 다음 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].option.excludeDir is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")
+```
+
+오류에 적힌 "Moving from excludeDir and excludeSuffix"는 영어판에서 이 절의 제목입니다. 각 값은 다음 차이를 확인하며 `exclude`로 옮깁니다.
+
+- `excludeDir` 값은 watcher를 실행한 위치를 기준으로 한 폴더 경로였습니다. `exclude` 패턴은 감시 대상 `path`를 기준으로 합니다.
+- `excludeSuffix` 값은 절대 경로의 끝부분과 비교했으므로, `out.txt`를 적으면 `layout.txt`도 빠졌습니다. `exclude`에서는 파일 이름 앞에 `**/`를 붙여 어느 깊이에 있든 그 이름에만 맞게 합니다.
+- `excludeSuffix`에서 옮긴 패턴이 폴더 이름에 맞으면 그 폴더 안 전체도 빠집니다. 예를 들어 `**/*~`는 `backup~` 폴더 안의 파일도 뺍니다.
+
+감시 대상이 `path: 'site'`일 때는 다음과 같이 옮깁니다.
+
+| 옛 설정 | 옮긴 설정 |
+|---|---|
+| `excludeDir: ['site/dist']` | `exclude: ['dist/**']` |
+| `excludeSuffix: ['_test.go']` | `exclude: ['**/*_test.go']` |
+| `excludeSuffix: ['~']` | `exclude: ['**/*~']` |
+| `excludeSuffix: ['/out.txt']` | `exclude: ['**/out.txt']` |
 
 ## 폴더 이벤트 감지에 대한 제약사항
 

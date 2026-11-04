@@ -9,7 +9,7 @@ Directory Watcher runs the commands you define when files are created, modified,
 ### Run commands when files change
 
 - Watch several directories at once. Each watch target has its own `onChange` commands, and the global `onBeforeChange` and `onAfterChange` commands run before and after every target's `onChange`.
-- Choose which events to react to (create, update, delete), and exclude directories, file suffixes, or subdirectories from watching.
+- Choose which events to react to (create, update, delete), exclude files and folders from watching with path patterns, or skip subdirectories.
 - Pass the changed file's path, name, extension, directory, and event type to a command with [template variables](USAGE.md#variables-in-commands).
 
 ### Handle bursts of changes
@@ -126,8 +126,9 @@ Download the executable from the [releases page](https://github.com/seungyeop-le
 
 3. Change a file under `src`. `make test` runs 100 ms after the last change.
 
+- **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
 - **Stop:** press Ctrl+C or send SIGTERM. The watcher cancels running commands, runs the finish commands, and exits.
-- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
+- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, excluding paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
 
 ## How it works
 
@@ -140,7 +141,7 @@ flowchart TD
         watchDirs["Start watching the target directory"]
         targetStart["target onStartWatch"]
         receiveEvent(("Event received"))
-        filterEvent{"Watched event type and<br>not an excluded suffix?"}
+        filterEvent{"Watched event type and<br>not an excluded path?"}
         queueEvent{"Room in the target's<br>256-event queue?"}
         modeChoice{"noWait?"}
         debounceWait["Wait waitMillisecond after the last event<br>and keep only that event"]
@@ -154,7 +155,7 @@ flowchart TD
     globalStart --> watchDirs
     watchDirs --> targetStart
     targetStart --> receiveEvent
-    receiveEvent -->|"a new directory joins the watch list"| filterEvent
+    receiveEvent -->|"a new directory that is not excluded<br>joins the watch list"| filterEvent
     filterEvent -->|"no: ignore"| receiveEvent
     filterEvent -->|"yes"| queueEvent
     queueEvent -->|"no"| fatalStop

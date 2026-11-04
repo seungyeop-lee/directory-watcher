@@ -1,6 +1,8 @@
 package yaml
 
 import (
+	"fmt"
+
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config"
@@ -29,9 +31,13 @@ func (c Config) BuildCommandSet() (domain.CommandSet, error) {
 	if err != nil {
 		return domain.CommandSet{}, err
 	}
+	watchTargets, err := c.WatchTargets.BuildCommandSets(shell)
+	if err != nil {
+		return domain.CommandSet{}, err
+	}
 	return domain.CommandSet{
 		Global:       c.Global.BuildCommandSet(shell),
-		WatchTargets: c.WatchTargets.BuildCommandSets(shell),
+		WatchTargets: watchTargets,
 	}, nil
 }
 
@@ -65,12 +71,16 @@ func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) domain.GlobalLife
 
 type WatchTargetsConfigs []WatchTargetsConfig
 
-func (cs WatchTargetsConfigs) BuildCommandSets(shell cmd.Shell) domain.WatchTargetsCommandSets {
+func (cs WatchTargetsConfigs) BuildCommandSets(shell cmd.Shell) (domain.WatchTargetsCommandSets, error) {
 	result := domain.WatchTargetsCommandSets{}
-	for _, c := range cs {
-		result = append(result, c.BuildCommandSet(shell))
+	for i, c := range cs {
+		commandSet, err := c.BuildCommandSet(shell)
+		if err != nil {
+			return nil, fmt.Errorf("watchTargets[%d].%w", i, err)
+		}
+		result = append(result, commandSet)
 	}
-	return result
+	return result, nil
 }
 
 type WatchTargetsConfig struct {
@@ -79,12 +89,16 @@ type WatchTargetsConfig struct {
 	Option    WatchTargetsOptionConfig    `yaml:"option"`
 }
 
-func (c WatchTargetsConfig) BuildCommandSet(shell cmd.Shell) domain.WatchTargetsCommandSet {
+func (c WatchTargetsConfig) BuildCommandSet(shell cmd.Shell) (domain.WatchTargetsCommandSet, error) {
+	option, err := c.Option.BuildOption()
+	if err != nil {
+		return domain.WatchTargetsCommandSet{}, err
+	}
 	return domain.WatchTargetsCommandSet{
 		Path:      converter.NewPathConverter(c.Path).Convert(),
 		LifeCycle: c.LifeCycle.BuildLifeCycle(shell),
-		Option:    c.Option.BuildOption(),
-	}
+		Option:    option,
+	}, nil
 }
 
 type WatchTargetsLifeCycleConfig struct {
@@ -102,23 +116,38 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) domain.Watc
 }
 
 type WatchTargetsOptionConfig struct {
-	ExcludeDir      config.Paths        `yaml:"excludeDir"`
-	ExcludeSuffix   config.PathSuffixes `yaml:"excludeSuffix"`
-	WaitMillisecond config.Millisecond  `yaml:"waitMillisecond"`
-	WatchSubDir     *bool               `yaml:"watchSubDir"`
-	WatchEvent      config.WatchEvent   `yaml:"watchEvent"`
-	NoWait          *bool               `yaml:"noWait"`
-	Interruptible   *bool               `yaml:"interruptible"`
+	Exclude         config.Exclude     `yaml:"exclude"`
+	WaitMillisecond config.Millisecond `yaml:"waitMillisecond"`
+	WatchSubDir     *bool              `yaml:"watchSubDir"`
+	WatchEvent      config.WatchEvent  `yaml:"watchEvent"`
+	NoWait          *bool              `yaml:"noWait"`
+	Interruptible   *bool              `yaml:"interruptible"`
+
+	// RemovedExcludeDir와 RemovedExcludeSuffix는 v3에서 없앤 키를 받는다. yaml.Unmarshal은 모르는 키를
+	// 무시하므로, 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더와 파일이 경고 없이 다시 감시된다.
+	RemovedExcludeDir    yaml.Node `yaml:"excludeDir" json:"-"`
+	RemovedExcludeSuffix yaml.Node `yaml:"excludeSuffix" json:"-"`
 }
 
-func (c WatchTargetsOptionConfig) BuildOption() domain.WatchTargetsOption {
+func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, error) {
+	for _, removed := range []struct {
+		key  string
+		node yaml.Node
+	}{{"excludeDir", c.RemovedExcludeDir}, {"excludeSuffix", c.RemovedExcludeSuffix}} {
+		if removed.node.Kind != 0 {
+			return domain.WatchTargetsOption{}, fmt.Errorf(`option.%s is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`, removed.key)
+		}
+	}
+	exclude, err := converter.NewExcludeConverter(c.Exclude).Convert()
+	if err != nil {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
+	}
 	return domain.WatchTargetsOption{
-		ExcludeDir:      converter.NewPathsConverter(c.ExcludeDir).Convert(),
-		ExcludeSuffix:   converter.NewPathSuffixesConverter(c.ExcludeSuffix).Convert(),
+		Exclude:         exclude,
 		WaitMillisecond: converter.NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
 		WatchSubDir:     converter.NewWatchSubDirConverter(c.WatchSubDir).Convert(),
 		WatchEvent:      converter.NewWatchEventConverter(c.WatchEvent).Convert(),
 		NoWait:          converter.NewNoWaitConverter(c.NoWait).Convert(),
 		Interruptible:   converter.NewInterruptibleConverter(c.Interruptible).Convert(),
-	}
+	}, nil
 }

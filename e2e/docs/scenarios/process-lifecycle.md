@@ -17,7 +17,7 @@ In interruptible mode (`interruptible: true`), when a hook made of real parent, 
 
 - The target `onStartWatch` and `onChange` are set to the same `hookrec --depth=2` command. The record format (`generation|PID|depth|state`) and signal handling are described in [`hookrec` process trees and delayed hooks](../harness.md#hookrec-process-trees-and-delayed-hooks).
 - The target `onFinishWatch` records `TARGET:onFinishWatch`, and the global `onFinishWatch` records `GLOBAL:onFinishWatch`.
-- The target options are `interruptible: true`, `waitMillisecond: 100`, `watchEvent: C`, and `excludeSuffix: [.probe]`.
+- The target options are `interruptible: true`, `waitMillisecond: 100`, `watchEvent: C`, and `exclude: ['*.probe']`.
 
 ## Sequence
 

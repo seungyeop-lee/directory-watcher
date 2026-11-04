@@ -3,9 +3,8 @@ package config
 type CmdInfo interface{}
 
 type Path string
-type Paths []Path
 
-type PathSuffixes []string
+type Exclude []string
 
 type Millisecond uint
 

@@ -9,7 +9,7 @@ Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·�
 ### 파일이 바뀌면 명령 실행하기
 
 - 여러 디렉터리를 한 번에 감시합니다. 감시 대상마다 `onChange` 명령을 따로 정하고, 전역 `onBeforeChange`와 `onAfterChange` 명령은 모든 대상의 `onChange` 앞뒤에 실행됩니다.
-- 반응할 이벤트(생성, 수정, 삭제)를 고르고, 특정 디렉터리나 파일 접미사, 하위 디렉터리를 감시에서 뺄 수 있습니다.
+- 반응할 이벤트(생성, 수정, 삭제)를 고르고, 경로 패턴으로 파일과 폴더를 감시에서 빼거나 하위 디렉터리를 감시하지 않게 할 수 있습니다.
 - 바뀐 파일의 경로, 이름, 확장자, 디렉터리, 이벤트 종류를 [템플릿 변수](USAGE.ko.md#실행-명령에서-쓸-수-있는-변수)로 명령에 넘깁니다.
 
 ### 몰려드는 변경 다루기
@@ -126,8 +126,9 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 3. `src` 아래의 파일을 고칩니다. 마지막 변경 뒤 100ms가 지나면 `make test`가 실행됩니다.
 
+- **hook의 결과 파일:** hook이 `path` 안에 쓴 파일도 변경이므로, hook이 다시 실행되며 끝없이 반복됩니다. 그 파일을 감시 대상의 `exclude`에 적습니다. 예를 들어 `onChange`가 `src/build.log`에 쓰면 `option` 아래에 `exclude: ['build.log']`를 적습니다. 자세한 내용은 [hook이 자기 결과로 다시 실행되지 않게 하기](USAGE.ko.md#hook이-자기-결과로-다시-실행되지-않게-하기)를 확인하세요.
 - **멈추기:** Ctrl+C를 누르거나 SIGTERM을 보냅니다. watcher는 실행 중인 명령을 취소하고 종료 명령을 실행한 뒤 끝납니다.
-- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
+- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 경로 제외, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
 
 ## 동작 다이어그램
 
@@ -140,7 +141,7 @@ flowchart TD
         watchDirs["대상 디렉터리 감시 시작"]
         targetStart["대상 onStartWatch"]
         receiveEvent(("이벤트 수신"))
-        filterEvent{"감시하는 이벤트 종류이고<br>제외 접미사가 아닌가?"}
+        filterEvent{"감시하는 이벤트 종류이고<br>제외된 경로가 아닌가?"}
         queueEvent{"대상의 256개 대기열에<br>자리가 있는가?"}
         modeChoice{"noWait?"}
         debounceWait["마지막 이벤트 뒤 waitMillisecond 대기<br>그 이벤트만 남김"]
@@ -154,7 +155,7 @@ flowchart TD
     globalStart --> watchDirs
     watchDirs --> targetStart
     targetStart --> receiveEvent
-    receiveEvent -->|"새 디렉터리는 감시 목록에 추가"| filterEvent
+    receiveEvent -->|"제외되지 않은 새 디렉터리는<br>감시 목록에 추가"| filterEvent
     filterEvent -->|"아니오: 무시"| receiveEvent
     filterEvent -->|"예"| queueEvent
     queueEvent -->|"아니오"| fatalStop

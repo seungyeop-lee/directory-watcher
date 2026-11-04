@@ -40,8 +40,7 @@ type watchTargetRunner struct {
 	runFinishHook func()
 	cancelHook    func()
 
-	excludeDir      domain.Paths
-	excludeSuffix   domain.PathSuffixes
+	exclude         domain.ExcludePatterns
 	waitMillisecond domain.Millisecond
 	watchSubDir     bool
 	watchEvent      domain.WatchEvent
@@ -76,8 +75,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		runChangeHook:   hookFunc.RunChangeHook,
 		runFinishHook:   hookFunc.RunFinishHook,
 		cancelHook:      hookFunc.Cancel,
-		excludeDir:      commandSet.Option.ExcludeDir,
-		excludeSuffix:   commandSet.Option.ExcludeSuffix,
+		exclude:         commandSet.Option.Exclude,
 		waitMillisecond: commandSet.Option.WaitMillisecond,
 		watchSubDir:     commandSet.Option.WatchSubDir,
 		watchEvent:      commandSet.Option.WatchEvent,
@@ -140,7 +138,7 @@ func (r *watchTargetRunner) Run() error {
 			if ev.Name == "" || !domain.Path(r.watchRoot).Contains(domain.Path(ev.Name)) {
 				continue
 			}
-			excluded := r.isDefaultExcluded(ev.Name)
+			excluded := r.isExcluded(ev.Name)
 			if ev.Op.Has(fsnotify.Create) {
 				if !excluded && r.watchSubDir {
 					if err := r.addDirTree(ev.Name); err != nil {
@@ -150,7 +148,7 @@ func (r *watchTargetRunner) Run() error {
 			} else if ev.Op.Has(fsnotify.Remove) {
 				_ = r.watcher.Remove(ev.Name)
 			}
-			if excluded || !r.watchEvent.IsListening(ev) || r.excludeSuffix.Contain(domain.Path(ev.Name)) {
+			if excluded || !r.watchEvent.IsListening(ev) {
 				continue
 			}
 			select {
@@ -191,10 +189,9 @@ func (r *watchTargetRunner) addDir() error {
 	return r.addDirTree(r.watchRoot)
 }
 
-// resolveLinkedPath는 path가 폴더 링크이면 링크를 푼 경로를 watchRoot로 정하고, 링크 경로 아래로 적은
-// excludeDir도 그 경로 아래로 바꾼다. 링크를 그대로 두면 filepath.WalkDir은 시작 경로의 링크를 따라가지
-// 않아 아무 폴더도 감시하지 않고, macOS의 fsnotify는 링크에 적힌 대상 경로로 이벤트를 알려 excludeDir
-// 판정과 경로 기준이 어긋난다.
+// resolveLinkedPath는 path가 폴더 링크이면 링크를 푼 경로를 watchRoot로 정한다. 링크를 그대로 두면
+// filepath.WalkDir은 시작 경로의 링크를 따라가지 않아 아무 폴더도 감시하지 않고, macOS의 fsnotify는 링크에
+// 적힌 대상 경로로 이벤트를 알려 exclude 패턴을 맞출 상대 경로의 기준이 어긋난다.
 func (r *watchTargetRunner) resolveLinkedPath() error {
 	r.watchRoot = r.path.String()
 	info, err := os.Lstat(r.watchRoot)
@@ -208,11 +205,7 @@ func (r *watchTargetRunner) resolveLinkedPath() error {
 	if err != nil {
 		return err
 	}
-	excludeDir := make(domain.Paths, len(r.excludeDir))
-	for i, dir := range r.excludeDir {
-		excludeDir[i] = dir.Rebase(r.path, domain.Path(resolved))
-	}
-	r.watchRoot, r.excludeDir = resolved, excludeDir
+	r.watchRoot = resolved
 	return nil
 }
 
@@ -232,11 +225,7 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 		if !d.IsDir() {
 			return nil
 		}
-		if r.isDefaultExcluded(p) {
-			return filepath.SkipDir
-		}
-		path := domain.Path(p)
-		if r.excludeDir.Equal(path) || r.excludeDir.IsSubFolder(path) {
+		if r.isExcluded(p) {
 			return filepath.SkipDir
 		}
 
@@ -245,10 +234,20 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 	})
 }
 
-// isDefaultExcluded는 name이 기본 제외 규칙에 따라 감시와 hook 실행에서 빠지는지 판단한다.
-// 감시 대상 경로는 사용자가 직접 지정했으므로 이름으로 제외하지 않는다.
-func (r *watchTargetRunner) isDefaultExcluded(name string) bool {
-	return name != r.watchRoot && domain.Path(name).IsDefaultExcludeFile()
+// isExcluded는 감시 대상 안의 경로 name이 기본 제외 규칙이나 option.exclude에 따라 감시와 hook 실행에서
+// 빠지는지 판단한다. 감시 대상 경로는 사용자가 직접 지정했으므로 빼지 않는다.
+func (r *watchTargetRunner) isExcluded(name string) bool {
+	if name == r.watchRoot {
+		return false
+	}
+	if domain.Path(name).IsDefaultExcludeFile() {
+		return true
+	}
+	if len(r.exclude) == 0 {
+		return false
+	}
+	rel, ok := domain.Path(r.watchRoot).RelOf(domain.Path(name))
+	return ok && r.exclude.Excludes(filepath.ToSlash(rel))
 }
 
 func (r *watchTargetRunner) selectEventHandler() func(chan domain.Event) {
@@ -280,7 +279,7 @@ func (r *watchTargetRunner) selectEventHandler() func(chan domain.Event) {
 				if !ok {
 					return
 				}
-				if r.excludeSuffix.Contain(event.Path) {
+				if r.isExcluded(event.Path.String()) {
 					continue
 				}
 				if r.noWait {

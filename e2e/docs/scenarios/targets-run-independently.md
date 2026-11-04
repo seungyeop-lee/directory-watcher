@@ -17,7 +17,7 @@ While a hook of one watch target runs for 800ms, checks that a hook of another w
 | Slow target | Watch folder | `hookrec --delay=800ms --line=SLOW` |
 | Fast target | `other` in the run folder | `hookrec --line=FAST` |
 
-Both targets use `noWait: true`, `watchEvent: C`, and `excludeSuffix: [.probe]`.
+Both targets use `noWait: true`, `watchEvent: C`, and `exclude: ['*.probe']`.
 
 ## Sequence
 

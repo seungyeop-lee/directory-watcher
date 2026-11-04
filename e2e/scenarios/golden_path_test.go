@@ -80,7 +80,7 @@ watchTargets:
     option:
       waitMillisecond: 100
       watchEvent: CDU
-      excludeSuffix: [.probe]
+      exclude: ['*.probe']
 `, command("GLOBAL:onStartWatch", ""), command("GLOBAL:onBeforeChange", change), command("GLOBAL:onAfterChange", change), command("GLOBAL:onFinishWatch", ""), s.Watch, command("TARGET:onStartWatch", ""), command("TARGET:onChange", change), command("TARGET:onFinishWatch", ""))
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -172,4 +173,44 @@ func readTrimmed(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSpace(string(data))
+}
+
+func TestRemovedExcludeKeysStopBuild(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{name: "excludeDir", option: "excludeDir: ['site/dist']", want: "watchTargets[1].option.excludeDir"},
+		{name: "excludeSuffix", option: "excludeSuffix: ['~']", want: "watchTargets[1].option.excludeSuffix"},
+		{name: "empty list", option: "excludeDir: []", want: "watchTargets[1].option.excludeDir"},
+		{name: "null value", option: "excludeSuffix:", want: "watchTargets[1].option.excludeSuffix"},
+		{name: "with exclude", option: "exclude: ['dist/**']\n      excludeDir: ['site/dist']", want: "watchTargets[1].option.excludeDir"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      " + tt.option + "\n"
+			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+			want := tt.want + ` is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`
+			if err == nil || err.Error() != want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestExcludeBuildsPatterns(t *testing.T) {
+	commands := buildCommandSet(t, "watchTargets:\n  - path: site\n    option:\n      exclude: ['dist/**', '**/*.log', '!important.log']\n")
+	got := commands.WatchTargets[0].Option.Exclude
+	if !slices.Equal(got, domain.ExcludePatterns{"dist/**", "**/*.log", "!important.log"}) {
+		t.Fatalf("Exclude = %q", got)
+	}
+}
+
+func TestInvalidExcludePatternStopsBuild(t *testing.T) {
+	_, err := configyaml.NewConfig([]byte("watchTargets:\n  - path: site\n    option:\n      exclude: ['ok', '[a']\n")).BuildCommandSet()
+	want := `watchTargets[0].option.exclude[1]: invalid pattern "[a"`
+	if err == nil || err.Error() != want {
+		t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
+	}
 }

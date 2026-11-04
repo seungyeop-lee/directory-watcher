@@ -15,7 +15,7 @@
 ## 설정
 
 - 대상 `onStartWatch`는 `hookrec --depth=2`입니다. 변경 hook과 종료 hook은 설정하지 않습니다.
-- 대상 옵션은 `noWait: true`, `watchEvent: C`, `excludeSuffix: [.probe]`입니다.
+- 대상 옵션은 `noWait: true`, `watchEvent: C`, `exclude: ['*.probe']`입니다.
 
 ## 진행 순서
 

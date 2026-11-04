@@ -24,7 +24,7 @@ watcher는 종료 신호를 받은 뒤 10초 안에 종료 코드 0으로 끝나
 
 - 전역 hook `onStartWatch`·`onBeforeChange`·`onAfterChange`·`onFinishWatch`와 대상 hook `onStartWatch`·`onChange`·`onFinishWatch`를 모두 설정합니다.
 - 각 hook은 `hookrec --line=<라벨>`로 `GLOBAL:onBeforeChange`처럼 자기 라벨을 기록합니다. 변경 hook은 라벨 뒤에 `:<변수>`를 붙여 기록합니다. 변수는 값에 공백이 있어도 인자 하나로 넘어가도록 따옴표 밖에 두고, sh와 cmd가 해석하지 않는 쉼표로 구분합니다.
-- 대상 옵션은 `waitMillisecond: 100`, `watchEvent: CDU`, `excludeSuffix: [.probe]`입니다.
+- 대상 옵션은 `waitMillisecond: 100`, `watchEvent: CDU`, `exclude: ['*.probe']`입니다.
 
 ## 진행 순서
 

@@ -54,7 +54,7 @@ watchTargets:
     option:
       noWait: true
       watchEvent: C
-      excludeSuffix: [.probe]
+      exclude: ['*.probe']
   - path: '%s'
     lifeCycle:
       onStartWatch:
@@ -277,7 +277,7 @@ watchTargets:
       noWait: %t
       waitMillisecond: 50
       watchEvent: C
-      excludeSuffix: [.probe]
+      exclude: ['*.probe']
 `, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--line=CHANGE:{{.Path}}"), s.Hook("--line=FINISH"), noWait))
 			var paths []string
 			for n := range 20 {

@@ -14,7 +14,7 @@
 
 - 전역 `onError`는 `hookrec --error-context --line=NOTIFY`입니다. 실행되면 `ERROR|<JSON>`을 기록합니다.
 - 대상 `onChange`는 `CHANGE:{{.Path}}`를, `onFinishWatch`는 `FINISH`를 기록합니다.
-- 대상 옵션은 하위 테스트별 `noWait`와 `waitMillisecond: 50`, `watchEvent: C`, `excludeSuffix: [.probe]`입니다.
+- 대상 옵션은 하위 테스트별 `noWait`와 `waitMillisecond: 50`, `watchEvent: C`, `exclude: ['*.probe']`입니다.
 
 ## 하위 테스트
 

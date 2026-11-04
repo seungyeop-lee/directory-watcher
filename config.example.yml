@@ -30,11 +30,11 @@ watchTargets:
       onFinishWatch:
         - echo 'dir2 onFinishWatch'
     option:
-      excludeDir:
-        - 'test/dir2/tmp'
-      excludeSuffix:
-        - '_test.go'
-        - '~'
+      # Patterns are relative to path. Quote them: YAML reads a leading * or ! as syntax.
+      exclude:
+        - 'tmp/**'
+        - '**/*_test.go'
+        - '**/*~'
       waitMillisecond: 1000 # default 100
       watchEvent: CDU
       noWait: true # default false

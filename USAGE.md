@@ -69,10 +69,8 @@ watchTargets:
       onFinishWatch: # onFinishWatch hook
         [ Same specification as global onStartWatch hook ]
     option:
-      excludeDir:
-        - [ path of the directory to exclude from monitoring ]
-      excludeSuffix:
-        - [ file suffix to exclude from monitoring ]
+      exclude:
+        - [ path pattern of files and folders to exclude from watching, relative to path ]
       waitMillisecond: [ wait time after an event occurs before executing the hook, default is 100 ]
       watchSubDir: [ whether to monitor subdirectories, default is true ]
       watchEvent: [ monitoring events (C: create, U: update, D: delete), default is "CUD" ]
@@ -167,7 +165,7 @@ The references of `cmd` and `powershell` read an environment variable whose name
 - `powershell` doubles the trailing `\` only when Windows PowerShell 5.1 wraps the argument in double quotes, that is, when the value contains whitespace. A value with whitespace that ends in `\` then shows one extra `\` at its end in a cmdlet or a string.
 - Windows PowerShell 5.1 does not pass an empty string argument to a program. In `powershell`, an empty value outside quotes, such as `{{.ExtName}}` of a file without an extension, leaves the program with one argument fewer.
 
-If `path` is a link to a folder, the folder it points to is watched. The variables above then hold paths based on the fully resolved path instead of `path`. An `excludeDir` written under the link path excludes the same location in the linked folder.
+If `path` is a link to a folder, the folder it points to is watched. The variables above then hold paths based on the fully resolved path instead of `path`. `exclude` patterns exclude the same locations in the linked folder.
 
 ## waitMillisecond and noWait
 
@@ -197,7 +195,7 @@ After each notification command completes, fails, or times out, the processes it
 
 ## Overload and shutdown
 
-- Each target keeps at most 256 pending events and runs one run of its hooks at a time. `noWait: true` preserves received-event order; it does not become latest-only under load. Debounce retains the last received valid event, and excluded suffixes neither execute nor reset its timer. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the debounce result.
+- Each target keeps at most 256 pending events and runs one run of its hooks at a time. `noWait: true` preserves received-event order; it does not become latest-only under load. Debounce retains the last received valid event, and excluded paths neither execute nor reset its timer. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the debounce result.
 - A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
 - A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
 - With `interruptible: true`, a new run starts only after the canceled previous run has ended. A shutdown signal cancels running start and change commands, discards pending changes, waits for event handling to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
@@ -213,6 +211,73 @@ The order of these steps is drawn in the [README diagrams](README.md#how-it-work
 
 - Files and folders whose names start with `.` or `_` are not watched. For example, creating, modifying, or deleting `.env`, or changing anything inside `.git` or `.idea`, does not run hooks. The folder set as `path` is watched regardless of its name.
 - Links to folders inside the watched folder are not followed. Changes in a folder outside the watched folder do not run hooks, even when a link inside the watched folder points to it.
+
+## Excluding paths with exclude
+
+`option.exclude` lists path patterns. A file or folder that matches is not watched:
+
+- A matched folder and everything below it are not added to the watch list, whether the folder existed when watching started or was created later. Excluding a large folder such as `node_modules` adds no watches for anything in it.
+- Creating, modifying, or deleting a matched file does not run hooks.
+
+```yaml
+watchTargets:
+  - path: site
+    option:
+      exclude:
+        - '**/node_modules/**'
+        - '**/*.log'
+        - '!important.log'
+```
+
+- Each pattern is matched against the path relative to the target's `path`, with `/` between folders on every OS. A pattern without `**` matches from the top of `path` only: `build.log` matches `site/build.log` but not `site/logs/build.log`.
+- `*` matches any part of a name, `?` matches one character, and `**` matches any number of folders. `dist/**` matches the folder `dist` and everything below it, and `**/*.log` matches `.log` files at any depth. Character classes such as `[abc]` and alternatives such as `{js,css}` also work.
+- Patterns are checked from top to bottom, and the last pattern that matches decides. A pattern that starts with `!` watches a path again that an earlier pattern excluded. In the example, `important.log` directly under `site` runs hooks, and other `.log` files do not.
+- `!` cannot watch a path inside an excluded folder again, because that folder is not watched. To keep part of a folder, exclude the entries inside it instead of the folder: with `dist/*` and `!dist/keep.txt`, only `keep.txt` in `dist` runs hooks. With `dist/**` and `!dist/keep.txt`, `dist` is not watched, so `keep.txt` does not run hooks either.
+- `!` also cannot watch a name that [default exclusion](#default-exclusion) excludes.
+- Quote each pattern. Unquoted, YAML reads a value that starts with `*` or `!` as its own syntax.
+
+If a pattern is malformed, the watcher runs no hook, prints an error such as `Error: watchTargets[0].option.exclude[1]: invalid pattern "[a"`, and exits with code 1.
+
+### Stopping a hook from rerunning itself
+
+When a hook writes a file inside the target's `path`, that write is a change too, so the hook runs again, writes again, and keeps running. Add the path the hook writes to `exclude`. In this example, `onChange` writes `site/build.log`, and `exclude: ['build.log']` stops that write from running the hook:
+
+```yaml
+watchTargets:
+  - path: site
+    lifeCycle:
+      onChange:
+        - dir: .
+          cmd: make build > site/build.log
+    option:
+      exclude:
+        - 'build.log'
+```
+
+With `interruptible: false`, other files changed while the hook runs still run the hook after it finishes.
+
+### Moving from excludeDir and excludeSuffix
+
+Version 3 removed `excludeDir` and `excludeSuffix`. If a target's `option` still has either, the watcher runs no hook, prints the error below, and exits with code 1:
+
+```text
+Error: watchTargets[0].option.excludeDir is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")
+```
+
+Move each value to `exclude`, keeping these differences in mind:
+
+- An `excludeDir` value was a folder path relative to the directory the watcher runs in. An `exclude` pattern is relative to the target's `path`.
+- An `excludeSuffix` value was compared with the end of the absolute path, so `out.txt` also excluded `layout.txt`. In `exclude`, write `**/` before the file name to match that name at any depth.
+- A pattern moved from `excludeSuffix` that matches a folder name, such as `**/*~` for a folder `backup~`, now also excludes everything in that folder.
+
+For a target with `path: 'site'`:
+
+| Before | After |
+|---|---|
+| `excludeDir: ['site/dist']` | `exclude: ['dist/**']` |
+| `excludeSuffix: ['_test.go']` | `exclude: ['**/*_test.go']` |
+| `excludeSuffix: ['~']` | `exclude: ['**/*~']` |
+| `excludeSuffix: ['/out.txt']` | `exclude: ['**/out.txt']` |
 
 ## Limitations on folder event detection
 

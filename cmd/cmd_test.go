@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,5 +51,33 @@ func TestUnknownFlagPrintsUsage(t *testing.T) {
 	}
 	if !strings.Contains(stdout+stderr, "Usage:") {
 		t.Fatalf("usage missing for an unknown flag:\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestRemovedExcludeKeyStopsBeforeWatching(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yml")
+	data := fmt.Sprintf(`global:
+  lifeCycle:
+    onStartWatch:
+      - dir: %q
+        cmd: echo started> started.txt
+watchTargets:
+  - path: %q
+    option:
+      excludeDir: [dist]
+`, dir, dir)
+	if err := os.WriteFile(config, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := executeRoot(t, "-c", config)
+
+	want := `Error: watchTargets[0].option.excludeDir is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`
+	if err == nil || !strings.Contains(stderr, want) {
+		t.Fatalf("Execute error = %v, stderr:\n%s\nwant %q", err, stderr, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "started.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("onStartWatch ran before the config error: %v", err)
 	}
 }

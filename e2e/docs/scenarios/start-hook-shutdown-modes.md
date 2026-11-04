@@ -15,7 +15,7 @@ While the start hook runs a real parent, child, and grandchild process tree, a c
 ## Configuration
 
 - The target `onStartWatch` and `onChange` are set to the same `hookrec --depth=2` command. The record format and signal handling are described in [`hookrec` process trees and delayed hooks](../harness.md#hookrec-process-trees-and-delayed-hooks).
-- The target options are the per-subtest `noWait` and `interruptible`, plus `waitMillisecond: 10`, `watchEvent: C`, and `excludeSuffix: [.probe]`. No finish hook is configured.
+- The target options are the per-subtest `noWait` and `interruptible`, plus `waitMillisecond: 10`, `watchEvent: C`, and `exclude: ['*.probe']`. No finish hook is configured.
 
 ## Subtests
 

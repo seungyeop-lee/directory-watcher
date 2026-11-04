@@ -15,7 +15,7 @@ This saturation is a saturation of the application queue. How it differs from an
 ## Configuration
 
 - The target `onStartWatch` is `hookrec --depth=2`. No change hook or finish hook is configured.
-- The target options are `noWait: true`, `watchEvent: C`, and `excludeSuffix: [.probe]`.
+- The target options are `noWait: true`, `watchEvent: C`, and `exclude: ['*.probe']`.
 
 ## Sequence
 
