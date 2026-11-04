@@ -188,7 +188,7 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("event inside the watch target did not reach the hook")
 	}
-	if got := r.watcher.WatchList(); len(got) != 1 || got[0] != target {
+	if got := r.tree.watcher.WatchList(); len(got) != 1 || got[0] != target {
 		t.Fatalf("watch list changed: %v", got)
 	}
 }
@@ -249,7 +249,7 @@ func TestExcludedFolderStaysOutOfWatchList(t *testing.T) {
 			}
 
 			watchList := map[string]bool{}
-			for _, p := range r.watcher.WatchList() {
+			for _, p := range r.tree.watcher.WatchList() {
 				watchList[p] = true
 			}
 			for _, dir := range excludedDirs {

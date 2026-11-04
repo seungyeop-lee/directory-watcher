@@ -81,7 +81,7 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, firstErrors := controlledSource(r.watchTargets[0])
 	secondErrors := make(chan error, 1)
-	r.watchTargets[1].watchErrors = secondErrors
+	r.watchTargets[1].tree.errs = secondErrors
 	go r.Run()
 	firstErrors <- fsnotify.ErrEventOverflow
 	first := <-r.Errors()

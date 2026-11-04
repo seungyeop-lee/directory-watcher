@@ -46,8 +46,8 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 	events := []chan fsnotify.Event{make(chan fsnotify.Event, 8), make(chan fsnotify.Event, 8)}
 	sources := []chan error{make(chan error, 1), make(chan error, 1)}
 	for n, target := range r.watchTargets {
-		target.watchEvents = events[n]
-		target.watchErrors = sources[n]
+		target.tree.events = events[n]
+		target.tree.errs = sources[n]
 	}
 	go r.Run()
 	for n, stream := range events {

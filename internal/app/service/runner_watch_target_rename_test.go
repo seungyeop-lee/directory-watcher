@@ -178,13 +178,13 @@ func TestFolderRecreatedRightAfterMoveOutIgnoresMovedFolder(t *testing.T) {
 	time.Sleep(3 * leakCheckDelay)
 	f.changes()
 	count := 0
-	for _, p := range f.runner.watcher.WatchList() {
+	for _, p := range f.runner.tree.watcher.WatchList() {
 		if filepath.Clean(p) == f.path("src/d") {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Errorf("watch list holds src/d %d times, want once (%v)", count, f.runner.watcher.WatchList())
+		t.Errorf("watch list holds src/d %d times, want once (%v)", count, f.runner.tree.watcher.WatchList())
 	}
 }
 
@@ -293,7 +293,7 @@ func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
 	// 폴더 이벤트를 모으지 않아, 보류를 푼 d의 C가 묶음을 기다리지 않고 곧바로 hook에 간다.
 	option.DirBatch = domain.DirBatchOption{}
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: option}, newMockLogger())
-	if err := r.watcher.Add(outside); err != nil {
+	if err := r.tree.watcher.Add(outside); err != nil {
 		t.Fatal(err)
 	}
 	retired, retiredErrors := controlledSource(r)
@@ -301,7 +301,7 @@ func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
 	r.held = []fsnotify.Event{{Name: dir, Op: fsnotify.Create}}
 	r.renameSource = filepath.Join(target, "old")
 	r.holdTimeout = holdTimeout
-	r.unreleasedDirs[dir] = struct{}{}
+	r.tree.unreleasedDirs[dir] = struct{}{}
 	changed, result := startRunner(t, r, nil)
 
 	var got []string

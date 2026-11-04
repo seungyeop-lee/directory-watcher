@@ -102,7 +102,7 @@ func startRunner(t *testing.T, r *watchTargetRunner, onChange func(domain.Event)
 // controlledSource는 r이 실제 watcher 대신, 돌려준 두 채널에서 이벤트와 오류를 받게 한다.
 func controlledSource(r *watchTargetRunner) (chan fsnotify.Event, chan error) {
 	events, watchErrors := make(chan fsnotify.Event), make(chan error)
-	r.watchEvents, r.watchErrors = events, watchErrors
+	r.tree.events, r.tree.errs = events, watchErrors
 	return events, watchErrors
 }
 
@@ -341,12 +341,12 @@ func (f *renameFixture) next() string {
 //
 // Windows에서는 옮겨 나간 폴더의 감시를 leakCheckDelay 뒤에 watcher를 새로 만들어 버리므로, 그보다 오래 기다린
 // 뒤 표지 파일의 hook이 실행될 때까지 기다린다. 감시 루프는 이벤트와 watcher 교체를 차례로 처리하므로, 표지
-// 파일의 hook이 실행됐다면 교체도 끝났고 runner.watcher를 읽어도 된다.
+// 파일의 hook이 실행됐다면 교체도 끝났고 runner.tree.watcher를 읽어도 된다.
 func (f *renameFixture) assertNoWatchUnder(rel string) {
 	f.t.Helper()
 	time.Sleep(3 * leakCheckDelay)
 	f.changes()
-	for _, p := range f.runner.watcher.WatchList() {
+	for _, p := range f.runner.tree.watcher.WatchList() {
 		if domain.Path(f.path(rel)).Contains(domain.Path(p)) {
 			f.t.Errorf("watch list still holds %s under the old path %s", p, rel)
 		}
@@ -356,34 +356,48 @@ func (f *renameFixture) assertNoWatchUnder(rel string) {
 // assertRecorded는 감시 대상 기준 상대 경로 rel이 기록에 있는지와 폴더인지가 want, wantDir와 같은지 확인한다.
 func (f *renameFixture) assertRecorded(rel string, want, wantDir bool) {
 	f.t.Helper()
-	isDir, ok := f.runner.recorded(f.path(rel))
-	switch {
-	case ok != want:
-		f.t.Errorf("recorded(%s) = %v, want %v", rel, ok, want)
-	case ok && isDir != wantDir:
-		f.t.Errorf("recorded(%s) reports folder %v, want %v", rel, isDir, wantDir)
-	}
+	assertRecorded(f.t, f.runner.tree, f.target, rel, want, wantDir)
 }
 
 // assertRecordMatchesDisk는 감시 대상 안에 있는 모든 항목이 기록에 같은 종류로 있고, gone의 경로는 기록에
 // 없는지 확인한다. exclude와 subDir: false가 기록에서 빼는 항목이 없는 감시 대상에서만 쓴다.
 func (f *renameFixture) assertRecordMatchesDisk(gone ...string) {
 	f.t.Helper()
-	err := filepath.WalkDir(f.target, func(p string, d fs.DirEntry, err error) error {
+	assertRecordMatchesDisk(f.t, f.runner.tree, f.target, gone...)
+}
+
+// assertRecorded는 감시 대상 root 기준 상대 경로 rel이 tree의 기록에 있는지와 폴더인지가 want, wantDir와 같은지
+// 확인한다.
+func assertRecorded(t *testing.T, tree *watchTree, root, rel string, want, wantDir bool) {
+	t.Helper()
+	isDir, ok := tree.recorded(filepath.Join(root, filepath.FromSlash(rel)))
+	switch {
+	case ok != want:
+		t.Errorf("recorded(%s) = %v, want %v", rel, ok, want)
+	case ok && isDir != wantDir:
+		t.Errorf("recorded(%s) reports folder %v, want %v", rel, isDir, wantDir)
+	}
+}
+
+// assertRecordMatchesDisk는 감시 대상 root 안에 있는 모든 항목이 tree의 기록에 같은 종류로 있고, gone의 경로는
+// 기록에 없는지 확인한다. exclude와 subDir: false가 기록에서 빼는 항목이 없는 감시 대상에서만 쓴다.
+func assertRecordMatchesDisk(t *testing.T, tree *watchTree, root string, gone ...string) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(f.target, p)
+		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return err
 		}
-		f.assertRecorded(filepath.ToSlash(rel), true, d.IsDir())
+		assertRecorded(t, tree, root, filepath.ToSlash(rel), true, d.IsDir())
 		return nil
 	})
 	if err != nil {
-		f.t.Fatal(err)
+		t.Fatal(err)
 	}
 	for _, rel := range gone {
-		f.assertRecorded(rel, false, false)
+		assertRecorded(t, tree, root, rel, false, false)
 	}
 }
