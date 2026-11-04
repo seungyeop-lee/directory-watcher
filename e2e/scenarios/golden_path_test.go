@@ -51,7 +51,7 @@ const goldenFileName = `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`
 // 일곱 이벤트 변수도 changeValues 순서대로 기록하게 한다. 변수는 따옴표 밖에 두어 값에 공백이
 // 있어도 인자 하나로 넘어가게 하고, 구분자는 sh와 cmd가 해석하지 않는 쉼표를 쓴다.
 func goldenConfig(s *harness.Scenario) string {
-	change := "{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}"
+	change := "{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}}"
 	command := func(label, suffix string) string {
 		if suffix != "" {
 			label += ":" + suffix

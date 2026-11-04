@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
@@ -20,14 +21,55 @@ func NewCmdInfoConverter(cmdInfo config.CmdInfo, shell cmd.Shell) *CmdInfoConver
 	}
 }
 
+// Convert는 이벤트를 받지 않는 hook의 명령을 만든다. 이런 hook의 명령은 템플릿으로 해석하지 않고 그대로 실행한다.
 func (c CmdInfoConverter) Convert() domain.Cmd {
+	return cmd.NewManager(c.builder())
+}
+
+// ConvertEventHook은 이벤트를 받는 hook의 명령을 만든다. 명령이 모르는 템플릿 변수를 쓰면, hook 안에서 그 명령의
+// 위치(예: [1].cmd[0])를 앞에 붙인 오류를 낸다.
+func (c CmdInfoConverter) ConvertEventHook() (domain.Cmd, error) {
+	builder := c.builder()
+	if err := checkTemplates(builder); err != nil {
+		return nil, err
+	}
+	return cmd.NewManager(builder), nil
+}
+
+func (c CmdInfoConverter) builder() cmd.ExecCmdBuilder {
 	v := reflect.ValueOf(c.cmdInfo)
 	switch v.Kind() {
 	case reflect.Slice:
-		return cmd.NewManager(c.mapForSlice(v))
+		return c.mapForSlice(v)
 	default:
-		return cmd.NewManager(cmd.EmptyCmd{})
+		return cmd.EmptyCmd{}
 	}
+}
+
+// checkTemplates는 mapForSlice가 만든 명령을 설정 파일의 모양대로 따라가며 검사한다. hook 목록의 항목은 [i],
+// 항목의 cmd 목록은 .cmd[j]로 위치를 적는다.
+func checkTemplates(builder cmd.ExecCmdBuilder) error {
+	switch b := builder.(type) {
+	case cmd.Cmds:
+		for i, item := range b {
+			if err := checkTemplates(item); err != nil {
+				return fmt.Errorf("[%d]%w", i, err)
+			}
+		}
+	case cmd.StructuredCmd:
+		return checkTemplates(b.Cmd)
+	case cmd.MultiLineCmd:
+		for i, line := range b.Cmds {
+			if err := line.CheckTemplates(); err != nil {
+				return fmt.Errorf(".cmd[%d]: %w", i, err)
+			}
+		}
+	case cmd.SingleCmd:
+		if err := b.CheckTemplates(); err != nil {
+			return fmt.Errorf(": %w", err)
+		}
+	}
+	return nil
 }
 
 func (c CmdInfoConverter) mapForSlice(cmdInfoSliceValue reflect.Value) cmd.Cmds {

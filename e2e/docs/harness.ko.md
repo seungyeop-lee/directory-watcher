@@ -66,7 +66,7 @@ func TestCreateAnotherFile(t *testing.T) {
     option:
       watchEvent: C
       exclude: ['*.probe']
-`, s.Watch, s.Hook("--line=CHANGE:{{.FileName}}")))
+`, s.Watch, s.Hook("--line=CHANGE:{{.Name}}")))
 	s.Write(filepath.Join(s.Watch, "another.txt"), nil)
 	s.AwaitLine("create hook", 10*time.Second, "CHANGE:another.txt")
 	s.Stop()

@@ -165,15 +165,30 @@ working directory <working directory>: <cause>
 
 ### Variables in commands
 
-| Variable        | Environment variable | Description                                             | Example (when `test/dir2` is set as the monitored directory) |
-|-----------------|----------------------|---------------------------------------------------------|--------------------------------------------------------------|
-| {{.Path}}       | `DW_PATH`            | Relative path of the file where the event occurred      | test/dir2/b.txt                                              |
-| {{.AbsPath}}    | `DW_ABS_PATH`        | Absolute path of the file where the event occurred      | /Users/example/directory-watcher/test/dir2/b.txt             |
-| {{.FileName}}   | `DW_FILE_NAME`       | File name where the event occurred                      | b.txt                                                        |
-| {{.ExtName}}    | `DW_EXT_NAME`        | Extension of the file where the event occurred          | .txt                                                         |
-| {{.DirPath}}    | `DW_DIR_PATH`        | Relative path of the directory where the event occurred | test/dir2                                                    |
-| {{.DirAbsPath}} | `DW_DIR_ABS_PATH`    | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
-| {{.Event}}      | `DW_EVENT`           | Event type (C: create, U: update, D: delete)            | C                                                            |
+| Variable           | Environment variable | Description                                                              | Example (when `test/dir2` is set as the monitored directory) |
+|--------------------|----------------------|--------------------------------------------------------------------------|--------------------------------------------------------------|
+| {{.Path}}          | `DW_PATH`            | Relative path of the file where the event occurred                       | test/dir2/b.txt                                              |
+| {{.AbsPath}}       | `DW_ABS_PATH`        | Absolute path of the file where the event occurred                       | /Users/example/directory-watcher/test/dir2/b.txt             |
+| {{.Name}}          | `DW_NAME`            | Name of the file where the event occurred                                | b.txt                                                        |
+| {{.ExtName}}       | `DW_EXT_NAME`        | Extension of the file where the event occurred                           | .txt                                                         |
+| {{.ParentPath}}    | `DW_PARENT_PATH`     | Relative path of the folder that holds the file where the event occurred | test/dir2                                                    |
+| {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | Absolute path of the folder that holds the file where the event occurred | /Users/example/directory-watcher/test/dir2                   |
+| {{.Event}}         | `DW_EVENT`           | Event type (C: create, U: update, D: delete)                             | C                                                            |
+
+- Only the hooks that run for a change use these variables: the target's `onChange` and global `onBeforeChange` and `onAfterChange`.
+- The other hooks run their commands as written, so `{{.Path}}` in them stays as that literal text.
+
+- Before watching starts, the watcher checks the variables in the hooks that run for a change.
+
+If a command uses a variable that is not in the table, the watcher runs no hook, prints an error like the one below, and exits with code 1:
+
+```text
+Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event
+```
+
+- The location before the colon points to the command in the config.
+  - `onChange[1]` is the second item of `onChange`, and `onChange[0].cmd[1]` is the second command in the `cmd` list of the first item.
+  - A global hook starts with `global.lifeCycle.`, as in `global.lifeCycle.onBeforeChange[0]`.
 
 - The watcher puts each value in the environment variable of the table and replaces the variable in the command with a shell reference that reads that environment variable.
 - The reference for each shell is in the table of [Shell that runs hook commands](#shell-that-runs-hook-commands).
@@ -199,6 +214,22 @@ Inside quotes, variables behave as follows:
 - If `path` is a link to a folder, the folder it points to is watched.
   - The variables above then hold paths based on the fully resolved path instead of `path`.
   - `exclude` patterns exclude the same locations in the linked folder.
+
+### Moving from FileName, DirPath, and DirAbsPath
+
+- Version 3 renamed three template variables and their environment variables.
+  - The values of the renamed variables stay the same.
+- A hook that still uses an old template variable stops the watcher at startup with the `unknown template variable` error in [Variables in commands](#variables-in-commands).
+- The watcher no longer sets the old environment variables and does not check commands for them.
+  - A command or script that reads `DW_FILE_NAME`, `DW_DIR_PATH`, or `DW_DIR_ABS_PATH` runs without the value, so search your hook commands and the scripts they run for these names.
+
+Rename each variable as follows:
+
+| Before | After |
+|---|---|
+| `{{.FileName}}`, `DW_FILE_NAME` | `{{.Name}}`, `DW_NAME` |
+| `{{.DirPath}}`, `DW_DIR_PATH` | `{{.ParentPath}}`, `DW_PARENT_PATH` |
+| `{{.DirAbsPath}}`, `DW_DIR_ABS_PATH` | `{{.ParentAbsPath}}`, `DW_PARENT_ABS_PATH` |
 
 ## waitMillisecond and noWait
 

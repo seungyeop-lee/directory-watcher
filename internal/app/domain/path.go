@@ -48,12 +48,12 @@ func (p Path) Abs() string {
 	return abs
 }
 
-func (p Path) FileName() string {
+func (p Path) Name() string {
 	return filepath.Base(string(p))
 }
 
 func (p Path) IsDefaultExcludeFile() bool {
-	name := p.FileName()
+	name := p.Name()
 	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
 
@@ -61,11 +61,11 @@ func (p Path) ExtName() string {
 	return filepath.Ext(string(p))
 }
 
-func (p Path) DirPath() string {
+func (p Path) ParentPath() string {
 	return filepath.Dir(string(p))
 }
 
-func (p Path) DirAbsPath() string {
+func (p Path) ParentAbsPath() string {
 	return filepath.Dir(p.Abs())
 }
 

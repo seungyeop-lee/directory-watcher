@@ -91,7 +91,7 @@ func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 			for {
 				select {
 				case got := <-changed:
-					switch got.FileName() {
+					switch got.Name() {
 					case "plain.txt":
 						return
 					case ".hidden.txt", "_draft.txt":
@@ -202,7 +202,7 @@ func waitPlainEvent(t *testing.T, changed <-chan domain.Event, op fsnotify.Op) {
 			if got.Path.IsDefaultExcludeFile() {
 				t.Fatalf("%s of default-excluded name ran the hook: %s", got.Operation, got.Path)
 			}
-			if got.Path.FileName() == "plain.txt" && fsnotify.Op(got.Operation).Has(op) {
+			if got.Path.Name() == "plain.txt" && fsnotify.Op(got.Operation).Has(op) {
 				return
 			}
 		case <-time.After(5 * time.Second):
@@ -466,11 +466,11 @@ func TestHookOutputInExcludedPathDoesNotRerunHook(t *testing.T) {
 		Exclude:     domain.ExcludePatterns{"out.txt"},
 	}, logger, func(event domain.Event) {
 		mu.Lock()
-		runs = append(runs, "start "+event.Path.FileName())
+		runs = append(runs, "start "+event.Path.Name())
 		mu.Unlock()
 		f, err := os.OpenFile(out, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err == nil {
-			_, err = f.WriteString(event.Path.FileName() + "\n")
+			_, err = f.WriteString(event.Path.Name() + "\n")
 			f.Close()
 		}
 		if err != nil {
@@ -478,7 +478,7 @@ func TestHookOutputInExcludedPathDoesNotRerunHook(t *testing.T) {
 		}
 		once.Do(func() { <-release })
 		mu.Lock()
-		runs = append(runs, "end "+event.Path.FileName())
+		runs = append(runs, "end "+event.Path.Name())
 		mu.Unlock()
 	})
 

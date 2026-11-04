@@ -15,9 +15,9 @@
 4. `TARGET:onFinishWatch`
 5. `GLOBAL:onFinishWatch`
 
-- `<variables>` is `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`.
-- The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of the test file, and `{{.DirPath}}` and `{{.DirAbsPath}}` are both the absolute path of the watch folder.
-- `{{.FileName}}` is the test file name, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
+- `<variables>` is `{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}}`.
+- The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of the test file, and `{{.ParentPath}}` and `{{.ParentAbsPath}}` are both the absolute path of the watch folder.
+- `{{.Name}}` is the test file name, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
 
 - The test file name is `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`.
 - It contains the syntax that sh, cmd, and powershell use to chain or substitute commands, so a shell that reads the value as a command creates a folder whose name starts with `pwned`, and cmd changes `%OS%` if it expands the value again.

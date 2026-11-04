@@ -82,13 +82,22 @@ func TestShellInterpretsCommandWithItsOwnSyntax(t *testing.T) {
 }
 
 // TestShellArgsProcess는 템플릿 값 테스트가 인자를 받는 실제 프로그램으로 쓰려고 이 테스트 바이너리를
-// 다시 실행한다. 테스트 플래그 뒤의 인자를 JSON 배열 한 줄로 쓴다.
+// 다시 실행한다. 테스트 플래그 뒤의 인자를 JSON 배열 한 줄로 쓰고, 이름이 DW_로 시작하는 환경 변수를
+// JSON 객체 한 줄로 쓴다.
 func TestShellArgsProcess(t *testing.T) {
 	if os.Getenv("DW_SHELL_ARGS_HELPER") != "1" {
 		return
 	}
 	data, _ := json.Marshal(os.Args[2:])
 	fmt.Println("args=" + string(data))
+	env := map[string]string{}
+	for _, entry := range os.Environ() {
+		if name, value, _ := strings.Cut(entry, "="); strings.HasPrefix(name, "DW_") {
+			env[name] = value
+		}
+	}
+	data, _ = json.Marshal(env)
+	fmt.Println("env=" + string(data))
 	os.Exit(0)
 }
 
@@ -138,23 +147,35 @@ func TestTemplateValueIsNeverRunAsCommand(t *testing.T) {
 
 func receivedArgs(t *testing.T, output string) []string {
 	t.Helper()
+	var args []string
+	receivedJSON(t, output, "args=", &args)
+	return args
+}
+
+func receivedEnv(t *testing.T, output string) map[string]string {
+	t.Helper()
+	var env map[string]string
+	receivedJSON(t, output, "env=", &env)
+	return env
+}
+
+func receivedJSON(t *testing.T, output, prefix string, v any) {
+	t.Helper()
 	for _, line := range hookLines(output) {
-		if data, ok := strings.CutPrefix(line, "args="); ok {
-			var args []string
-			if err := json.Unmarshal([]byte(data), &args); err != nil {
+		if data, ok := strings.CutPrefix(line, prefix); ok {
+			if err := json.Unmarshal([]byte(data), v); err != nil {
 				t.Fatal(err)
 			}
-			return args
+			return
 		}
 	}
-	t.Fatalf("program printed no arguments: %q", output)
-	return nil
+	t.Fatalf("program printed no %q line: %q", prefix, output)
 }
 
 func TestTemplateVariablesAreReplacedWithTheirValues(t *testing.T) {
 	event := &domain.Event{Path: domain.Path(filepath.Join("dir", "b.txt")), Operation: domain.Operation(fsnotify.Write)}
-	templates := `{{.Path}} {{.AbsPath}} {{.FileName}} {{.ExtName}} {{.DirPath}} {{.DirAbsPath}} {{.Event}}`
-	want := []string{event.Path.String(), event.Path.Abs(), "b.txt", ".txt", "dir", event.Path.DirAbsPath(), "U"}
+	templates := `{{.Path}} {{.AbsPath}} {{.Name}} {{.ExtName}} {{.ParentPath}} {{.ParentAbsPath}} {{.Event}}`
+	want := []string{event.Path.String(), event.Path.Abs(), "b.txt", ".txt", "dir", filepath.Dir(event.Path.Abs()), "U"}
 	for _, shell := range testedShells(t) {
 		t.Run(shell.String(), func(t *testing.T) {
 			ctx, output := capturedContext(t)
@@ -169,8 +190,46 @@ func TestTemplateVariablesAreReplacedWithTheirValues(t *testing.T) {
 	}
 }
 
+// hook은 템플릿 변수와 같은 값을 환경 변수로도 받는다. 이름을 바꾸기 전의 환경 변수는 cmd와 powershell이
+// 쓰는 _ARG 변수까지 받지 않는다.
+func TestEventEnvironmentUsesCurrentNamesOnly(t *testing.T) {
+	event := &domain.Event{Path: domain.Path(filepath.Join("dir", "b.txt")), Operation: domain.Operation(fsnotify.Write)}
+	want := map[string]string{
+		"DW_PATH":            event.Path.String(),
+		"DW_ABS_PATH":        event.Path.Abs(),
+		"DW_NAME":            "b.txt",
+		"DW_EXT_NAME":        ".txt",
+		"DW_PARENT_PATH":     "dir",
+		"DW_PARENT_ABS_PATH": filepath.Dir(event.Path.Abs()),
+		"DW_EVENT":           "U",
+	}
+	removed := []string{"DW_FILE_NAME", "DW_DIR_PATH", "DW_DIR_ABS_PATH"}
+	for _, shell := range testedShells(t) {
+		t.Run(shell.String(), func(t *testing.T) {
+			ctx, output := capturedContext(t)
+			cmd := command.NewManager(argsCommand(t, shell, ""))
+			if err := cmd.Run(ctx, domain.Path(t.TempDir()), event); err != nil {
+				t.Fatal(err)
+			}
+			env := receivedEnv(t, output())
+			for name, value := range want {
+				if env[name] != value {
+					t.Errorf("%s = %q, want %q", name, env[name], value)
+				}
+			}
+			for _, name := range removed {
+				for _, received := range []string{name, name + "_ARG"} {
+					if value, ok := env[received]; ok {
+						t.Errorf("program received removed variable %s=%q", received, value)
+					}
+				}
+			}
+		})
+	}
+}
+
 // 셸이 따옴표로 감싼 인자가 \로 끝나면, 프로그램은 \"를 따옴표 글자로 읽는다. 드라이브나 공유 폴더 바로
-// 아래 파일의 {{.DirPath}}가 C:\이나 \\server\share\처럼 \로 끝난다.
+// 아래 파일의 {{.ParentPath}}가 C:\이나 \\server\share\처럼 \로 끝난다.
 func TestTemplateValueEndingInBackslashIsOneArgument(t *testing.T) {
 	values := []string{`C:\`, `C:\My Dir\`, `\\server\my share\`, `C:\a\\`}
 	for _, shell := range testedShells(t) {

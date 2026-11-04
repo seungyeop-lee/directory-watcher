@@ -214,3 +214,82 @@ func TestInvalidExcludePatternStopsBuild(t *testing.T) {
 		t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
 	}
 }
+
+func TestUnknownTemplateVariableInEventHookStopsBuild(t *testing.T) {
+	const available = "available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event"
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{
+			name: "old name in onChange",
+			data: "watchTargets:\n  - path: other\n  - path: site\n    lifeCycle:\n      onChange: ['echo {{.Path}}', 'echo {{.DirPath}}']\n",
+			want: `watchTargets[1].lifeCycle.onChange[1]: unknown template variable "DirPath"; ` + available,
+		},
+		{
+			name: "typo in a cmd list",
+			data: "watchTargets:\n  - path: site\n    lifeCycle:\n      onChange: [{dir: site, cmd: ['echo {{.Path}}', 'echo {{.FilePath}}']}]\n",
+			want: `watchTargets[0].lifeCycle.onChange[0].cmd[1]: unknown template variable "FilePath"; ` + available,
+		},
+		{
+			name: "old name in a dir command",
+			data: "watchTargets:\n  - path: site\n    lifeCycle:\n      onChange: [{dir: site, cmd: 'echo {{.FileName}}'}]\n",
+			want: `watchTargets[0].lifeCycle.onChange[0]: unknown template variable "FileName"; ` + available,
+		},
+		{
+			name: "global onBeforeChange",
+			data: "global:\n  lifeCycle:\n    onBeforeChange: ['echo {{if .Event}}{{.DirAbsPath}}{{end}}']\nwatchTargets: []\n",
+			want: `global.lifeCycle.onBeforeChange[0]: unknown template variable "DirAbsPath"; ` + available,
+		},
+		{
+			name: "global onAfterChange",
+			data: "global:\n  lifeCycle:\n    onAfterChange: ['echo {{$.Path}} {{printf \"%s\" $.Unknown}}']\nwatchTargets: []\n",
+			want: `global.lifeCycle.onAfterChange[0]: unknown template variable "Unknown"; ` + available,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := configyaml.NewConfig([]byte(tt.data)).BuildCommandSet()
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// 이벤트가 없는 hook은 템플릿을 해석하지 않으므로, 쓸 수 있는 변수든 모르는 변수든 검사하지 않고 글자 그대로 실행한다.
+func TestHookWithoutEventRunsTemplateTextAsIs(t *testing.T) {
+	dir := t.TempDir()
+	commands := buildCommandSet(t, fmt.Sprintf(`global:
+  lifeCycle:
+    onStartWatch: [{dir: %q, cmd: 'echo {{.Path}}> start.txt'}]
+    onFinishWatch: [{dir: %q, cmd: 'echo {{.Unknown}}> finish.txt'}]
+    onError: [{dir: %q, cmd: 'echo {{.Name}}> error.txt'}]
+watchTargets:
+  - path: %q
+    lifeCycle:
+      onStartWatch: [{dir: %q, cmd: 'echo {{.ParentPath}}> targetStart.txt'}]
+      onFinishWatch: [{dir: %q, cmd: 'echo {{.FilePath}}> targetFinish.txt'}]
+`, dir, dir, dir, dir, dir, dir))
+	global, target := commands.Global.LifeCycle, commands.WatchTargets[0].LifeCycle
+	ctx := helper.NewWatcherContext("config-test")
+	defer ctx.Cancel()
+	for name, run := range map[string]struct {
+		hook domain.Cmd
+		want string
+	}{
+		"start":        {global.OnStartWatch, "{{.Path}}"},
+		"finish":       {global.OnFinishWatch, "{{.Unknown}}"},
+		"error":        {global.OnError, "{{.Name}}"},
+		"targetStart":  {target.OnStartWatch, "{{.ParentPath}}"},
+		"targetFinish": {target.OnFinishWatch, "{{.FilePath}}"},
+	} {
+		if err := run.hook.Run(ctx, "", nil); err != nil {
+			t.Fatal(err)
+		}
+		if got := readTrimmed(t, filepath.Join(dir, name+".txt")); got != run.want {
+			t.Errorf("%s hook printed %q, want %q", name, got, run.want)
+		}
+	}
+}

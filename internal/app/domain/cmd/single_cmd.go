@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
+	"text/template/parse"
 
 	"github.com/moby/term"
 
@@ -28,10 +30,10 @@ var eventVariables = []struct {
 }{
 	{"Path", "DW_PATH", func(e *domain.Event) string { return e.Path.String() }},
 	{"AbsPath", "DW_ABS_PATH", func(e *domain.Event) string { return e.Path.Abs() }},
-	{"FileName", "DW_FILE_NAME", func(e *domain.Event) string { return e.Path.FileName() }},
+	{"Name", "DW_NAME", func(e *domain.Event) string { return e.Path.Name() }},
 	{"ExtName", "DW_EXT_NAME", func(e *domain.Event) string { return e.Path.ExtName() }},
-	{"DirPath", "DW_DIR_PATH", func(e *domain.Event) string { return e.Path.DirPath() }},
-	{"DirAbsPath", "DW_DIR_ABS_PATH", func(e *domain.Event) string { return e.Path.DirAbsPath() }},
+	{"ParentPath", "DW_PARENT_PATH", func(e *domain.Event) string { return e.Path.ParentPath() }},
+	{"ParentAbsPath", "DW_PARENT_ABS_PATH", func(e *domain.Event) string { return e.Path.ParentAbsPath() }},
 	{"Event", "DW_EVENT", func(e *domain.Event) string { return e.Operation.String() }},
 }
 
@@ -66,9 +68,9 @@ func (c SingleCmd) replaceTemplates(event *domain.Event) (script, filled string,
 		return c.Cmd, "", nil
 	}
 
-	t, err := template.New("parser").Parse(c.Cmd)
+	t, err := c.parseTemplate()
 	if err != nil {
-		return "", "", fmt.Errorf("can't parse command: %s", err)
+		return "", "", err
 	}
 
 	refs, values := map[string]string{}, map[string]string{}
@@ -86,6 +88,91 @@ func (c SingleCmd) replaceTemplates(event *domain.Event) (script, filled string,
 		filled = ""
 	}
 	return script, filled, nil
+}
+
+func (c SingleCmd) parseTemplate() (*template.Template, error) {
+	t, err := template.New("parser").Parse(c.Cmd)
+	if err != nil {
+		return nil, fmt.Errorf("can't parse command: %s", err)
+	}
+	return t, nil
+}
+
+// CheckTemplates는 명령이 eventVariables에 없는 템플릿 변수를 쓰면 오류를 낸다. Go 템플릿은 값 map에 없는
+// 변수를 만나도 오류 없이 <no value>를 넣으므로, 이벤트를 받는 hook의 명령은 감시를 시작하기 전에 이 검사를 거친다.
+func (c SingleCmd) CheckTemplates() error {
+	t, err := c.parseTemplate()
+	if err != nil {
+		return err
+	}
+	var names []string
+	for _, v := range eventVariables {
+		names = append(names, v.template)
+	}
+	for _, defined := range t.Templates() {
+		for _, name := range referencedVariables(defined.Root) {
+			if !slices.Contains(names, name) {
+				return fmt.Errorf("unknown template variable %q; available: %s", name, strings.Join(names, ", "))
+			}
+		}
+	}
+	return nil
+}
+
+// referencedVariables는 템플릿 node 아래에서 {{.Path}}나 {{$.Path}}처럼 템플릿 값에서 읽는 변수 이름을 모은다.
+func referencedVariables(node parse.Node) []string {
+	switch n := node.(type) {
+	case *parse.FieldNode:
+		return n.Ident[:1]
+	case *parse.VariableNode:
+		if n.Ident[0] == "$" && len(n.Ident) > 1 {
+			return n.Ident[1:2]
+		}
+	case *parse.ChainNode:
+		return referencedVariables(n.Node)
+	case *parse.ListNode:
+		return referencedVariablesIn(n.Nodes)
+	case *parse.ActionNode:
+		return referencedVariables(n.Pipe)
+	case *parse.PipeNode:
+		// {{template "name"}}처럼 값을 넘기지 않는 TemplateNode는 Pipe가 nil이다.
+		if n == nil {
+			return nil
+		}
+		var names []string
+		for _, cmd := range n.Cmds {
+			names = append(names, referencedVariables(cmd)...)
+		}
+		return names
+	case *parse.CommandNode:
+		return referencedVariablesIn(n.Args)
+	case *parse.TemplateNode:
+		return referencedVariables(n.Pipe)
+	case *parse.IfNode:
+		return referencedVariablesInBranch(n.BranchNode)
+	case *parse.RangeNode:
+		return referencedVariablesInBranch(n.BranchNode)
+	case *parse.WithNode:
+		return referencedVariablesInBranch(n.BranchNode)
+	}
+	return nil
+}
+
+func referencedVariablesIn(nodes []parse.Node) []string {
+	var names []string
+	for _, node := range nodes {
+		names = append(names, referencedVariables(node)...)
+	}
+	return names
+}
+
+func referencedVariablesInBranch(b parse.BranchNode) []string {
+	names := referencedVariables(b.Pipe)
+	names = append(names, referencedVariables(b.List)...)
+	if b.ElseList != nil {
+		names = append(names, referencedVariables(b.ElseList)...)
+	}
+	return names
 }
 
 func execute(t *template.Template, data map[string]string) (string, error) {

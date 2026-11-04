@@ -15,9 +15,9 @@
 4. `TARGET:onFinishWatch`
 5. `GLOBAL:onFinishWatch`
 
-- `<변수>`는 `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`입니다.
-- 설정의 감시 경로가 절대 경로이므로 `{{.Path}}`와 `{{.AbsPath}}`는 모두 테스트 파일의 절대 경로이고, `{{.DirPath}}`와 `{{.DirAbsPath}}`는 모두 감시 폴더의 절대 경로입니다.
-- `{{.FileName}}`은 테스트 파일 이름, `{{.ExtName}}`은 `.txt`, `{{.Event}}`는 `C`·`U`·`D`입니다.
+- `<변수>`는 `{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}}`입니다.
+- 설정의 감시 경로가 절대 경로이므로 `{{.Path}}`와 `{{.AbsPath}}`는 모두 테스트 파일의 절대 경로이고, `{{.ParentPath}}`와 `{{.ParentAbsPath}}`는 모두 감시 폴더의 절대 경로입니다.
+- `{{.Name}}`은 테스트 파일 이름, `{{.ExtName}}`은 `.txt`, `{{.Event}}`는 `C`·`U`·`D`입니다.
 
 - 테스트 파일 이름은 `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`입니다.
 - 이 이름에는 sh, cmd, powershell이 명령을 잇거나 치환하는 문법이 들어 있어, 셸이 값을 명령으로 해석하면 `pwned`로 시작하는 폴더가 생기고 cmd가 값을 다시 펼치면 `%OS%`가 바뀝니다.

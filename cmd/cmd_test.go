@@ -81,3 +81,38 @@ watchTargets:
 		t.Fatalf("onStartWatch ran before the config error: %v", err)
 	}
 }
+
+func TestUnknownTemplateVariableStopsBeforeWatching(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yml")
+	data := fmt.Sprintf(`global:
+  lifeCycle:
+    onStartWatch:
+      - dir: %q
+        cmd: echo started> started.txt
+watchTargets:
+  - path: %q
+    lifeCycle:
+      onStartWatch:
+        - dir: %q
+          cmd: echo target started> target.txt
+      onChange:
+        - echo {{.Path}}
+        - echo {{.DirPath}}
+`, dir, dir, dir)
+	if err := os.WriteFile(config, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := executeRoot(t, "-c", config)
+
+	want := `Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "DirPath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event`
+	if err == nil || !strings.Contains(stderr, want) {
+		t.Fatalf("Execute error = %v, stderr:\n%s\nwant %q", err, stderr, want)
+	}
+	for _, name := range []string{"started.txt", "target.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("a hook made %s before the config error: %v", name, err)
+		}
+	}
+}

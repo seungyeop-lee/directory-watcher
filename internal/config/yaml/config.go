@@ -35,8 +35,12 @@ func (c Config) BuildCommandSet() (domain.CommandSet, error) {
 	if err != nil {
 		return domain.CommandSet{}, err
 	}
+	global, err := c.Global.BuildCommandSet(shell)
+	if err != nil {
+		return domain.CommandSet{}, fmt.Errorf("global.%w", err)
+	}
 	return domain.CommandSet{
-		Global:       c.Global.BuildCommandSet(shell),
+		Global:       global,
 		WatchTargets: watchTargets,
 	}, nil
 }
@@ -45,10 +49,12 @@ type GlobalConfig struct {
 	LifeCycle GlobalLifeCycleConfig `yaml:"lifeCycle"`
 }
 
-func (c GlobalConfig) BuildCommandSet(shell cmd.Shell) domain.GlobalCommandSet {
-	return domain.GlobalCommandSet{
-		LifeCycle: c.LifeCycle.BuildLifeCycle(shell),
+func (c GlobalConfig) BuildCommandSet(shell cmd.Shell) (domain.GlobalCommandSet, error) {
+	lifeCycle, err := c.LifeCycle.BuildLifeCycle(shell)
+	if err != nil {
+		return domain.GlobalCommandSet{}, fmt.Errorf("lifeCycle.%w", err)
 	}
+	return domain.GlobalCommandSet{LifeCycle: lifeCycle}, nil
 }
 
 type GlobalLifeCycleConfig struct {
@@ -59,14 +65,22 @@ type GlobalLifeCycleConfig struct {
 	OnError        config.CmdInfo `yaml:"onError"`
 }
 
-func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) domain.GlobalLifeCycle {
+func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.GlobalLifeCycle, error) {
+	onBeforeChange, err := converter.NewCmdInfoConverter(c.OnBeforeChange, shell).ConvertEventHook()
+	if err != nil {
+		return domain.GlobalLifeCycle{}, fmt.Errorf("onBeforeChange%w", err)
+	}
+	onAfterChange, err := converter.NewCmdInfoConverter(c.OnAfterChange, shell).ConvertEventHook()
+	if err != nil {
+		return domain.GlobalLifeCycle{}, fmt.Errorf("onAfterChange%w", err)
+	}
 	return domain.GlobalLifeCycle{
 		OnStartWatch:   converter.NewCmdInfoConverter(c.OnStartWatch, shell).Convert(),
-		OnBeforeChange: converter.NewCmdInfoConverter(c.OnBeforeChange, shell).Convert(),
-		OnAfterChange:  converter.NewCmdInfoConverter(c.OnAfterChange, shell).Convert(),
+		OnBeforeChange: onBeforeChange,
+		OnAfterChange:  onAfterChange,
 		OnFinishWatch:  converter.NewCmdInfoConverter(c.OnFinishWatch, shell).Convert(),
 		OnError:        converter.NewCmdInfoConverter(c.OnError, shell).Convert(),
-	}
+	}, nil
 }
 
 type WatchTargetsConfigs []WatchTargetsConfig
@@ -94,9 +108,13 @@ func (c WatchTargetsConfig) BuildCommandSet(shell cmd.Shell) (domain.WatchTarget
 	if err != nil {
 		return domain.WatchTargetsCommandSet{}, err
 	}
+	lifeCycle, err := c.LifeCycle.BuildLifeCycle(shell)
+	if err != nil {
+		return domain.WatchTargetsCommandSet{}, fmt.Errorf("lifeCycle.%w", err)
+	}
 	return domain.WatchTargetsCommandSet{
 		Path:      converter.NewPathConverter(c.Path).Convert(),
-		LifeCycle: c.LifeCycle.BuildLifeCycle(shell),
+		LifeCycle: lifeCycle,
 		Option:    option,
 	}, nil
 }
@@ -107,12 +125,16 @@ type WatchTargetsLifeCycleConfig struct {
 	OnFinishWatch config.CmdInfo `yaml:"onFinishWatch"`
 }
 
-func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) domain.WatchTargetsLifeCycle {
+func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.WatchTargetsLifeCycle, error) {
+	onChange, err := converter.NewCmdInfoConverter(c.OnChange, shell).ConvertEventHook()
+	if err != nil {
+		return domain.WatchTargetsLifeCycle{}, fmt.Errorf("onChange%w", err)
+	}
 	return domain.WatchTargetsLifeCycle{
 		OnStartWatch:  converter.NewCmdInfoConverter(c.OnStartWatch, shell).Convert(),
-		OnChange:      converter.NewCmdInfoConverter(c.OnChange, shell).Convert(),
+		OnChange:      onChange,
 		OnFinishWatch: converter.NewCmdInfoConverter(c.OnFinishWatch, shell).Convert(),
-	}
+	}, nil
 }
 
 type WatchTargetsOptionConfig struct {

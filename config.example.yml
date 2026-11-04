@@ -24,7 +24,7 @@ watchTargets:
         - echo 'dir2 onStartWatch'
       onChange:
         # Write template variables outside quotes; each one becomes a single argument.
-        - echo 'dir2 onChange' {{.Path}}, {{.AbsPath}}, {{.FileName}}, {{.ExtName}}, {{.DirPath}}, {{.DirAbsPath}}, {{.Event}}
+        - echo 'dir2 onChange' {{.Path}}, {{.AbsPath}}, {{.Name}}, {{.ExtName}}, {{.ParentPath}}, {{.ParentAbsPath}}, {{.Event}}
         - sleep 10000
         - echo 'dir2 onChange after sleep'
       onFinishWatch:

@@ -166,15 +166,30 @@ working directory <작업 폴더>: <원인>
 
 ### 실행 명령에서 쓸 수 있는 변수
 
-| 변수              | 환경 변수             | 설명                           | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
-|-----------------|-------------------|------------------------------|--------------------------------------------------|
-| {{.Path}}       | `DW_PATH`         | 이벤트가 일어난 파일의 상대 경로           | test/dir2/b.txt                                  |
-| {{.AbsPath}}    | `DW_ABS_PATH`     | 이벤트가 일어난 파일의 절대 경로           | /Users/example/directory-watcher/test/dir2/b.txt |
-| {{.FileName}}   | `DW_FILE_NAME`    | 이벤트가 일어난 파일 이름               | b.txt                                            |
-| {{.ExtName}}    | `DW_EXT_NAME`     | 이벤트가 일어난 파일의 확장자             | .txt                                             |
-| {{.DirPath}}    | `DW_DIR_PATH`     | 이벤트가 일어난 파일이 속한 디렉토리 상대 경로   | test/dir2                                        |
-| {{.DirAbsPath}} | `DW_DIR_ABS_PATH` | 이벤트가 일어난 파일이 속한 디렉토리 절대 경로   | /Users/example/directory-watcher/test/dir2       |
-| {{.Event}}      | `DW_EVENT`        | 이벤트 종류 (C: 생성, U: 수정, D: 삭제) | C                                                |
+| 변수                 | 환경 변수                | 설명                              | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
+|--------------------|----------------------|---------------------------------|--------------------------------------------------|
+| {{.Path}}          | `DW_PATH`            | 이벤트가 일어난 파일의 상대 경로              | test/dir2/b.txt                                  |
+| {{.AbsPath}}       | `DW_ABS_PATH`        | 이벤트가 일어난 파일의 절대 경로              | /Users/example/directory-watcher/test/dir2/b.txt |
+| {{.Name}}          | `DW_NAME`            | 이벤트가 일어난 파일 이름                  | b.txt                                            |
+| {{.ExtName}}       | `DW_EXT_NAME`        | 이벤트가 일어난 파일의 확장자                | .txt                                             |
+| {{.ParentPath}}    | `DW_PARENT_PATH`     | 이벤트가 일어난 파일이 들어 있는 폴더의 상대 경로    | test/dir2                                        |
+| {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | 이벤트가 일어난 파일이 들어 있는 폴더의 절대 경로    | /Users/example/directory-watcher/test/dir2       |
+| {{.Event}}         | `DW_EVENT`           | 이벤트 종류 (C: 생성, U: 수정, D: 삭제)    | C                                                |
+
+- 이 변수는 변경이 생겼을 때 실행하는 hook, 곧 감시 대상의 `onChange`와 전역 `onBeforeChange`, `onAfterChange`에서만 씁니다.
+- 다른 hook은 명령을 적힌 그대로 실행하므로, 그 명령에 쓴 `{{.Path}}`는 글자 그대로 남습니다.
+
+- watcher는 감시를 시작하기 전에 변경이 생겼을 때 실행하는 hook의 변수를 검사합니다.
+
+명령에 표에 없는 변수가 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event
+```
+
+- 쌍점 앞의 위치는 설정에서 문제가 된 명령을 가리킵니다.
+  - `onChange[1]`은 `onChange`의 두 번째 항목이고, `onChange[0].cmd[1]`은 첫 번째 항목의 `cmd` 목록에 있는 두 번째 명령입니다.
+  - 전역 hook은 `global.lifeCycle.onBeforeChange[0]`처럼 `global.lifeCycle.`로 시작합니다.
 
 - watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자리를 그 환경 변수를 읽는 셸 참조로 바꿉니다.
 - 참조 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)의 표에 있습니다.
@@ -200,6 +215,22 @@ working directory <작업 폴더>: <원인>
 - `path`가 폴더를 가리키는 링크이면 링크가 가리키는 폴더를 감시합니다.
   - 이때 위 변수에는 `path` 대신 링크를 모두 푼 경로를 기준으로 한 경로가 들어갑니다.
   - `exclude` 패턴도 링크가 가리키는 폴더의 같은 위치를 제외합니다.
+
+### FileName, DirPath, DirAbsPath에서 옮기기
+
+- 버전 3에서 템플릿 변수 세 개와 그 환경 변수의 이름을 바꿨습니다.
+  - 이름을 바꾼 변수의 값은 그대로입니다.
+- 예전 템플릿 변수를 쓴 hook이 있으면 watcher는 시작할 때 [실행 명령에서 쓸 수 있는 변수](#실행-명령에서-쓸-수-있는-변수)에 적은 `unknown template variable` 오류를 내고 끝납니다.
+- watcher는 예전 환경 변수를 더 이상 설정하지 않고, 명령이 그 변수를 읽는지도 검사하지 않습니다.
+  - `DW_FILE_NAME`, `DW_DIR_PATH`, `DW_DIR_ABS_PATH`를 읽는 명령이나 스크립트는 값 없이 실행되므로, hook 명령과 그 명령이 실행하는 스크립트에서 이 이름을 찾아 바꿉니다.
+
+각 변수는 다음과 같이 바꿉니다.
+
+| 옛 이름 | 바뀐 이름 |
+|---|---|
+| `{{.FileName}}`, `DW_FILE_NAME` | `{{.Name}}`, `DW_NAME` |
+| `{{.DirPath}}`, `DW_DIR_PATH` | `{{.ParentPath}}`, `DW_PARENT_PATH` |
+| `{{.DirAbsPath}}`, `DW_DIR_ABS_PATH` | `{{.ParentAbsPath}}`, `DW_PARENT_ABS_PATH` |
 
 ## waitMillisecond와 noWait
 
