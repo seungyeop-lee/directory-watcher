@@ -54,7 +54,7 @@ func startProcessTree(cmd *exec.Cmd, killOnClose bool) (processTree, error) {
 		// 이렇게 job을 벗어난 프로세스는 취소된 명령의 job을 끝낼 때 함께 끝나지 않는다.
 		limits.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK
 	}
-	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
+	if ok, _, err := procSetInformationJobObject.Call(uintptr(job), windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), unsafe.Sizeof(limits)); ok == 0 {
 		_ = windows.CloseHandle(job)
 		return 0, fmt.Errorf("configure job object: %w", err)
 	}
@@ -169,11 +169,16 @@ type jobProcessIDList struct {
 	ids              [256]uintptr
 }
 
-// procQueryInformationJobObject는 프로세스 목록을 받을 때 windows.QueryInformationJobObject 대신 쓴다. 그 함수는
-// 결과 버퍼를 uintptr로 받으므로, 버퍼가 스택에 있으면 호출하는 사이에 스택이 옮겨져 커널이 옛 주소에 쓸 수 있다.
-// UTM의 Windows 11 ARM64 VM에서 스택에 둔 목록을 그 함수로 받았을 때는 첫 신호가 늦춰지지 않았다. LazyProc.Call은
-// uintptr로 바꾼 포인터의 대상을 힙에 두게 한다.
-var procQueryInformationJobObject = windows.NewLazySystemDLL("kernel32.dll").NewProc("QueryInformationJobObject")
+// job 정보를 조회하고 설정할 때는 windows.QueryInformationJobObject와 windows.SetInformationJobObject 대신 아래
+// 함수를 쓴다. windows 패키지의 두 함수는 버퍼를 uintptr로 받으므로, 버퍼가 스택에 있으면 호출하는 사이에 스택이
+// 옮겨져 커널이 옛 주소를 읽거나 쓸 수 있다. UTM의 Windows 11 ARM64 VM에서 스택에 둔 프로세스 목록을
+// windows.QueryInformationJobObject로 받았을 때는 첫 신호가 늦춰지지 않았다. LazyProc.Call은 uintptr로 바꾼
+// 포인터의 대상을 힙에 두게 한다.
+var (
+	kernel32                      = windows.NewLazySystemDLL("kernel32.dll")
+	procQueryInformationJobObject = kernel32.NewProc("QueryInformationJobObject")
+	procSetInformationJobObject   = kernel32.NewProc("SetInformationJobObject")
+)
 
 // lastProcessCreation은 job에서 실행 중인 프로세스 가운데 가장 늦게 만들어진 프로세스의 생성 시각을 돌려준다.
 // 생성 시각을 읽기 전에 끝난 프로세스는 건너뛴다. 프로세스가 목록 크기보다 많으면 목록에 담기지 않은 프로세스가
@@ -266,7 +271,7 @@ func terminateJob(job windows.Handle, deadline time.Time) error {
 
 func queryJob(job windows.Handle) (jobAccounting, error) {
 	var accounting jobAccounting
-	if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&accounting)), uint32(unsafe.Sizeof(accounting)), nil); err != nil {
+	if ok, _, err := procQueryInformationJobObject.Call(uintptr(job), windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&accounting)), unsafe.Sizeof(accounting), 0); ok == 0 {
 		return accounting, fmt.Errorf("query job object: %w", err)
 	}
 	return accounting, nil
