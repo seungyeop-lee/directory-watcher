@@ -80,7 +80,7 @@ git log --format='--- %h %s%n%b' --name-only v<지금 version>..HEAD
 아래 조건 중 하나라도 맞지 않으면 아무것도 바꾸지 않고 멈춥니다.
 
 1. `go list -m`이 출력한 모듈 경로가 `/v<새 version의 major>`로 끝납니다. Go는 major 2 이상인 version의 모듈을 그 접미사가 붙은 경로로 찾으므로, 맞지 않으면 `go install`로 새 version을 설치할 수 없습니다. 멈출 때 지금 모듈 경로와 필요한 접미사를 알리고, 둘 중 하나를 고르게 안내합니다.
-   - major로 올리려면 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령을 새 major로 바꿔 먼저 커밋합니다.
+   - major로 올리려면 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령, 설정 예시 첫 줄의 스키마 URL(`yaml-language-server: $schema=`)에 든 `v<major>` 브랜치를 새 major로 바꿔 먼저 커밋합니다.
    - major로 올리지 않으려면 모듈 경로가 지금 major와 맞는지 확인하고, 모듈 경로를 이미 올렸다면 `major`로 다시 실행합니다.
 2. `git rev-parse -q --verify refs/tags/v<새 version>`이 실패합니다. 성공하면 그 version은 이미 tag가 있으므로 멈춥니다. 2단계에서 원격 tag를 받아 왔으므로 이 확인은 원격 tag도 포함합니다.
 3. `refs/heads/v<major>`와 `refs/remotes/origin/v<major>` 가운데 있는 것(`git rev-parse -q --verify <ref>`가 성공하는 것)마다 `git merge-base --is-ancestor <ref> HEAD`가 성공합니다. 릴리스 커밋은 `HEAD` 위에 만들어지므로, 이 조건이 맞아야 `v<major>`를 릴리스 커밋으로 fast-forward할 수 있습니다. 둘 다 없으면 이번이 그 major의 첫 릴리스이고, 5단계에서 `v<major>`를 새로 만듭니다.

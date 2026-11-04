@@ -11,6 +11,7 @@
 다음 `config.yml`은 Go 서버의 코드가 바뀌면 서버를 재시작하고, 프론트엔드 소스가 바뀌면 프론트엔드를 다시 빌드합니다.
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
 watchTargets:
   - path: server
     lifeCycle:
@@ -143,6 +144,7 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 1. watcher를 실행할 디렉터리에 `config.yml`을 만듭니다. 다음 예시는 `src` 아래의 파일이 바뀔 때마다 그 디렉터리에서 `make test`를 실행합니다.
 
    ```yaml
+   # yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
    watchTargets:
      - path: src
        lifeCycle:
@@ -150,6 +152,8 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
            - dir: .
              cmd: make test
    ```
+
+   첫 줄이 있으면 VS Code의 Red Hat YAML 확장처럼 yaml-language-server를 쓰는 에디터가 키를 자동 완성하고 검사합니다. 자세한 내용은 [설정 파일](docs/guide/configuration.ko.md#configyml)에 있습니다.
 
 2. 같은 디렉터리에서 watcher를 시작합니다.
 

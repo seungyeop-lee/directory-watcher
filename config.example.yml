@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
 # Shell for every hook command: sh (default on Unix), cmd (default on Windows), or powershell (Windows only).
 # shell: sh
 global:

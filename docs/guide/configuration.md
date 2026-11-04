@@ -9,8 +9,12 @@
 - For a practical example, see [`config.example.yml`](../../config.example.yml).
 - [`directory-watcher.schema.json`](../../directory-watcher.schema.json) describes the same format as a JSON schema.
 - Running `make run` from the repository root first creates the folders this example watches and then starts the watcher with the example.
+- The first line of the block below, `# yaml-language-server: $schema=...`, links the file to the JSON schema above. Put it at the top of your `config.yml` too.
+  - Editors that use yaml-language-server, such as VS Code with the Red Hat YAML extension, then complete keys and mark keys and values the schema does not allow.
+  - The URL points to the branch named after the major version, such as `v3`, which holds the schema of that major's releases.
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
 shell: [ shell that runs hook commands (sh, cmd, powershell), default is sh on Unix and cmd on Windows ]
 global:
   lifeCycle:

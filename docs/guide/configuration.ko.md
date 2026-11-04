@@ -9,8 +9,12 @@
 - 실제 예시는 [`config.example.yml`](../../config.example.yml)에 있습니다.
 - 같은 형식을 JSON 스키마로 기술한 파일은 [`directory-watcher.schema.json`](../../directory-watcher.schema.json)입니다.
 - 저장소 루트에서 `make run`을 실행하면 이 예시가 감시하는 폴더를 먼저 만든 뒤 이 예시로 watcher를 실행합니다.
+- 아래 블록의 첫 줄 `# yaml-language-server: $schema=...`은 파일을 위의 JSON 스키마에 연결합니다. 직접 만드는 `config.yml`의 맨 위에도 이 줄을 넣습니다.
+  - 그러면 VS Code의 Red Hat YAML 확장처럼 yaml-language-server를 쓰는 에디터가 키를 자동 완성하고, 스키마가 허용하지 않는 키와 값을 표시합니다.
+  - URL은 `v3`처럼 major version 이름을 딴 브랜치를 가리키며, 이 브랜치에는 그 major 릴리스의 스키마가 있습니다.
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
 shell: [ hook 명령을 실행할 셸 (sh, cmd, powershell), default는 Unix에서 sh, Windows에서 cmd ]
 global:
   lifeCycle:

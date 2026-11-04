@@ -11,6 +11,7 @@
 This `config.yml` restarts a Go server when its code changes and rebuilds the frontend when its sources change:
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
 watchTargets:
   - path: server
     lifeCycle:
@@ -143,6 +144,7 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 1. Create `config.yml` in the directory where you will run the watcher. This example runs `make test` in that directory whenever a file under `src` changes:
 
    ```yaml
+   # yaml-language-server: $schema=https://raw.githubusercontent.com/seungyeop-lee/directory-watcher/v3/directory-watcher.schema.json
    watchTargets:
      - path: src
        lifeCycle:
@@ -150,6 +152,8 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
            - dir: .
              cmd: make test
    ```
+
+   The first line lets editors that use yaml-language-server, such as VS Code with the Red Hat YAML extension, complete and check the keys. See [Configuration file](docs/guide/configuration.md#configyml).
 
 2. Start the watcher in the same directory:
 
