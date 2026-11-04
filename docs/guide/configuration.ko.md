@@ -128,10 +128,31 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 
 ### 명령 실행 위치
 
-| dir | global onStartWatch, global onFinishWatch, global onError, global onQueueWarning | 그외 hook |
-|-----|-------------------------------------------|------------|
-| O   | dir 설정 위치                                 | dir 설정 위치  |
-| X   | 프로그램 실행 위치                                | path 설정 위치 |
+- `path`와 `dir`에 쓴 상대 경로는 모두 watcher를 실행한 폴더(실행 위치)를 기준으로 풉니다.
+  - `dir`도 `path`가 아니라 실행 위치를 기준으로 풉니다.
+- 명령에 `dir`을 적으면 hook 종류와 관계없이 `dir` 폴더에서 명령을 실행합니다.
+- `dir`을 적지 않으면 hook 종류에 따라 다음 폴더에서 명령을 실행합니다.
+
+| hook | `dir`이 없을 때 실행 폴더 |
+|------|------------------------|
+| 감시 대상의 `onStartWatch`, `onChange`, `onFinishWatch` | 그 감시 대상의 `path` |
+| 전역 `onBeforeChange`, `onAfterChange` | 변경이 생긴 감시 대상의 `path` |
+| 전역 `onStartWatch`, `onFinishWatch`, `onError`, `onQueueWarning` | 실행 위치 |
+
+아래 설정에서 각 명령은 주석에 적은 폴더에서 실행되며, `<실행 위치>`는 watcher를 실행한 폴더입니다.
+
+```yaml
+watchTargets:
+  - path: server
+    lifeCycle:
+      onChange:
+        - go run .          # <실행 위치>/server
+  - path: web/src
+    lifeCycle:
+      onChange:
+        - dir: web          # <실행 위치>/web (<실행 위치>/web/src/web이 아님)
+          cmd: npm run build
+```
 
 - 명령을 실행하기 직전에 작업 폴더를 확인합니다.
 - 작업 폴더가 없거나 폴더가 아니면 그 명령을 실행하지 않고, 다른 명령이 실패했을 때처럼 그 hook의 나머지 명령을 건너뜁니다.

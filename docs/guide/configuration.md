@@ -127,10 +127,31 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 
 ### Command execution location
 
-| dir | global onStartWatch, global onFinishWatch, global onError, global onQueueWarning | Other hooks |
-|-----|-------------------------------------------|-------------------------|
-| O   | Specified dir location                    | Specified dir location  |
-| X   | Program execution location                | Specified path location |
+- Relative paths in `path` and `dir` are both resolved against the directory where you started the watcher (the launch directory).
+  - `dir` is resolved against the launch directory too, not against `path`.
+- A command with `dir` runs in that `dir`, whatever the hook.
+- A command without `dir` runs in the directory below, depending on the hook.
+
+| Hook | Directory when `dir` is omitted |
+|------|---------------------------------|
+| Target `onStartWatch`, `onChange`, `onFinishWatch` | That target's `path` |
+| Global `onBeforeChange`, `onAfterChange` | The `path` of the target where the change happened |
+| Global `onStartWatch`, `onFinishWatch`, `onError`, `onQueueWarning` | The launch directory |
+
+Each command in the config below runs in the directory given in its comment, where `<launch dir>` is the directory where you started the watcher.
+
+```yaml
+watchTargets:
+  - path: server
+    lifeCycle:
+      onChange:
+        - go run .          # <launch dir>/server
+  - path: web/src
+    lifeCycle:
+      onChange:
+        - dir: web          # <launch dir>/web (not <launch dir>/web/src/web)
+          cmd: npm run build
+```
 
 - Just before a command runs, its working directory is checked.
 - If the working directory does not exist or is not a directory, the command does not run and the remaining commands of that hook are skipped, as for any other failed command.
