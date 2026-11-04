@@ -18,30 +18,12 @@ func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(path, "child"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: recursive, FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
-			}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: recursive, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
 			assertWatchDirectoriesRemovable(t, r)
-			stop := func() {
-				var wg sync.WaitGroup
-				wg.Add(1)
-				r.Stop(&wg)
-			}
-			t.Cleanup(stop)
-			ready, changed, finished := make(chan struct{}), make(chan struct{}, 8), make(chan struct{})
-			r.runStartHook = func() { close(ready) }
-			r.runChangeHook = func(domain.Event) { changed <- struct{}{} }
+			changed, result := startRunner(t, r, nil)
+			// finish hook은 Stop을 부른 고루틴이 실행하므로, 감시를 시작한 뒤에 바꿔도 Run과 겹치지 않는다.
+			finished := make(chan struct{})
 			r.runFinishHook = func() { close(finished) }
-			result := make(chan error, 1)
-			go func() { result <- r.Run() }()
-			select {
-			case <-ready:
-			case err := <-result:
-				t.Fatalf("run before registration: %v", err)
-			case <-time.After(5 * time.Second):
-				t.Fatal("native watcher did not become ready")
-			}
 			if err := os.WriteFile(filepath.Join(path, "actual.txt"), []byte("event"), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -50,7 +32,9 @@ func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("native filesystem event did not reach the hook")
 			}
-			stop()
+			var wg sync.WaitGroup
+			wg.Add(1)
+			r.Stop(&wg)
 			if err := <-result; err != nil {
 				t.Fatalf("normal stop: %v", err)
 			}
@@ -71,30 +55,9 @@ func TestSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 			if err := os.Mkdir(child, 0700); err != nil {
 				t.Fatal(err)
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: subDir, FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
-			}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: subDir, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
 			assertWatchDirectoriesRemovable(t, r)
-			stop := func() {
-				var wg sync.WaitGroup
-				wg.Add(1)
-				r.Stop(&wg)
-			}
-			t.Cleanup(stop)
-			ready, changed := make(chan struct{}), make(chan domain.Path, 8)
-			r.runStartHook = func() { close(ready) }
-			r.runChangeHook = func(event domain.Event) { changed <- event.Path }
-			r.runFinishHook = func() {}
-			result := make(chan error, 1)
-			go func() { result <- r.Run() }()
-			select {
-			case <-ready:
-			case err := <-result:
-				t.Fatalf("run before registration: %v", err)
-			case <-time.After(5 * time.Second):
-				t.Fatal("native watcher did not become ready")
-			}
+			changed, _ := startRunner(t, r, nil)
 
 			nested := filepath.Join(child, "nested.txt")
 			if err := os.WriteFile(nested, []byte("event"), 0600); err != nil {
@@ -110,8 +73,8 @@ func TestSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 			for !sentinelSeen || (subDir && !nestedSeen) {
 				select {
 				case got := <-changed:
-					nestedSeen = nestedSeen || got.String() == nested
-					sentinelSeen = sentinelSeen || got.String() == sentinel
+					nestedSeen = nestedSeen || got.Path.String() == nested
+					sentinelSeen = sentinelSeen || got.Path.String() == sentinel
 				case <-time.After(5 * time.Second):
 					t.Fatalf("events did not reach the hook: nested=%t sentinel=%t", nestedSeen, sentinelSeen)
 				}

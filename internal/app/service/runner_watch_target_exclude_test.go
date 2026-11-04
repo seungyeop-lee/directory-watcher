@@ -11,25 +11,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
-
-// chdir는 작업 디렉터리를 dir로 옮기고 테스트가 끝나면 되돌린다. Windows는 작업 디렉터리로 쓰는 폴더를
-// 지우지 못하므로, dir은 이 함수를 부르기 전에 만든 TempDir 안에 있어야 TempDir 정리보다 먼저 되돌려진다.
-func chdir(t *testing.T, dir string) {
-	original, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(original); err != nil {
-			t.Fatal(err)
-		}
-	})
-}
 
 func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 	tests := []struct {
@@ -58,28 +40,8 @@ func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.watchPath(t)
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
-			}, newMockLogger())
-			t.Cleanup(func() {
-				var wg sync.WaitGroup
-				wg.Add(1)
-				r.Stop(&wg)
-			})
-			ready, changed := make(chan struct{}), make(chan domain.Path, 8)
-			r.runStartHook = func() { close(ready) }
-			r.runChangeHook = func(event domain.Event) { changed <- event.Path }
-			r.runFinishHook = func() {}
-			result := make(chan error, 1)
-			go func() { result <- r.Run() }()
-			select {
-			case <-ready:
-			case err := <-result:
-				t.Fatalf("run before registration: %v", err)
-			case <-time.After(5 * time.Second):
-				t.Fatal("native watcher did not become ready")
-			}
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+			changed, _ := startRunner(t, r, nil)
 
 			// 제외된 이벤트가 오지 않았음을 시간 초과만으로 판단하지 않도록,
 			// 제외 대상을 먼저 만들고 일반 파일의 이벤트가 도착할 때까지 받은 경로를 확인한다.
@@ -91,11 +53,11 @@ func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 			for {
 				select {
 				case got := <-changed:
-					switch got.Name() {
+					switch got.Path.Name() {
 					case "plain.txt":
 						return
 					case ".hidden.txt", "_draft.txt":
-						t.Fatalf("create of default-excluded file ran the hook: %s", got)
+						t.Fatalf("create of default-excluded file ran the hook: %s", got.Path)
 					}
 				case <-time.After(5 * time.Second):
 					t.Fatal("create of plain.txt did not reach the hook")
@@ -136,28 +98,8 @@ func TestDefaultExcludeChecksModifiedAndRemovedName(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(path, ".cache"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
-			}, newMockLogger())
-			t.Cleanup(func() {
-				var wg sync.WaitGroup
-				wg.Add(1)
-				r.Stop(&wg)
-			})
-			ready, changed := make(chan struct{}), make(chan domain.Event, 32)
-			r.runStartHook = func() { close(ready) }
-			r.runChangeHook = func(event domain.Event) { changed <- event }
-			r.runFinishHook = func() {}
-			result := make(chan error, 1)
-			go func() { result <- r.Run() }()
-			select {
-			case <-ready:
-			case err := <-result:
-				t.Fatalf("run before registration: %v", err)
-			case <-time.After(5 * time.Second):
-				t.Fatal("native watcher did not become ready")
-			}
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()})}, newMockLogger())
+			changed, _ := startRunner(t, r, nil)
 
 			// 제외된 이벤트가 오지 않았음을 시간 초과만으로 판단하지 않도록, 제외 대상을 먼저 바꾸고
 			// 일반 파일의 수정과 삭제가 hook에 도착할 때까지 받은 이벤트를 확인한다.
@@ -218,22 +160,9 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	if err := os.Mkdir(outsideDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-		Path:   domain.Path(target),
-		Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
-	}, newMockLogger())
-	t.Cleanup(func() {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		r.Stop(&wg)
-	})
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}})}, newMockLogger())
 	events, _ := controlledSource(r)
-	changed := make(chan domain.Path, 8)
-	r.runStartHook = func() {}
-	r.runChangeHook = func(event domain.Event) { changed <- event.Path }
-	r.runFinishHook = func() {}
-	result := make(chan error, 1)
-	go func() { result <- r.Run() }()
+	changed, result := startRunner(t, r, nil)
 
 	for _, ev := range []fsnotify.Event{
 		{Name: "", Op: fsnotify.Write},
@@ -251,8 +180,8 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	events <- fsnotify.Event{Name: inside, Op: fsnotify.Create}
 	select {
 	case got := <-changed:
-		if got.String() != inside {
-			t.Fatalf("event outside the watch target ran the hook: %q", got)
+		if got.Path.String() != inside {
+			t.Fatalf("event outside the watch target ran the hook: %q", got.Path)
 		}
 	case err := <-result:
 		t.Fatalf("run stopped: %v", err)
@@ -262,36 +191,6 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	if got := r.watcher.WatchList(); len(got) != 1 || got[0] != target {
 		t.Fatalf("watch list changed: %v", got)
 	}
-}
-
-// startExcludeRunner는 path를 감시하는 runner를 시작하고, 감시 목록 등록이 끝나면 돌려준다.
-// changed는 hook이 받은 이벤트를, result는 Run의 결과를 받는다.
-func startExcludeRunner(t *testing.T, path string, option domain.WatchTargetsOption, logger helper.Logger, onChange func(domain.Event)) (r *watchTargetRunner, changed <-chan domain.Event, result <-chan error) {
-	t.Helper()
-	r = NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: option}, logger)
-	t.Cleanup(func() {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		r.Stop(&wg)
-	})
-	ready, events, done := make(chan struct{}), make(chan domain.Event, testQueueSize), make(chan error, 1)
-	r.runStartHook = func() { close(ready) }
-	r.runChangeHook = func(event domain.Event) {
-		if onChange != nil {
-			onChange(event)
-		}
-		events <- event
-	}
-	r.runFinishHook = func() {}
-	go func() { done <- r.Run() }()
-	select {
-	case <-ready:
-	case err := <-done:
-		t.Fatalf("run before registration: %v", err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("native watcher did not become ready")
-	}
-	return r, events, done
 }
 
 // awaitHookPath는 hook이 path의 이벤트를 받을 때까지 기다리며, 그 사이에 받은 이벤트의 경로를 돌려준다.
@@ -335,12 +234,8 @@ func TestExcludedFolderStaysOutOfWatchList(t *testing.T) {
 			if atStart {
 				makeDirs()
 			}
-			r, changed, result := startExcludeRunner(t, target, domain.WatchTargetsOption{
-				Watch:     domain.WatchOption{SubDir: true, Exclude: exclude, FileEvent: domain.WatchEvent{Create: true}},
-				DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-				HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-				Queue:     domain.QueueOption{Size: testQueueSize},
-			}, newMockLogger(), nil)
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: exclude, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+			changed, result := startRunner(t, r, nil)
 			if !atStart {
 				makeDirs()
 			}
@@ -390,28 +285,15 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			target := t.TempDir()
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-				Path:   domain.Path(target),
-				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchAllEvent()}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
-			}, newMockLogger())
-			t.Cleanup(func() {
-				var wg sync.WaitGroup
-				wg.Add(1)
-				r.Stop(&wg)
-			})
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchAllEvent()})}, newMockLogger())
 			events, _ := controlledSource(r)
-			changed := make(chan domain.Event, testQueueSize)
-			r.runStartHook = func() {}
-			r.runChangeHook = func(event domain.Event) { changed <- event }
-			r.runFinishHook = func() {}
-			result := make(chan error, 1)
-			go func() { result <- r.Run() }()
+			changed, result := startRunner(t, r, nil)
 
-			type change struct {
+			type fileChange struct {
 				rel string
 				op  fsnotify.Op
 			}
-			var want []change
+			var want []fileChange
 			for _, rel := range append(append([]string{}, tc.excluded...), tc.watched...) {
 				for _, op := range ops {
 					events <- fsnotify.Event{Name: filepath.Join(target, filepath.FromSlash(rel)), Op: op}
@@ -419,14 +301,14 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 			}
 			for _, rel := range tc.watched {
 				for _, op := range ops {
-					want = append(want, change{rel, op})
+					want = append(want, fileChange{rel, op})
 				}
 			}
 			// 감시 루프와 hook은 이벤트를 받은 순서대로 처리하므로, 뒤이어 넣은 이벤트의 hook이 실행됐다면
 			// 앞서 넣은 이벤트의 처리도 끝났다.
 			sentinel := filepath.Join(target, "zz-sentinel.txt")
 			events <- fsnotify.Event{Name: sentinel, Op: fsnotify.Create}
-			var got []change
+			var got []fileChange
 			for done := false; !done; {
 				select {
 				case event := <-changed:
@@ -435,7 +317,7 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 						break
 					}
 					rel, _ := filepath.Rel(target, event.Path.String())
-					got = append(got, change{filepath.ToSlash(rel), fsnotify.Op(event.Operation)})
+					got = append(got, fileChange{filepath.ToSlash(rel), fsnotify.Op(event.Operation)})
 				case err := <-result:
 					t.Fatalf("run stopped: %v", err)
 				case <-time.After(5 * time.Second):
@@ -459,12 +341,8 @@ func TestHookOutputInExcludedPathDoesNotRerunHook(t *testing.T) {
 	var once sync.Once
 	var mu sync.Mutex
 	var runs []string // hook이 시작하고 끝난 순서
-	_, changed, result := startExcludeRunner(t, target, domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{SubDir: true, Exclude: domain.ExcludePatterns{"out.txt"}, FileEvent: domain.WatchAllEvent()},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-		Queue:     domain.QueueOption{Size: testQueueSize},
-	}, logger, func(event domain.Event) {
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: domain.ExcludePatterns{"out.txt"}, FileEvent: domain.WatchAllEvent()})}, logger)
+	changed, result := startRunner(t, r, func(event domain.Event) {
 		mu.Lock()
 		runs = append(runs, "start "+event.Path.Name())
 		mu.Unlock()

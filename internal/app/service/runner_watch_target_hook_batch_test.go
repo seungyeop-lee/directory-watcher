@@ -11,33 +11,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
-
-// mockLogger는 테스트용 모의 Logger다.
-type mockLogger struct{}
-
-func (m *mockLogger) Info(msg string)  {}
-func (m *mockLogger) Error(msg string) {}
-func (m *mockLogger) Debug(msg string) {}
-
-func newMockLogger() helper.Logger {
-	return &mockLogger{}
-}
-
-// testQueueSize는 대기열을 채우지 않는 테스트의 대기열 용량이다. hook이 받은 실행을 모으는 채널도 이만큼 받아 둔다.
-const testQueueSize = 2048
-
-// hookBatchOption은 설정 파일에 option을 적지 않았을 때의 감시 대상 옵션에서 hookBatch 값만 바꾼다.
-func hookBatchOption(wait, maxWait domain.Millisecond, deliver domain.Deliver) domain.WatchTargetsOption {
-	return domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-		HookBatch: domain.HookBatchOption{WaitMillisecond: wait, MaxWaitMillisecond: maxWait, Deliver: deliver},
-		Queue:     domain.QueueOption{Size: testQueueSize},
-		Run:       domain.RunPolicy{Concurrency: 1},
-	}
-}
 
 // hookBatchFixture는 fsnotify 이벤트를 직접 넣는 감시 대상 runner와, hook이 받은 실행을 둔다. 실제 watcher의
 // 이벤트는 받지 않으므로, 디스크를 바꾼 뒤 그 이벤트를 send로 넣는다.
@@ -45,8 +19,8 @@ type hookBatchFixture struct {
 	t      *testing.T
 	root   string
 	events chan<- fsnotify.Event
-	runs   chan domain.Event
-	result chan error
+	runs   <-chan domain.Event
+	result <-chan error
 }
 
 // startHookBatchRunner는 root를 option으로 감시하는 runner를 시작한다. onChange는 hook이 실행을 받을 때 먼저 실행한다.
@@ -54,30 +28,8 @@ func startHookBatchRunner(t *testing.T, root string, option domain.WatchTargetsO
 	t.Helper()
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
 	events, _ := controlledSource(r)
-	f := &hookBatchFixture{t: t, root: root, events: events, runs: make(chan domain.Event, 64), result: make(chan error, 1)}
-	ready := make(chan struct{})
-	r.runStartHook = func() { close(ready) }
-	r.runChangeHook = func(event domain.Event) {
-		if onChange != nil {
-			onChange(event)
-		}
-		f.runs <- event
-	}
-	r.runFinishHook = func() {}
-	t.Cleanup(func() {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		r.Stop(&wg)
-	})
-	go func() { f.result <- r.Run() }()
-	select {
-	case <-ready:
-	case err := <-f.result:
-		t.Fatalf("run before registration: %v", err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("watcher did not become ready")
-	}
-	return f
+	runs, result := startRunner(t, r, onChange)
+	return &hookBatchFixture{t: t, root: root, events: events, runs: runs, result: result}
 }
 
 func (f *hookBatchFixture) path(rel string) string {
@@ -115,13 +67,6 @@ func (f *hookBatchFixture) collect(quiet time.Duration) []string {
 		case <-time.After(quiet):
 			return got
 		}
-	}
-}
-
-func writeFile(t *testing.T, path string) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte("event"), 0600); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -267,7 +212,8 @@ func TestFileWithoutCreateEventIsRecordedOnWrite(t *testing.T) {
 func TestMaxWaitRunsHookDuringContinuousWrites(t *testing.T) {
 	const maxWait = 500 * time.Millisecond
 	root := t.TempDir()
-	_, changed, result := startExcludeRunner(t, root, hookBatchOption(100, domain.Millisecond(maxWait/time.Millisecond), domain.DeliverLast), newMockLogger(), nil)
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: hookBatchOption(100, domain.Millisecond(maxWait/time.Millisecond), domain.DeliverLast)}, newMockLogger())
+	changed, result := startRunner(t, r, nil)
 	stop, writing := make(chan struct{}), make(chan struct{})
 	defer func() { close(stop); <-writing }()
 	start := time.Now()

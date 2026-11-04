@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -19,7 +18,7 @@ import (
 )
 
 func TestStopDiscardsPendingEvents(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{Watch: domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -66,7 +65,7 @@ func TestRunChangesTerminatesWhenStopCloses(t *testing.T) {
 }
 
 func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{Watch: domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, watchErrors := controlledSource(r)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -86,24 +85,6 @@ func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	r.Stop(&wg)
-}
-
-type runnerCommand func(*process.WatcherContext, *domain.Event) error
-
-func (f runnerCommand) Run(ctx *process.WatcherContext, _ domain.Path, event *domain.Event) error {
-	return f(ctx, event)
-}
-func emptyCommand() domain.Cmd {
-	return runnerCommand(func(*process.WatcherContext, *domain.Event) error { return nil })
-}
-
-func testCommandSet(paths ...string) domain.CommandSet {
-	empty := emptyCommand()
-	set := domain.CommandSet{Global: domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: empty, OnBeforeChange: empty, OnAfterChange: empty, OnFinishWatch: empty}}}
-	for _, path := range paths {
-		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{Watch: domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}, Run: domain.RunPolicy{Concurrency: 1}}})
-	}
-	return set
 }
 
 func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
@@ -131,7 +112,9 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 
 func TestBoundedDispatchReportsLoss(t *testing.T) {
 	const boundedQueueSize = 16
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{Watch: domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: boundedQueueSize}}}, newMockLogger())
+	option := watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})
+	option.Queue.Size = boundedQueueSize
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: option}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)
@@ -296,24 +279,4 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 			})
 		}
 	}
-}
-
-func controlledSource(r *watchTargetRunner) (chan fsnotify.Event, chan error) {
-	events, watchErrors := make(chan fsnotify.Event), make(chan error)
-	r.watchEvents, r.watchErrors = events, watchErrors
-	return events, watchErrors
-}
-
-func assertWatchDirectoriesRemovable(t *testing.T, targets ...*watchTargetRunner) {
-	t.Helper()
-	t.Cleanup(func() {
-		for _, target := range targets {
-			before := time.Now()
-			err := os.RemoveAll(target.path.String())
-			t.Logf("resource removal path=%q at=%s duration=%s err=%v", target.path, time.Now().UTC().Format(time.RFC3339Nano), time.Since(before), err)
-			if err != nil {
-				t.Errorf("watch directory remains in use after Stop: %v", err)
-			}
-		}
-	})
 }

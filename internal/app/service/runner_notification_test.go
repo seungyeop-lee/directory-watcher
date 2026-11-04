@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,24 +16,6 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
-
-type notificationLog struct {
-	sync.Mutex
-	messages []string
-}
-
-func (l *notificationLog) Debug(string) {}
-func (l *notificationLog) Info(string)  {}
-func (l *notificationLog) Error(s string) {
-	l.Lock()
-	defer l.Unlock()
-	l.messages = append(l.messages, s)
-}
-func (l *notificationLog) String() string {
-	l.Lock()
-	defer l.Unlock()
-	return strings.Join(l.messages, "\n")
-}
 
 func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 	set := testCommandSet(t.TempDir(), t.TempDir())

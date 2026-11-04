@@ -17,106 +17,6 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
-// renameFixture는 감시 대상 target 안에 src와 dst 폴더를, target 밖에 outside 폴더를 둔다.
-type renameFixture struct {
-	t       *testing.T
-	target  string
-	outside string
-	runner  *watchTargetRunner
-	changed <-chan domain.Event
-	result  <-chan error
-	phase   int
-	// sentinelDirs는 changes가 표지 파일을 쓰는 폴더다. 감시 대상 기준 상대 경로이고, ""는 감시 대상이다.
-	sentinelDirs []string
-}
-
-func newRenameFixture(t *testing.T) *renameFixture {
-	base := t.TempDir()
-	f := &renameFixture{t: t, target: filepath.Join(base, "target"), outside: filepath.Join(base, "outside"), sentinelDirs: []string{"", "src", "dst"}}
-	for _, dir := range []string{"target/src", "target/dst", "outside"} {
-		if err := os.MkdirAll(filepath.Join(base, filepath.FromSlash(dir)), 0700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return f
-}
-
-// path는 감시 대상 기준 상대 경로 rel을 경로로 바꾼다. "../outside/"로 시작하면 감시 대상 밖 경로다.
-func (f *renameFixture) path(rel string) string {
-	return filepath.Join(f.target, filepath.FromSlash(rel))
-}
-
-func (f *renameFixture) write(rel string) {
-	f.t.Helper()
-	if err := os.MkdirAll(filepath.Dir(f.path(rel)), 0700); err != nil {
-		f.t.Fatal(err)
-	}
-	if err := os.WriteFile(f.path(rel), []byte("event"), 0600); err != nil {
-		f.t.Fatal(err)
-	}
-}
-
-func (f *renameFixture) move(from, to string) {
-	f.t.Helper()
-	if err := os.Rename(f.path(from), f.path(to)); err != nil {
-		f.t.Fatal(err)
-	}
-}
-
-func (f *renameFixture) start(exclude domain.ExcludePatterns) {
-	f.startWith(domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{SubDir: true, Exclude: exclude, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-		Queue:     domain.QueueOption{Size: testQueueSize},
-	})
-}
-
-func (f *renameFixture) startWith(option domain.WatchTargetsOption) {
-	f.runner, f.changed, f.result = startExcludeRunner(f.t, f.target, option, newMockLogger(), nil)
-}
-
-// changes는 sentinelDirs의 폴더마다 표지 파일을 쓰고, 그 표지들의 hook이 모두 실행될 때까지 hook이 받은
-// 이벤트를 "D src/a.txt"처럼 돌려준다. 폴더 이벤트는 "C src/d/"처럼 경로 끝에 /를 붙인다. 표지 파일의 이벤트는
-// 빼고 돌려준다.
-//
-// Windows는 폴더마다 따로 이벤트를 받으므로, 한 폴더의 표지만 기다리면 다른 폴더의 이벤트가 그 뒤에 올 수 있다.
-func (f *renameFixture) changes() []string {
-	f.t.Helper()
-	f.phase++
-	sentinel := fmt.Sprintf("zz-sentinel-%d.txt", f.phase)
-	waiting := map[string]bool{}
-	for _, dir := range f.sentinelDirs {
-		rel := filepath.ToSlash(filepath.Join(dir, sentinel))
-		f.write(rel)
-		waiting[rel] = true
-	}
-	var got []string
-	for len(waiting) > 0 {
-		select {
-		case ev := <-f.changed:
-			rel, err := filepath.Rel(f.target, ev.Path.String())
-			if err != nil {
-				f.t.Fatal(err)
-			}
-			rel = filepath.ToSlash(rel)
-			if strings.HasPrefix(filepath.Base(rel), "zz-sentinel-") {
-				delete(waiting, rel)
-				continue
-			}
-			if ev.IsDir {
-				rel += "/"
-			}
-			got = append(got, ev.Operation.String()+" "+rel)
-		case err := <-f.result:
-			f.t.Fatalf("run stopped: %v", err)
-		case <-time.After(5 * time.Second):
-			f.t.Fatalf("sentinels %v did not reach the hook (got %v)", waiting, got)
-		}
-	}
-	return got
-}
-
 // 파일의 이름을 바꾸거나 옮기면 hook이 옛 경로의 삭제(D)를 먼저, 감시 대상 안의 새 경로의 생성(C)을 그다음에
 // 받는지 확인한다.
 func TestRenamedOrMovedFileNotifiesOldPathAsDelete(t *testing.T) {
@@ -208,22 +108,6 @@ func TestRenamedOrMovedFolderNotifiesOldPathAsDelete(t *testing.T) {
 					f.assertNoWatchUnder(tc.from)
 				}
 			})
-		}
-	}
-}
-
-// assertNoWatchUnder는 감시 목록에 rel과 그 아래 경로가 없는지 확인한다.
-//
-// Windows에서는 옮겨 나간 폴더의 감시를 leakCheckDelay 뒤에 watcher를 새로 만들어 버리므로, 그보다 오래 기다린
-// 뒤 표지 파일의 hook이 실행될 때까지 기다린다. 감시 루프는 이벤트와 watcher 교체를 차례로 처리하므로, 표지
-// 파일의 hook이 실행됐다면 교체도 끝났고 runner.watcher를 읽어도 된다.
-func (f *renameFixture) assertNoWatchUnder(rel string) {
-	f.t.Helper()
-	time.Sleep(3 * leakCheckDelay)
-	f.changes()
-	for _, p := range f.runner.watcher.WatchList() {
-		if domain.Path(f.path(rel)).Contains(domain.Path(p)) {
-			f.t.Errorf("watch list still holds %s under the old path %s", p, rel)
 		}
 	}
 }
@@ -405,19 +289,10 @@ func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-		Path: domain.Path(target),
-		Option: domain.WatchTargetsOption{
-			Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}, DirEvent: domain.WatchEvent{Create: true}},
-			HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-			Queue:     domain.QueueOption{Size: testQueueSize},
-		},
-	}, newMockLogger())
-	t.Cleanup(func() {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		r.Stop(&wg)
-	})
+	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}, DirEvent: domain.WatchEvent{Create: true}})
+	// 폴더 이벤트를 모으지 않아, 보류를 푼 d의 C가 묶음을 기다리지 않고 곧바로 hook에 간다.
+	option.DirBatch = domain.DirBatchOption{}
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: option}, newMockLogger())
 	if err := r.watcher.Add(outside); err != nil {
 		t.Fatal(err)
 	}
@@ -427,24 +302,17 @@ func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
 	r.renameSource = filepath.Join(target, "old")
 	r.holdTimeout = holdTimeout
 	r.unreleasedDirs[dir] = struct{}{}
-	changed := make(chan string, testQueueSize)
-	r.runStartHook = func() {}
-	r.runChangeHook = func(event domain.Event) {
-		if rel, err := filepath.Rel(target, event.Path.String()); err == nil {
-			changed <- filepath.ToSlash(rel)
-		}
-	}
-	r.runFinishHook = func() {}
-	result := make(chan error, 1)
-	go func() { result <- r.Run() }()
+	changed, result := startRunner(t, r, nil)
 
 	var got []string
 	await := func(want string) {
 		t.Helper()
 		for !slices.Contains(got, want) {
 			select {
-			case rel := <-changed:
-				got = append(got, rel)
+			case ev := <-changed:
+				if rel, err := filepath.Rel(target, ev.Path.String()); err == nil {
+					got = append(got, filepath.ToSlash(rel))
+				}
 			case err := <-result:
 				t.Fatalf("run stopped: %v", err)
 			case <-time.After(5 * time.Second):

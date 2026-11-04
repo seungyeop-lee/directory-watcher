@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,28 +12,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
-
-// fill은 감시 대상 기준 상대 경로 dir 안에 파일 n개를 만든다.
-func (f *renameFixture) fill(dir string, n int) {
-	f.t.Helper()
-	for i := 0; i < n; i++ {
-		f.write(fmt.Sprintf("%s/f%d.txt", dir, i))
-	}
-}
-
-func (f *renameFixture) mkdirAll(rel string) {
-	f.t.Helper()
-	if err := os.MkdirAll(f.path(rel), 0700); err != nil {
-		f.t.Fatal(err)
-	}
-}
-
-func (f *renameFixture) removeAll(rel string) {
-	f.t.Helper()
-	if err := os.RemoveAll(f.path(rel)); err != nil {
-		f.t.Fatal(err)
-	}
-}
 
 // 폴더가 안의 내용과 함께 생기거나 사라지면 hook이 맨 위 폴더의 이벤트 하나만 받는지 확인한다. 폴더 안의
 // 파일 300개를 옮겨 오거나 지워도 그 파일들의 이벤트는 대기열에 들어가지 않는다.
@@ -152,12 +129,9 @@ func TestFolderEventKeepsOrderWithFileEvents(t *testing.T) {
 func TestFolderEventIsSentWithinMaxWaitDuringContinuousWrites(t *testing.T) {
 	const maxWait = 500 * time.Millisecond
 	f := newRenameFixture(t)
-	f.startWith(domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: domain.Millisecond(maxWait / time.Millisecond)},
-		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-		Queue:     domain.QueueOption{Size: testQueueSize},
-	})
+	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}})
+	option.DirBatch.MaxWaitMillisecond = domain.Millisecond(maxWait / time.Millisecond)
+	f.startWith(option)
 	stop, writing := make(chan struct{}), make(chan struct{})
 	defer func() { close(stop); <-writing }()
 	start := time.Now()
@@ -203,7 +177,7 @@ func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
 	f := newRenameFixture(t)
 	f.fill("src/pkg", 5)
 	f.fill("../outside/x", 3)
-	f.startWith(domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}})
+	f.startWith(watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}))
 	f.mkdirAll("src/a/b")
 	f.write("src/a/b/c.txt")
 	f.move("../outside/x", "src/x")
@@ -222,12 +196,7 @@ func TestFolderEventWithoutSubDir(t *testing.T) {
 	f := newRenameFixture(t)
 	f.sentinelDirs = []string{""}
 	f.fill("src", 3)
-	f.startWith(domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-		Queue:     domain.QueueOption{Size: testQueueSize},
-	})
+	f.startWith(watchTargetOption(domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}}))
 	f.removeAll("src")
 	if got, want := f.changes(), []string{"D src/"}; !slices.Equal(got, want) {
 		t.Fatalf("hook events after removing an existing folder = %v, want %v", got, want)
@@ -260,28 +229,6 @@ func TestFolderCreatedWithFileIsWatchedAfterFolderEvent(t *testing.T) {
 	}
 }
 
-// next는 hook이 받은 다음 이벤트를 changes와 같은 꼴로 돌려준다.
-func (f *renameFixture) next() string {
-	f.t.Helper()
-	select {
-	case ev := <-f.changed:
-		rel, err := filepath.Rel(f.target, ev.Path.String())
-		if err != nil {
-			f.t.Fatal(err)
-		}
-		rel = filepath.ToSlash(rel)
-		if ev.IsDir {
-			rel += "/"
-		}
-		return ev.Operation.String() + " " + rel
-	case err := <-f.result:
-		f.t.Fatalf("run stopped: %v", err)
-	case <-time.After(5 * time.Second):
-		f.t.Fatal("no event reached the hook")
-	}
-	return ""
-}
-
 // 폴더 이벤트를 모으는 동안 쌓인 이벤트로 만든 실행이 대기열 용량보다 많으면, 감시 루프는 대기열에 자리가 나기를
 // 기다리지 않고 dispatch queue full로 멈춘다. 폴더 안의 파일만 지우면 폴더 이벤트가 없어 파일 이벤트가 모두 실행이 된다.
 func TestBatchLargerThanQueueOverflows(t *testing.T) {
@@ -289,12 +236,10 @@ func TestBatchLargerThanQueueOverflows(t *testing.T) {
 	f := newRenameFixture(t)
 	f.fill("src", files)
 	release := make(chan struct{})
-	f.runner, f.changed, f.result = startExcludeRunner(t, f.target, domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-		Queue:     domain.QueueOption{Size: queueSize},
-	}, newMockLogger(), func(domain.Event) { <-release })
+	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}})
+	option.Queue.Size = queueSize
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger())
+	f.changed, f.result = startRunner(t, r, func(domain.Event) { <-release })
 	t.Cleanup(func() { close(release) })
 	for i := 0; i < files; i++ {
 		if err := os.Remove(f.path(fmt.Sprintf("src/f%d.txt", i))); err != nil {

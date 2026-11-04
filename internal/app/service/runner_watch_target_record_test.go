@@ -1,67 +1,10 @@
 package service
 
 import (
-	"io/fs"
-	"path/filepath"
-	"runtime"
-	"sync"
 	"testing"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
-
-// stop은 runner를 멈추고 감시 루프가 끝날 때까지 기다린다. 그 뒤에는 기록을 읽어도 감시 루프와 겹치지 않는다.
-func (f *renameFixture) stop() {
-	f.t.Helper()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	f.runner.Stop(&wg)
-}
-
-// assertRecorded는 감시 대상 기준 상대 경로 rel이 기록에 있는지와 폴더인지가 want, wantDir와 같은지 확인한다.
-func (f *renameFixture) assertRecorded(rel string, want, wantDir bool) {
-	f.t.Helper()
-	isDir, ok := f.runner.recorded(f.path(rel))
-	switch {
-	case ok != want:
-		f.t.Errorf("recorded(%s) = %v, want %v", rel, ok, want)
-	case ok && isDir != wantDir:
-		f.t.Errorf("recorded(%s) reports folder %v, want %v", rel, isDir, wantDir)
-	}
-}
-
-// assertRecordMatchesDisk는 감시 대상 안에 있는 모든 항목이 기록에 같은 종류로 있고, gone의 경로는 기록에
-// 없는지 확인한다. exclude와 subDir: false가 기록에서 빼는 항목이 없는 감시 대상에서만 쓴다.
-func (f *renameFixture) assertRecordMatchesDisk(gone ...string) {
-	f.t.Helper()
-	err := filepath.WalkDir(f.target, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(f.target, p)
-		if err != nil {
-			return err
-		}
-		f.assertRecorded(filepath.ToSlash(rel), true, d.IsDir())
-		return nil
-	})
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	for _, rel := range gone {
-		f.assertRecorded(rel, false, false)
-	}
-}
-
-// fillMovable은 이름을 바꾸거나 옮길 폴더 dir과 그 아래 sub 폴더에 파일을 채운다. Windows는 감시 중인 하위 폴더가
-// 있는 폴더의 이름 바꾸기와 옮기기를 거부하므로, Windows에서는 sub 폴더를 만들지 않는다.
-func (f *renameFixture) fillMovable(dir string) {
-	f.t.Helper()
-	f.fill(dir, 3)
-	if runtime.GOOS != "windows" {
-		f.fill(dir+"/sub", 3)
-	}
-}
 
 // 감시를 시작할 때와 항목을 만들거나 지우거나 옮긴 뒤에, 기록이 감시 대상 안의 실제 파일과 폴더와 같은지
 // 확인한다.
@@ -186,12 +129,7 @@ func TestRecordWithoutSubDirHoldsOnlyDirectChildren(t *testing.T) {
 	f.write("top.txt")
 	f.fill("src/sub", 2)
 	f.fill("gone", 2)
-	f.startWith(domain.WatchTargetsOption{
-		Watch:     domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
-		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-		Queue:     domain.QueueOption{Size: testQueueSize},
-	})
+	f.startWith(watchTargetOption(domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}}))
 	f.fill("new", 2)
 	f.write("added.txt")
 	f.removeAll("gone")

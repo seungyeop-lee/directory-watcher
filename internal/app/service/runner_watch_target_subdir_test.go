@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -80,33 +79,8 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 					build(target)
 				}
 
-				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-					Path: domain.Path(target),
-					Option: domain.WatchTargetsOption{
-						Watch:     domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}},
-						DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-						HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-						Queue:     domain.QueueOption{Size: testQueueSize},
-					},
-				}, newMockLogger())
-				t.Cleanup(func() {
-					var wg sync.WaitGroup
-					wg.Add(1)
-					r.Stop(&wg)
-				})
-				ready, changed := make(chan struct{}), make(chan domain.Path, testQueueSize)
-				r.runStartHook = func() { close(ready) }
-				r.runChangeHook = func(event domain.Event) { changed <- event.Path }
-				r.runFinishHook = func() {}
-				result := make(chan error, 1)
-				go func() { result <- r.Run() }()
-				select {
-				case <-ready:
-				case err := <-result:
-					t.Fatalf("run before registration: %v", err)
-				case <-time.After(5 * time.Second):
-					t.Fatal("native watcher did not become ready")
-				}
+				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}})}, newMockLogger())
+				changed, result := startRunner(t, r, nil)
 
 				seen := map[string]bool{}
 				write := func(rel string) {
@@ -118,13 +92,13 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 					for !seen[rel] {
 						select {
 						case got := <-changed:
-							gotAbs, err := filepath.Abs(got.String())
+							gotAbs, err := filepath.Abs(got.Path.String())
 							if err != nil {
 								t.Fatal(err)
 							}
 							gotRel, err := filepath.Rel(target, gotAbs)
-							if got == "" || err != nil || gotRel == ".." || strings.HasPrefix(gotRel, ".."+string(filepath.Separator)) {
-								t.Fatalf("event outside the watch target ran the hook: %q", got)
+							if got.Path == "" || err != nil || gotRel == ".." || strings.HasPrefix(gotRel, ".."+string(filepath.Separator)) {
+								t.Fatalf("event outside the watch target ran the hook: %q", got.Path)
 							}
 							seen[filepath.ToSlash(gotRel)] = true
 						case err := <-result:
@@ -221,33 +195,8 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 			}
 			makeDirs(tc.startDirs)
 
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
-				Path: domain.Path(link),
-				Option: domain.WatchTargetsOption{
-					Watch:     domain.WatchOption{SubDir: tc.subDir, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}},
-					DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
-					HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
-					Queue:     domain.QueueOption{Size: testQueueSize},
-				},
-			}, newMockLogger())
-			t.Cleanup(func() {
-				var wg sync.WaitGroup
-				wg.Add(1)
-				r.Stop(&wg)
-			})
-			ready, changed := make(chan struct{}), make(chan domain.Path, testQueueSize)
-			r.runStartHook = func() { close(ready) }
-			r.runChangeHook = func(event domain.Event) { changed <- event.Path }
-			r.runFinishHook = func() {}
-			result := make(chan error, 1)
-			go func() { result <- r.Run() }()
-			select {
-			case <-ready:
-			case err := <-result:
-				t.Fatalf("run before registration: %v", err)
-			case <-time.After(5 * time.Second):
-				t.Fatal("native watcher did not become ready")
-			}
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(link), Option: watchTargetOption(domain.WatchOption{SubDir: tc.subDir, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}})}, newMockLogger())
+			changed, result := startRunner(t, r, nil)
 
 			seen := map[string]bool{}
 			write := func(rel string) {
@@ -259,7 +208,7 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 				for !seen[rel] {
 					select {
 					case got := <-changed:
-						gotRel, err := filepath.Rel(resolved, got.String())
+						gotRel, err := filepath.Rel(resolved, got.Path.String())
 						if err != nil {
 							t.Fatal(err)
 						}
