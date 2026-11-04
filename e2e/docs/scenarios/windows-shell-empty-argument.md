@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](windows-shell-empty-argument.ko.md)
 
-- Checks the documented difference when an extensionless file expands `{{.ExtName}}` outside quotes.
+- The test checks the documented difference when an extensionless file expands `{{.ExtName}}` outside quotes.
 
 ## What it checks and success criteria
 
@@ -55,5 +55,5 @@ make e2e-windows ARGS="-- -run '^TestWindowsShellEmptyArgument$'"
 
 ## Related code
 
-- `e2e/scenarios/shell_windows_test.go`: `TestWindowsShellEmptyArgument`
-- `e2e/harness`: `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`.
+- `e2e/scenarios/shell_windows_test.go` defines `TestWindowsShellEmptyArgument`.
+- The test uses `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, and `Lines` from `e2e/harness`.

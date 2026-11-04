@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](powershell-event-variables.ko.md)
 
-- Checks eight event variables and injection prevention through Windows PowerShell using the same file name as `TestGoldenPath`.
+- The test checks eight event variables and injection prevention through Windows PowerShell using the same file name as `TestGoldenPath`.
 
 ## What it checks and success criteria
 
@@ -51,5 +51,5 @@ make e2e-windows ARGS="-- -run '^TestPowershellEventVariables$'"
 
 ## Related code
 
-- `e2e/scenarios/shell_windows_test.go`: `TestPowershellEventVariables`
-- `e2e/harness`: `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`.
+- `e2e/scenarios/shell_windows_test.go` defines `TestPowershellEventVariables`.
+- The test uses `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, and `Lines` from `e2e/harness`.

@@ -55,5 +55,5 @@ make e2e-windows ARGS="-- -run '^TestWindowsShellEmptyArgument$'"
 
 ## 관련 코드
 
-- `e2e/scenarios/shell_windows_test.go`: `TestWindowsShellEmptyArgument`
-- `e2e/harness`: `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`.
+- `e2e/scenarios/shell_windows_test.go`에 `TestWindowsShellEmptyArgument`를 정의합니다.
+- 테스트는 `e2e/harness`의 `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`를 사용합니다.

@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](windows-shell-rejected-on-unix.ko.md)
 
-- Checks that selecting `shell: cmd` on Unix fails before any hook runs.
+- The test checks that selecting `shell: cmd` on Unix fails before any hook runs.
 
 ## What it checks and success criteria
 
@@ -41,5 +41,5 @@ go run ./e2e/linux -- -run '^TestWindowsShellRejectedOnUnix$'
 
 ## Related code
 
-- `e2e/scenarios/shell_unix_test.go`: `TestWindowsShellRejectedOnUnix`
-- `e2e/harness`: `NewScenario`, `Hook`, `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines`.
+- `e2e/scenarios/shell_unix_test.go` defines `TestWindowsShellRejectedOnUnix`.
+- The test uses `NewScenario`, `Hook`, `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, and `Lines` from `e2e/harness`.

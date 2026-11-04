@@ -41,5 +41,5 @@ go run ./e2e/linux -- -run '^TestWindowsShellRejectedOnUnix$'
 
 ## 관련 코드
 
-- `e2e/scenarios/shell_unix_test.go`: `TestWindowsShellRejectedOnUnix`
-- `e2e/harness`: `NewScenario`, `Hook`, `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines`.
+- `e2e/scenarios/shell_unix_test.go`에 `TestWindowsShellRejectedOnUnix`를 정의합니다.
+- 테스트는 `e2e/harness`의 `NewScenario`, `Hook`, `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines`를 사용합니다.

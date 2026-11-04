@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](hook-working-directory.ko.md)
 
-- Checks the actual working directories of global and target lifecycle hooks against the [execution location table](../../../docs/guide/configuration.md#command-execution-location).
+- The test checks the actual working directories of global and target lifecycle hooks against the [execution location table](../../../docs/guide/configuration.md#command-execution-location).
 
 ## What it checks and success criteria
 
@@ -58,6 +58,6 @@ make e2e-windows ARGS="-- -run '^TestHookWorkingDirectory$'"
 
 ## Related code
 
-- `e2e/scenarios/shell_test.go`: `TestHookWorkingDirectory`
-- `e2e/harness`: `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`.
-- `e2e/hookrec/main.go`, `main_test.go`: `--workdir`, `TestWorkingDirectoryBeforeLine`.
+- `e2e/scenarios/shell_test.go` defines `TestHookWorkingDirectory`.
+- The test uses `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, and `Lines` from `e2e/harness`.
+- `e2e/hookrec/main.go` implements `--workdir`, and `main_test.go` verifies it with `TestWorkingDirectoryBeforeLine`.

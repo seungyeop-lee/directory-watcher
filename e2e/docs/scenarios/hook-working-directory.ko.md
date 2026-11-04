@@ -58,6 +58,6 @@ make e2e-windows ARGS="-- -run '^TestHookWorkingDirectory$'"
 
 ## 관련 코드
 
-- `e2e/scenarios/shell_test.go`: `TestHookWorkingDirectory`
-- `e2e/harness`: `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`.
-- `e2e/hookrec/main.go`, `main_test.go`: `--workdir`, `TestWorkingDirectoryBeforeLine`.
+- `e2e/scenarios/shell_test.go`에 `TestHookWorkingDirectory`를 정의합니다.
+- 테스트는 `e2e/harness`의 `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`를 사용합니다.
+- `e2e/hookrec/main.go`는 `--workdir`을 구현하고, `main_test.go`는 `TestWorkingDirectoryBeforeLine`으로 이를 검증합니다.

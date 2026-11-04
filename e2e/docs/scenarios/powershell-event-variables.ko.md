@@ -51,5 +51,5 @@ make e2e-windows ARGS="-- -run '^TestPowershellEventVariables$'"
 
 ## 관련 코드
 
-- `e2e/scenarios/shell_windows_test.go`: `TestPowershellEventVariables`
-- `e2e/harness`: `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`.
+- `e2e/scenarios/shell_windows_test.go`에 `TestPowershellEventVariables`를 정의합니다.
+- 테스트는 `e2e/harness`의 `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`를 사용합니다.
