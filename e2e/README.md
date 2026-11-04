@@ -4,7 +4,7 @@
 
 - These runs build the watcher and the Go helper programs from the actual current source and check file events, hook records, and process termination.
 - macOS local, Linux Docker, and Windows runs execute the same Go E2E scenarios in `e2e/scenarios`.
-- The Windows-only harness check `TestCleanupReportsLockedResources` is in the `e2e/harness` package, so it runs with `go test ./...`, not with `make e2e-local`.
+- The Windows-only harness checks `TestCleanupReportsLockedResources`, `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram`, and `TestDelayedHooksGoneFailsWhileHookRuns` are in the `e2e/harness` package, so they run with `go test ./...`, not with `make e2e-local`.
 - What each scenario checks and where its code is are in [Scenarios and their supporting code](docs/harness.md#scenarios-and-their-supporting-code).
 
 ## Setup and run
@@ -48,7 +48,7 @@ go run ./e2e/linux -- -count=3 -run '^TestProcessLifecycle$'
 
 | Document | Contents |
 |---|---|
-| [Harness structure and adding scenarios](docs/harness.md) | Code locations by responsibility, scenarios and their supporting code, steps and an example for writing a new scenario, `hookrec` process trees and delayed hooks |
+| [Harness structure and adding scenarios](docs/harness.md) | Code locations by responsibility, scenarios and their supporting code, steps and an example for writing a new scenario, `hookrec` options, process trees, and delayed hooks |
 | Per-scenario documents: [`TestGoldenPath`](docs/scenarios/golden-path.md), [`TestFolderEvents`](docs/scenarios/folder-events.md), [`TestProcessLifecycle`](docs/scenarios/process-lifecycle.md), [`TestStartHookShutdownModes`](docs/scenarios/start-hook-shutdown-modes.md), [`TestConcurrentRunsShutdown`](docs/scenarios/concurrent-runs-shutdown.md), [`TestFastInflowSlowHook`](docs/scenarios/fast-inflow-slow-hook.md), [`TestTargetsRunIndependently`](docs/scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](docs/scenarios/bounded-overload-cli.md), [`TestEventLossNotificationCLI`](docs/scenarios/event-loss-notification-cli.md), [`TestNormalChangesDoNotNotify`](docs/scenarios/normal-changes-do-not-notify.md), [`TestQueueWarningCLI`](docs/scenarios/queue-warning-cli.md), [`TestCanceledCommandListStopsNextProgram`](docs/scenarios/canceled-command-list-stops-next-program.md), [`TestCanceledPowershellHookStops`](docs/scenarios/canceled-powershell-hook-stops.md) | For each scenario, what it checks and success criteria, configuration, sequence diagram, subtests, run commands, and related code |
 | [Running E2E on a UTM Windows VM](docs/windows-utm.md) | UTM Windows VM prerequisites on a Mac and the dedicated E2E VM, `make e2e-windows-up`, `e2e-windows`, `e2e-windows-down`, and `e2e-windows-all`, result locations, shutdown behavior, troubleshooting |
 | [Running Windows E2E and checking CI results](docs/windows.md) | Windows run commands, graceful shutdown with CTRL+BREAK, CI steps and checking artifacts, Windows failure analysis |

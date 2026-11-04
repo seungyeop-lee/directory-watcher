@@ -17,8 +17,19 @@
 | `harness/hook_records_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
 | `harness/cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증. 같은 `Run`을 거치는 하네스 패키지의 `TestMain` 포함 |
 | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 이미 쓰고 있는 기록된 PID를 사라진 것으로 보는지, 기록된 hook이 실행 중이면 지연 hook 부재 대기가 여전히 실패하는지 검증 |
-| `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램 |
+| `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램. 옵션은 [`hookrec` 프로세스 트리와 지연 hook](#hookrec-프로세스-트리와-지연-hook)에 있음 |
+| `hookrec/main_test.go` | `--error-context`와 `--queue-context`가 이름이 `DW_ERROR_`나 `DW_QUEUE_`로 시작하는 환경 변수를, 코드에 나열하지 않은 이름까지 모두 담고 다른 변수는 담지 않은 JSON으로 `--line` 기록보다 먼저 기록하는지, `--error-context`가 작업 디렉터리도 기록하는지, `--exit-code`가 종료 코드를 정하는지 검증 |
 | `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
+| `worktree/` | Linux·Windows 실행기에 넘기도록 현재 작업 트리를 항목이 `src/` 아래에 놓이는 tar 스트림으로 묶음(`Root`, `Files`, `Archive`). 추적 중인 파일과, 추적하지 않지만 무시되지도 않는 파일을 담으며, 커밋하지 않은 수정·추가·삭제가 반영됨 |
+| `worktree/worktree_test.go` | `Archive`가 수정한 파일과 추적하지 않는 파일의 작업 트리 내용을 담고, 목록에 있지만 작업 트리에서 사라진 파일은 건너뛰는지 검증 |
+| `windows/` | Mac에서 UTM Windows VM으로 같은 Go E2E를 실행하는 진입점(`up`, `test`, `down`, `all`). UTM과 VM 제어(`utm.go`), 같은 Mac의 다른 실행과 VM을 나눠 쓰는 잠금(`lock.go`), 소스와 게스트 프로그램을 게스트로 보내고 결과를 수집하는 일(`test.go`)을 맡음. 패키지와 테스트는 macOS에서만 빌드됨 |
+| `windows/utm_test.go` | 대체 스크립트로 `utmctl`·AppleScript 응답 해석을 검증. UUID나 전체 이름으로 VM 찾기, stopped가 아닌 VM 세기, 종료 코드가 아닌 stderr로 성공 판정, VM이 stopped로 남은 `start`의 실패, Guest Agent 준비에 필요한 IPv4 주소, 디스플레이 수 읽기 |
+| `windows/main_test.go` | `up`이 디스플레이가 있는 VM을 시작 요청 전에 거부하는지 검증 |
+| `windows/lock_test.go` | VM 잠금을 테스트 실행끼리는 함께 잡고 시작·종료는 혼자 잡는지, 잠금이 VM마다 따로인지 검증 |
+| `windows/test_test.go` | 게스트 실행 디렉터리 생성과 게스트 프로그램 시작을 `exec` 응답이 아닌 게스트에서 다시 읽은 파일로 판정하는지, 게스트 실행 디렉터리 삭제를 재시도하고 남은 디렉터리를 삭제 명령과 함께 알리는지, 이 정리 실패를 테스트 결과에 넣지 않는지, 소스 아카이브에서 심볼릭 링크를 빼는지 검증 |
+| `windows/guest/` | Windows 게스트 안에서 E2E 실행 한 번을 수행하는 프로그램. 소스 체크섬을 확인하고 `go test`를 실행하며, 실행 디렉터리에서 시작되어 남은 프로세스를 종료하고, 진단 자료를 아카이브로 묶은 뒤 결과를 씀. Windows에서만 빌드됨 |
+| `windows/guestrun/` | Mac 실행기와 게스트 프로그램이 게스트 실행 디렉터리에서 주고받는 파일(`Request`, `Result`), 실행기의 결과 판정(`Check`), 두 기기 사이에서 디렉터리를 옮기는 tar 형식(`ArchiveDir`, `Extract`) |
+| `windows/guestrun/guestrun_test.go` | `Check`가 같은 실행의 통과 결과만 받아들이는지, `ArchiveDir`와 `Extract`를 거쳐 파일이 그대로 돌아오는지, `Extract`가 대상 밖으로 나가는 경로와 심볼릭 링크를 거부하는지 검증 |
 
 - 바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다.
 - 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다.
@@ -92,10 +103,37 @@ func TestCreateAnotherFile(t *testing.T) {
 
 ## `hookrec` 프로세스 트리와 지연 hook
 
+- `hookrec`은 `--file=<기록 파일>`로 받은 파일에 한 줄 기록을 덧붙이며, `--file`이 없으면 기록하지 않고 종료 코드 2로 끝납니다.
+  - `s.Hook`은 시나리오의 기록 파일로 `--file`을 붙이므로, `exec.Command(harness.HookrecBin(), "--file="+s.Records, ...)`처럼 `hookrec`을 직접 실행할 때만 `--file`을 직접 넘깁니다.
+- `--depth`가 없으면 `hookrec`은 `--line=<기록>`의 값을 한 줄로 기록하고 끝납니다.
+
+### 프로세스 트리
+
 - 장시간 프로세스는 `s.Hook("--depth=2")`를 시작·변경 hook에 넣습니다.
 - 부모는 자식, 자식은 손자를 실제로 실행합니다.
 - 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다.
+  - 부모가 `--run=<세대>`로 자식과 손자에게 세대를 넘기므로, 시나리오에서는 `--run`을 지정하지 않습니다.
 - 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `AwaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다.
 - 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다.
+- `--release-file=<경로>`를 더하면 부모는 `ready` 뒤에 그 파일이 생기는 대로 `parent-exit`를 기록하고 끝나며, 자손은 계속 실행됩니다.
+  - 파일이 생기기 전에 종료 신호를 받으면 부모는 평소처럼 종료하고 `complete`를 남깁니다.
+  - `--depth=0`이면 부모만 실행되므로, 테스트가 파일을 만들 때까지 hook이 계속 실행됩니다. `TestQueueWarningCLI`는 `s.Hook("--depth=0", "--release-file="+release)`를 `onStartWatch`로 써서, 그동안 대상의 변경 hook이 실행되지 못하고 대기열에 남게 합니다.
+
+### 지연 hook
+
 - 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다.
 - `--cancel-exit-code=<코드>`를 더하면 `CANCEL`을 기록한 뒤 그 코드로 끝나며, 셸의 `||`처럼 앞 프로그램의 실패로 다음 프로그램을 시작하는 명령 목록에 씁니다.
+
+### 오류 알림과 대기열 경고의 환경 기록
+
+- `--error-context`는 이름이 `DW_ERROR_`로 시작하는 환경 변수를 모두 담고 작업 디렉터리를 `workdir` 키로 더해 `ERROR|<JSON>`으로 기록합니다.
+- `--queue-context`는 이름이 `DW_QUEUE_`로 시작하는 환경 변수를 모두 담아 `QUEUE|<JSON>`으로 기록합니다.
+- JSON은 변수 이름을 키로, 변수 값을 값으로 하는 객체입니다.
+- 이 기록은 `--line` 기록이나 프로세스 트리 기록보다 먼저 남으므로, `hookrec --error-context --line=NOTIFY`는 `ERROR|<JSON>`과 `NOTIFY`를 차례로 기록합니다.
+
+### 종료 코드
+
+- `--exit-code=<코드>`는 기록한 뒤의 종료 코드를 정합니다.
+  - 한 줄 기록과 지연 hook은 `--line` 기록을 쓴 뒤 그 코드로 끝납니다.
+  - 프로세스 트리의 부모는 `--release-file`이 있으면 `parent-exit`에서, 없으면 `ready` 직후에 종료 신호를 기다리지 않고 그 코드로 끝나며, 자손은 계속 실행됩니다.
+- `TestEventLossNotificationCLI`는 `--exit-code=7`로 알림 명령을 실패시킵니다.

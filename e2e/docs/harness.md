@@ -17,8 +17,19 @@
 | `harness/hook_records_test.go` | Unit tests for the receive boundary and completion functions |
 | `harness/cleanup_windows_test.go` | Verifies on Windows that failing to delete the run folder or binaries surfaces as an abnormal exit. Includes the harness package's `TestMain`, which goes through the same `Run` |
 | `harness/process_observer_windows_test.go` | Verifies on Windows that a recorded PID already held by another program counts as gone, and that the wait for delayed hooks still fails while a recorded hook runs |
-| `hookrec/` | Helper program that writes one-line records or creates real parent, child, and grandchild processes |
+| `hookrec/` | Helper program that writes one-line records or creates real parent, child, and grandchild processes. Its options are in [`hookrec` process trees and delayed hooks](#hookrec-process-trees-and-delayed-hooks) |
+| `hookrec/main_test.go` | Verifies that `--error-context` and `--queue-context` record every environment variable whose name starts with `DW_ERROR_` or `DW_QUEUE_`, including names the code does not list, and no other variable, as JSON before the `--line` record; that `--error-context` also records the working directory; and that `--exit-code` sets the exit status |
 | `linux/` | Entry point that passes a copy of the current source to an isolated Linux container and runs the same Go E2E |
+| `worktree/` | Packs the current working tree into a tar stream with entries under `src/` for the Linux and Windows runners (`Root`, `Files`, `Archive`). The archive holds tracked files and untracked files that are not ignored, with uncommitted modifications, additions, and deletions |
+| `worktree/worktree_test.go` | Verifies that `Archive` writes the working tree contents of modified and untracked files and skips listed files that are gone from the working tree |
+| `windows/` | Entry point that runs the same Go E2E on a UTM Windows VM from a Mac (`up`, `test`, `down`, `all`). Controls UTM and the VM (`utm.go`), locks the VM against other runs on the same Mac (`lock.go`), and sends the source and the guest program to the guest and collects the results (`test.go`). The package and its tests build only on macOS |
+| `windows/utm_test.go` | Verifies reading `utmctl` and AppleScript answers with stand-in scripts: finding a VM by UUID or complete name, counting VMs that are not stopped, judging success by stderr rather than by the exit code, failing a `start` that leaves the VM stopped, requiring an IPv4 address for Guest Agent readiness, and reading the display count |
+| `windows/main_test.go` | Verifies that `up` refuses a VM with a display before requesting its start |
+| `windows/lock_test.go` | Verifies that the VM lock is shared by test runs and exclusive for starting and stopping, and that it applies per VM |
+| `windows/test_test.go` | Verifies that creating the guest run directory and starting the guest program are judged by files read back from the guest rather than by the `exec` answer, that removing the guest run directory is retried and a remaining directory is reported with a removal command, that this cleanup failure stays out of the test result, and that the source archive leaves out symbolic links |
+| `windows/guest/` | Program that runs one E2E run inside the Windows guest. Checks the source checksum, runs `go test`, terminates leftover processes started from the run directory, archives the diagnostics, and writes the result. Builds only on Windows |
+| `windows/guestrun/` | Files the Mac runner and the guest program exchange in the guest run directory (`Request`, `Result`), how the runner judges a result (`Check`), and the tar format for moving directories between the two machines (`ArchiveDir`, `Extract`) |
+| `windows/guestrun/guestrun_test.go` | Verifies that `Check` accepts only a passed result of the same run, that `ArchiveDir` and `Extract` round trip, and that `Extract` rejects paths leaving the target and symbolic links |
 
 - Building the binaries and setting up the console happen once for the whole test run.
 - Each scenario owns its run folder, watcher, process observation, and cleanup.
@@ -92,10 +103,37 @@ After writing the test, create the scenario documents and update the scenario li
 
 ## `hookrec` process trees and delayed hooks
 
+- `hookrec` appends one-line records to the file given with `--file=<record file>`, and exits with code 2 without recording when `--file` is missing.
+  - `s.Hook` adds `--file` with the scenario's record file, so pass `--file` yourself only when starting `hookrec` directly, as with `exec.Command(harness.HookrecBin(), "--file="+s.Records, ...)`.
+- Without `--depth`, `hookrec` writes the `--line=<record>` value as one record and exits.
+
+### Process trees
+
 - For a long-running process, put `s.Hook("--depth=2")` in a start or change hook.
 - The parent actually runs a child, and the child runs a grandchild.
 - The generation identifier is the parent PID, and each process records `generation|PID|depth|state`.
+  - The parent passes the generation to its child and grandchild with `--run=<generation>`, so scenarios do not set `--run`.
 - The parent's `ready` is recorded after the child's `ready`, so `AwaitReadyGenerations` judges the whole generation ready by the parent's `ready`.
 - On a shutdown signal, a process waits for a 150ms handling delay and for its child's graceful exit, then writes `complete`.
+- With `--release-file=<path>`, the parent exits after `ready` once that file appears, recording `parent-exit` and leaving its descendants running.
+  - If a shutdown signal arrives before the file appears, the parent shuts down the usual way and writes `complete`.
+  - With `--depth=0`, only the parent runs, so the hook keeps running until the test creates the file. `TestQueueWarningCLI` uses `s.Hook("--depth=0", "--release-file="+release)` as `onStartWatch` so that the target's change hooks cannot run and stay in the queue.
+
+### Delayed hooks
+
 - A delayed hook is made with `s.Hook("--delay=80ms", "--line=...")` and writes `BEGIN|PID|record`, plus `CANCEL|PID|record` when cancelled.
 - With `--cancel-exit-code=<code>`, a delayed hook exits with that code after writing `CANCEL`; use it in a command list that starts the next program when the previous one fails, as with the shell `||`.
+
+### Error notification and queue warning context
+
+- `--error-context` records every environment variable whose name starts with `DW_ERROR_`, plus the working directory under the key `workdir`, as `ERROR|<JSON>`.
+- `--queue-context` records every environment variable whose name starts with `DW_QUEUE_` as `QUEUE|<JSON>`.
+- The JSON is an object that maps each variable name to its value.
+- These records come before the `--line` record or the process tree records, so `hookrec --error-context --line=NOTIFY` writes `ERROR|<JSON>` and then `NOTIFY`.
+
+### Exit status
+
+- `--exit-code=<code>` sets the exit status after recording.
+  - A one-line record or a delayed hook exits with that code after writing its `--line` record.
+  - A process tree parent exits with that code at `parent-exit` when `--release-file` is set, and otherwise right after `ready` without waiting for a shutdown signal, leaving its descendants running.
+- `TestEventLossNotificationCLI` uses `--exit-code=7` to make the notification command fail.
