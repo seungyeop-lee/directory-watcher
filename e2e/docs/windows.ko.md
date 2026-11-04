@@ -39,7 +39,7 @@ Windows E2E는 Git Bash 없이 watcher를 실행해, watcher가 취소된 hook�
 
 ## CI 단계
 
-- `.github/workflows/ci.yml`의 `test (windows-latest)`는 `go test -count=1 -race ./...` 뒤 오류 알림 프로세스 검증과 위 세 테스트의 `-count=3` 반복을 실행합니다.
+- `.github/workflows/ci.yml`의 `test (windows-latest)`는 `go test -count=1 -race ./...` 뒤 오류 알림 프로세스 검증과 [실행 명령](#실행-명령)에 나온 세 테스트의 `-count=3` 반복을 실행합니다.
 - 이어 `DW_E2E_FAULT=failure`, `timeout`의 의도적인 실패·시간 초과, 진단 파일과 세 PID 정리를 검사하고 별도로 실행한 Go 부모·자식·손자 트리가 살아 있는지 확인합니다.
 - Windows 전용 단계는 앞 단계가 실패해도 job이 취소되지 않았다면 실행합니다.
 - 앞 단계의 실패는 그대로 남아 최종 job도 실패하며, 진단 업로드 단계는 항상 실행됩니다.

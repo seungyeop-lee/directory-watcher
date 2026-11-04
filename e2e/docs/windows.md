@@ -39,7 +39,7 @@ The Windows E2E runs the watcher without Git Bash and checks that the watcher st
 
 ## CI steps
 
-- `test (windows-latest)` in `.github/workflows/ci.yml` runs `go test -count=1 -race ./...`, then the error notification process verification and the `-count=3` repeat of the three tests above.
+- `test (windows-latest)` in `.github/workflows/ci.yml` runs `go test -count=1 -race ./...`, then the error notification process verification and the `-count=3` repeat of the three tests in [Run commands](#run-commands).
 - It then checks the intentional failure and timeout of `DW_E2E_FAULT=failure` and `timeout`, the diagnostics files, and cleanup of the three PIDs, and confirms that a separately started Go parent, child, and grandchild tree is still alive.
 - The Windows-only steps run even if an earlier step failed, as long as the job was not cancelled.
 - The earlier failure remains, so the job still fails in the end, and the diagnostics upload step always runs.
