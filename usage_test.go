@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -9,10 +10,13 @@ import (
 
 	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/service"
+	yamlconfig "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
+	"gopkg.in/yaml.v3"
 )
 
 // 이 파일의 테스트는 USAGE 두 판에 손으로 옮겨 적은 목록이 코드가 정의하는 목록과 같은지 확인한다.
 // 실패하면 USAGE.md와 USAGE.ko.md의 해당 표와 예시를 코드 목록에 맞춰 함께 고친다.
+// 없앤 키의 오류가 인용하는 USAGE 절 제목은 반대로 코드(internal/config/yaml/config.go)에 손으로 적혀 있으므로, 그 검사가 실패하면 코드의 제목을 USAGE.md의 절 제목에 맞춘다.
 
 var usageFiles = []string{"USAGE.md", "USAGE.ko.md"}
 
@@ -139,5 +143,77 @@ func TestUsageListsSameShellsAsCode(t *testing.T) {
 		if !strings.Contains(doc, err.Error()) {
 			t.Errorf("%s has no error example %q", file, err.Error())
 		}
+	}
+}
+
+// eachRemovedKeyNode는 c 안에 있는 yaml.Node 필드마다 키 경로와 필드를 visit에 넘긴다.
+// yaml.Node 필드는 v3에서 없앤 키를 받아 오류로 알리려고 둔 것이다. 목록 안의 키는 목록 키 바로 아래 키로 센다(watchTargets.option.excludeDir).
+func eachRemovedKeyNode(c *yamlconfig.Config, visit func(key string, node *yaml.Node)) {
+	var walk func(v reflect.Value, parent string)
+	walk = func(v reflect.Value, parent string) {
+		for i := range v.NumField() {
+			name, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("yaml"), ",")
+			if name == "" {
+				continue
+			}
+			key, field := joinKey(parent, name), v.Field(i)
+			if node, ok := field.Addr().Interface().(*yaml.Node); ok {
+				visit(key, node)
+				continue
+			}
+			switch field.Kind() {
+			case reflect.Struct:
+				walk(field, key)
+			case reflect.Slice:
+				for j := range field.Len() {
+					if field.Index(j).Kind() == reflect.Struct {
+						walk(field.Index(j), key)
+					}
+				}
+			}
+		}
+	}
+	walk(reflect.ValueOf(c).Elem(), "")
+}
+
+func TestRemovedKeyErrorsCiteExistingUsageSections(t *testing.T) {
+	headings := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^#+ (.+)$`).FindAllStringSubmatch(readUsage(t, "USAGE.md"), -1) {
+		headings[m[1]] = true
+	}
+	parse := func() yamlconfig.Config {
+		var c yamlconfig.Config
+		if err := yaml.Unmarshal([]byte("watchTargets:\n  - path: site\n"), &c); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	base := parse()
+	var keys []string
+	eachRemovedKeyNode(&base, func(key string, _ *yaml.Node) { keys = append(keys, key) })
+	if len(keys) == 0 {
+		t.Fatal("found no removed key fields")
+	}
+	citation := regexp.MustCompile(`see USAGE "([^"]+)"`)
+	for _, key := range keys {
+		t.Run(key, func(t *testing.T) {
+			c := parse()
+			eachRemovedKeyNode(&c, func(k string, node *yaml.Node) {
+				if k == key {
+					node.Kind = yaml.ScalarNode
+				}
+			})
+			_, err := c.BuildCommandSet()
+			if err == nil {
+				t.Fatal("BuildCommandSet accepted the removed key")
+			}
+			m := citation.FindStringSubmatch(err.Error())
+			if m == nil {
+				t.Fatalf("error %q cites no USAGE section", err)
+			}
+			if !headings[m[1]] {
+				t.Errorf("error %q cites USAGE section %q, which USAGE.md has no heading for", err, m[1])
+			}
+		})
 	}
 }
