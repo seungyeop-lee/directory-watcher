@@ -1,0 +1,12 @@
+" hero.tape 녹화 전용 vim 설정이다. scene.sh가 VIMINIT로 읽게 해 사용자의 ~/.vimrc와 플러그인 대신 쓴다.
+set nocompatible
+set runtimepath=$VIMRUNTIME
+set noloadplugins
+set viminfo=
+" swap 파일과 백업 파일 없이 파일을 제자리에 덮어써서, watcher가 :w 한 번을 그 파일의 변경 하나로 받게 한다.
+set noswapfile nobackup nowritebackup
+set background=dark
+syntax on
+set number
+set shortmess+=I
+set noshowcmd

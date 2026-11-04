@@ -1,0 +1,8 @@
+watchTargets:
+  - path: inbox
+    lifeCycle:
+      onChange:
+        - sh ../import.sh {{.Name}}
+    option:
+      hookBatch:
+        deliver: lastPerPath

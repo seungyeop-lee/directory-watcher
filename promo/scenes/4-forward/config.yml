@@ -1,0 +1,9 @@
+watchTargets:
+  - path: receiver
+    lifeCycle:
+      onStartWatch:
+        - go run .
+  - path: docs
+    lifeCycle:
+      onChange:
+        - curl -s localhost:8091 -d {{.Event}}:{{.Path}}
