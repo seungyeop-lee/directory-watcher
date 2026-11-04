@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -16,9 +17,204 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
+
+func deletionRunner(t *testing.T, root string, option domain.WatchTargetsOption) *watchTargetRunner {
+	t.Helper()
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
+	t.Cleanup(func() { close(r.stop); r.tree.close() })
+	if err := r.tree.add(); err != nil {
+		t.Fatal(err)
+	}
+	r.dirBatcher.root = r.tree.root
+	return r
+}
+
+func sendDeletionEvent(t *testing.T, r *watchTargetRunner, op fsnotify.Op, rel string) {
+	t.Helper()
+	if err := r.handleEvent(fsnotify.Event{Name: filepath.Join(r.path.String(), filepath.FromSlash(rel)), Op: op}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func flushDeletionRuns(t *testing.T, r *watchTargetRunner) []domain.Event {
+	t.Helper()
+	if r.dirBatcher.batch != nil {
+		if err := r.enqueue(r.dirBatcher.flush()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r.hookBatcher.batch != nil {
+		if err := r.dispatcher.enqueue(r.hookBatcher.flush()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runs := r.dispatcher.queue.runs
+	r.dispatcher.queue.runs = nil
+	return runs
+}
+
+func TestDeletedFolderLifecycleAcrossBatches(t *testing.T) {
+	for _, separated := range []bool{false, true} {
+		for _, deliver := range []domain.Deliver{domain.DeliverLast, domain.DeliverLastPerPath, domain.DeliverEach} {
+			for _, filter := range []string{"all", "files", "folders"} {
+				t.Run(fmt.Sprintf("separated=%v/deliver=%v/%s", separated, deliver, filter), func(t *testing.T) {
+					root := t.TempDir()
+					mkdir(t, filepath.Join(root, "pkg.v2"))
+					writeFile(t, filepath.Join(root, "pkg.v2", "child.txt"))
+					option := hookBatchOption(1000, 10000, deliver)
+					option.DirBatch = domain.DirBatchOption{}
+					if separated {
+						option.DirBatch = domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}
+					}
+					if filter == "files" {
+						option.Watch.DirEvent = domain.WatchEvent{}
+					}
+					if filter == "folders" {
+						option.Watch.FileEvent = domain.WatchEvent{}
+					}
+					r := deletionRunner(t, root, option)
+					removeAll(t, filepath.Join(root, "pkg.v2"))
+					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2/child.txt")
+					if separated {
+						if err := r.enqueue(r.dirBatcher.flush()); err != nil {
+							t.Fatal(err)
+						}
+					}
+					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+					if separated {
+						if err := r.enqueue(r.dirBatcher.flush()); err != nil {
+							t.Fatal(err)
+						}
+					}
+					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+					runs := flushDeletionRuns(t, r)
+					got, want := []string{}, []string{}
+					if (deliver == domain.DeliverEach && filter != "folders") || (deliver == domain.DeliverLast && filter == "files") {
+						want = append(want, "D pkg.v2/child.txt")
+					}
+					if filter != "files" {
+						want = append(want, "D pkg.v2/")
+					}
+					for _, run := range runs {
+						got = append(got, describeRun(t, root, run))
+						built, err := (command.SingleCmd{Shell: command.DefaultShell(), Cmd: "{{.IsDir}} [{{.ExtName}}]"}).Build(context.Background(), domain.Path(root), &run)
+						if err != nil {
+							t.Fatal(err)
+						}
+						wantFilled, ext := "true []", ""
+						if !run.IsDir {
+							wantFilled, ext = "false [.txt]", ".txt"
+						}
+						if built[0].Filled != wantFilled || !slices.Contains(built[0].Cmd.Env, fmt.Sprintf("DW_IS_DIR=%v", run.IsDir)) || !slices.Contains(built[0].Cmd.Env, "DW_EXT_NAME="+ext) {
+							t.Errorf("command metadata = %q, want %q with matching DW_IS_DIR/DW_EXT_NAME", built[0].Filled, wantFilled)
+						}
+					}
+					if !slices.Equal(got, want) {
+						t.Fatalf("runs = %v, want %v", got, want)
+					}
+					assertRecorded(t, r.tree, root, "pkg.v2", false, false)
+					assertRecorded(t, r.tree, root, "pkg.v2/child.txt", false, false)
+					for _, path := range r.tree.watcher.WatchList() {
+						if domain.Path(filepath.Join(root, "pkg.v2")).Contains(domain.Path(path)) {
+							t.Errorf("deleted folder remains watched: %s", path)
+						}
+					}
+					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+					sendDeletionEvent(t, r, fsnotify.Write, "pkg.v2")
+					if late := flushDeletionRuns(t, r); len(late) != 0 {
+						t.Fatalf("late notifications after hook flush = %v", late)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestDeletedFolderRecreationStartsNewLifecycle(t *testing.T) {
+	for _, subDir := range []bool{false, true} {
+		for _, replacement := range []string{"file", "folder", "file without create"} {
+			t.Run(fmt.Sprintf("subDir=%v/%s", subDir, replacement), func(t *testing.T) {
+				root := t.TempDir()
+				path := filepath.Join(root, "pkg.v2")
+				mkdir(t, path)
+				option := hookBatchOption(0, 0, domain.DeliverEach)
+				option.DirBatch = domain.DirBatchOption{}
+				option.Watch.SubDir = subDir
+				r := deletionRunner(t, root, option)
+				removeAll(t, path)
+				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+				first := flushDeletionRuns(t, r)
+				if len(first) != 1 || !first[0].IsDir {
+					t.Fatalf("first deletion = %v, want one folder deletion", first)
+				}
+				if replacement == "folder" {
+					mkdir(t, path)
+				} else {
+					writeFile(t, path)
+				}
+				op := fsnotify.Create
+				if replacement == "file without create" {
+					op = fsnotify.Write
+				}
+				sendDeletionEvent(t, r, op, "pkg.v2")
+				created := flushDeletionRuns(t, r)
+				if len(created) != 1 || created[0].IsDir != (replacement == "folder") || fsnotify.Op(created[0].Operation) != op {
+					t.Fatalf("replacement = %v, want %s folder=%v", created, op, replacement == "folder")
+				}
+				removeAll(t, path)
+				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+				deleted := flushDeletionRuns(t, r)
+				if len(deleted) != 1 || deleted[0].IsDir != (replacement == "folder") || fsnotify.Op(deleted[0].Operation) != fsnotify.Remove {
+					t.Fatalf("replacement deletion = %v, want folder=%v", deleted, replacement == "folder")
+				}
+			})
+		}
+	}
+}
+
+func TestDeletionRecreationWithinDirBatch(t *testing.T) {
+	for _, replacement := range []string{"file", "folder", "file without create"} {
+		for _, deliver := range []domain.Deliver{domain.DeliverLast, domain.DeliverLastPerPath, domain.DeliverEach} {
+			t.Run(fmt.Sprintf("%s/deliver=%v", replacement, deliver), func(t *testing.T) {
+				root := t.TempDir()
+				path := filepath.Join(root, "pkg.v2")
+				mkdir(t, path)
+				r := deletionRunner(t, root, hookBatchOption(1000, 10000, deliver))
+				removeAll(t, path)
+				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+				suffix := ""
+				if replacement == "folder" {
+					mkdir(t, path)
+					suffix = "/"
+				} else {
+					writeFile(t, path)
+				}
+				op, symbol := fsnotify.Create, "C"
+				if replacement == "file without create" {
+					op, symbol = fsnotify.Write, "U"
+				}
+				sendDeletionEvent(t, r, op, "pkg.v2")
+				removeAll(t, path)
+				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+				got, want := []string{}, []string{"D pkg.v2" + suffix}
+				if deliver == domain.DeliverEach {
+					want = []string{"D pkg.v2/", symbol + " pkg.v2" + suffix, "D pkg.v2" + suffix}
+				}
+				for _, run := range flushDeletionRuns(t, r) {
+					got = append(got, describeRun(t, root, run))
+				}
+				if !slices.Equal(got, want) {
+					t.Fatalf("runs = %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
 
 // 생성 이벤트를 빠뜨린 파일은 처음 수정 이벤트에서 기록에 들어가, 다음에 기다리는 동안의 수정은 수정으로 나가는지 확인한다.
 func TestFileWithoutCreateEventIsRecordedOnWrite(t *testing.T) {

@@ -14,6 +14,8 @@ import (
 type change struct {
 	domain.Event
 	existed bool
+	// recreated는 CREATE를 놓쳤지만 디스크에서 삭제 뒤의 새 항목을 확인한 변경이다.
+	recreated bool
 }
 
 // changeBatch는 hook에 넘기려고 한 번 기다리는 동안 받은 이벤트를 받은 순서대로 모은다.

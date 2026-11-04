@@ -110,8 +110,15 @@ type eventBatch struct {
 // add는 e를 묶음에 넣는다. 폴더를 지운 이벤트이면 앞서 모은 그 폴더 아래 경로의 이벤트를 흡수한다. 폴더를
 // 통째로 지우면 운영체제는 폴더 안의 항목을 지운 이벤트를 폴더를 지운 이벤트보다 먼저 보내기 때문이다.
 func (b *eventBatch) add(e change) {
-	if slices.ContainsFunc(b.events, func(dir change) bool { return absorbs(dir.Event, e.Event) }) {
-		return
+	for i := len(b.events) - 1; i >= 0; i-- {
+		prev := b.events[i]
+		if !e.recreated && absorbs(prev.Event, e.Event) {
+			return
+		}
+		// 같은 경로의 재생성 뒤에는 앞선 폴더 삭제가 새 항목의 삭제를 흡수하지 않는다.
+		if prev.Path == e.Path {
+			break
+		}
 	}
 	if e.IsDir && fsnotify.Op(e.Operation) == fsnotify.Remove {
 		b.events = slices.DeleteFunc(b.events, func(prev change) bool { return isUnder(prev.Path, e.Path) })
@@ -125,8 +132,7 @@ func absorbs(dir, e domain.Event) bool {
 		return false
 	}
 	if dir.Path == e.Path {
-		// Windows는 지운 폴더의 Remove를 두 번 보내고, 그 폴더의 Write를 Remove 뒤에 보내기도 한다. 폴더 목록에서
-		// 이미 지운 뒤라 두 번째 이벤트는 파일 이벤트로 온다. 지운 폴더를 다시 만든 Create는 흡수하지 않는다.
+		// 같은 삭제 수명의 후행 REMOVE와 WRITE만 흡수하고, 재생성 CREATE는 흡수하지 않는다.
 		return dir.Operation == e.Operation || (fsnotify.Op(dir.Operation) == fsnotify.Remove && fsnotify.Op(e.Operation) == fsnotify.Write)
 	}
 	return isUnder(e.Path, dir.Path)

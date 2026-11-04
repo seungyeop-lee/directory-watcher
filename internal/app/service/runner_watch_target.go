@@ -42,6 +42,9 @@ type watchTargetRunner struct {
 	dirBatcher   *dirBatcher
 	hookBatcher  *hookBatcher
 	dispatcher   *dispatcher
+	// removedDirs는 삭제한 폴더의 수명을 기억한다. 감시와 항목 기록을 지운 뒤 오는 중복 REMOVE와 WRITE는
+	// 버리고, CREATE나 디스크에서 확인한 새 항목은 별도 수명으로 처리한다.
+	removedDirs map[string]struct{}
 
 	logger     helper.Logger
 	initErr    error
@@ -204,9 +207,14 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	if r.tree.isUnreleased(ev.Name) {
 		return nil
 	}
-	var isDir, existed bool
+	var isDir, existed, recreated bool
 	switch {
 	case ev.Op.Has(fsnotify.Create):
+		for path := range r.removedDirs {
+			if domain.Path(ev.Name).Contains(domain.Path(path)) {
+				delete(r.removedDirs, path)
+			}
+		}
 		r.renamePairer.forgetSelfRename(ev.Name)
 		if r.tree.isUnreleasedDir(ev.Name) {
 			// 같은 경로에 새로 생긴 폴더와 풀지 못한 옛 폴더의 감시는 같은 경로로 이벤트를 알리므로, 새 폴더를
@@ -233,13 +241,32 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 기록에 적어 둔 폴더인지로 판단한다.
 		var wasDir bool
 		wasDir, existed = r.tree.recorded(ev.Name)
+		if !existed {
+			if _, removed := r.removedDirs[ev.Name]; removed {
+				return nil
+			}
+		}
 		isDir = r.tree.unwatchTree(ev.Name) || wasDir
+		if isDir {
+			if r.removedDirs == nil {
+				r.removedDirs = make(map[string]struct{})
+			}
+			r.removedDirs[ev.Name] = struct{}{}
+		}
 		if isDir && inotifyOS && ev.Op.Has(fsnotify.Rename) {
 			r.renamePairer.addSelfRename(ev.Name)
 		}
 		// 이름을 바꾸거나 옮긴 파일의 옛 경로는 지운 파일처럼 사라졌으므로 삭제로 알린다.
 		ev.Op = fsnotify.Remove
 	case ev.Op.Has(fsnotify.Write):
+		if _, removed := r.removedDirs[ev.Name]; removed {
+			if _, err := os.Lstat(ev.Name); errors.Is(err, os.ErrNotExist) {
+				return nil
+			} else if err == nil {
+				delete(r.removedDirs, ev.Name)
+				recreated = true
+			}
+		}
 		// Windows는 폴더 안의 항목이 바뀌면 그 폴더의 Write를 보낸다. 폴더 안의 변경은 그 항목의 이벤트로 알린다.
 		if r.tree.isDir(ev.Name) {
 			return nil
@@ -257,7 +284,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	if r.tree.isExcluded(ev.Name) {
 		return nil
 	}
-	return r.enqueue(r.dirBatcher.add(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed}))
+	return r.enqueue(r.dirBatcher.add(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed, recreated: recreated}))
 }
 
 // enqueue는 dirBatcher가 돌려준 실행 runs를 dispatcher의 대기열에 넣고, dirBatcher가 runs 뒤의 변경을 넘기다 겪은
