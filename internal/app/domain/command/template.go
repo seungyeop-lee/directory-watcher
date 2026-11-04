@@ -49,8 +49,12 @@ func (c SingleCmd) parseTemplate() (*template.Template, error) {
 	return t, nil
 }
 
-// CheckTemplates는 명령이 eventVariables에 없는 템플릿 변수를 쓰면 오류를 낸다. Go 템플릿은 값 map에 없는
-// 변수를 만나도 오류 없이 <no value>를 넣으므로, 이벤트를 받는 hook의 명령은 감시를 시작하기 전에 이 검사를 거친다.
+// CheckTemplates는 이벤트를 받는 hook의 명령을 감시를 시작하기 전에 검사한다. 명령이 eventVariables에 없는
+// 템플릿 변수를 쓰거나, 템플릿을 실행할 때 반드시 실패하면 오류를 낸다.
+//   - Go 템플릿은 값 map에 없는 변수를 만나도 오류 없이 <no value>를 넣으므로, 변수 이름은 따로 검사한다.
+//   - 실행 검사는 Build의 첫 실행과 같은 c.Shell의 참조 값으로 템플릿을 실행한다. {{.Path.Missing}}처럼
+//     어떤 이벤트에서도 실패하는 명령은 여기서 걸리고, {{index .Path 9}}처럼 실제 값에 따라 실패하는 명령은
+//     실행할 때 실패한다.
 func (c SingleCmd) CheckTemplates() error {
 	t, err := c.parseTemplate()
 	if err != nil {
@@ -64,7 +68,8 @@ func (c SingleCmd) CheckTemplates() error {
 			}
 		}
 	}
-	return nil
+	_, err = execute(t, c.templateRefs())
+	return err
 }
 
 // referencedVariables는 템플릿 node 아래에서 {{.Path}}나 {{$.Path}}처럼 템플릿 값에서 읽는 변수 이름을 모은다.

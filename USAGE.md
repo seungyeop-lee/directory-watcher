@@ -192,7 +192,7 @@ working directory <working directory>: <cause>
 - Only the hooks that run for a change use these variables: the target's `onChange` and global `onBeforeChange` and `onAfterChange`.
 - The other hooks run their commands as written, so `{{.Path}}` in them stays as that literal text.
 
-- Before watching starts, the watcher checks the variables in the hooks that run for a change.
+- Before watching starts, the watcher checks the commands of the hooks that run for a change.
 
 If a command uses a variable that is not in the table, the watcher runs no hook, prints an error like the one below, and exits with code 1:
 
@@ -203,6 +203,8 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 - The location before the colon points to the command in the config.
   - `onChange[1]` is the second item of `onChange`, and `onChange[0].cmd[1]` is the second command in the `cmd` list of the first item.
   - A global hook starts with `global.lifeCycle.`, as in `global.lifeCycle.onBeforeChange[0]`.
+- A command whose template fails for every event, such as `{{.Path.Missing}}`, also stops the watcher, and its error has `can't execute command:` after the location.
+  - Every variable holds a string, so reading a field of a variable, as `.Missing` does, always fails.
 
 - The watcher puts each value in the environment variable of the table and replaces the variable in the command with a shell reference that reads that environment variable.
 - The reference for each shell is in the table of [Shell that runs hook commands](#shell-that-runs-hook-commands).

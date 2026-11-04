@@ -54,12 +54,11 @@ func (c SingleCmd) replaceTemplates(event *domain.Event) (script, filled string,
 		return "", "", err
 	}
 
-	refs, values := map[string]string{}, map[string]string{}
+	values := map[string]string{}
 	for _, v := range eventVariables {
-		refs[v.template] = c.Shell.templateRef(c.refEnv(v.env))
 		values[v.template] = v.value(event)
 	}
-	if script, err = execute(t, refs); err != nil {
+	if script, err = execute(t, c.templateRefs()); err != nil {
 		return "", "", err
 	}
 	if filled, err = execute(t, values); err != nil {
@@ -69,6 +68,15 @@ func (c SingleCmd) replaceTemplates(event *domain.Event) (script, filled string,
 		filled = ""
 	}
 	return script, filled, nil
+}
+
+// templateRefs는 템플릿 변수마다 그 값을 담은 환경 변수를 읽는 c.Shell의 참조다.
+func (c SingleCmd) templateRefs() map[string]string {
+	refs := map[string]string{}
+	for _, v := range eventVariables {
+		refs[v.template] = c.Shell.templateRef(c.refEnv(v.env))
+	}
+	return refs
 }
 
 // refEnv는 템플릿 참조가 읽는 환경 변수 이름이다.

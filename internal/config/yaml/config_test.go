@@ -209,6 +209,15 @@ func TestUnknownTemplateVariableInEventHookStopsBuild(t *testing.T) {
 	}
 }
 
+func TestTemplateThatFailsToRunInEventHookStopsBuild(t *testing.T) {
+	data := "watchTargets:\n  - path: site\n    lifeCycle:\n      onChange: ['echo first {{.Path.Missing}}', 'echo second-ran']\n"
+	_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+	const want = "watchTargets[0].lifeCycle.onChange[0]: can't execute command: "
+	if err == nil || !strings.HasPrefix(err.Error(), want) || !strings.Contains(err.Error(), "Missing") {
+		t.Fatalf("BuildCommandSet error = %v, want an error starting with %q", err, want)
+	}
+}
+
 // 이벤트가 없는 hook은 템플릿을 해석하지 않으므로, 쓸 수 있는 변수든 모르는 변수든 검사하지 않고 글자 그대로 실행한다.
 func TestHookWithoutEventRunsTemplateTextAsIs(t *testing.T) {
 	dir := t.TempDir()

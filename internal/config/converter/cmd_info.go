@@ -23,8 +23,8 @@ func NewCmdInfoConverter(key string, cmdInfo config.CmdInfo, shell command.Shell
 	return &CmdInfoConverter{key: key, cmdInfo: cmdInfo, shell: shell}
 }
 
-// NewEventHookConverter는 이벤트를 받는 hook의 converter를 만든다. 명령이 모르는 템플릿 변수를 쓰면, Convert는
-// hook 안에서 그 명령의 위치(예: onChange[1].cmd[0])를 앞에 붙인 오류를 낸다.
+// NewEventHookConverter는 이벤트를 받는 hook의 converter를 만든다. 명령이 command.SingleCmd.CheckTemplates의
+// 검사를 통과하지 못하면, Convert는 hook 안에서 그 명령의 위치(예: onChange[1].cmd[0])를 앞에 붙인 오류를 낸다.
 func NewEventHookConverter(key string, cmdInfo config.CmdInfo, shell command.Shell) *CmdInfoConverter {
 	return &CmdInfoConverter{key: key, cmdInfo: cmdInfo, shell: shell, eventHook: true}
 }

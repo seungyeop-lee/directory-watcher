@@ -193,7 +193,7 @@ working directory <작업 폴더>: <원인>
 - 이 변수는 변경이 생겼을 때 실행하는 hook, 곧 감시 대상의 `onChange`와 전역 `onBeforeChange`, `onAfterChange`에서만 씁니다.
 - 다른 hook은 명령을 적힌 그대로 실행하므로, 그 명령에 쓴 `{{.Path}}`는 글자 그대로 남습니다.
 
-- watcher는 감시를 시작하기 전에 변경이 생겼을 때 실행하는 hook의 변수를 검사합니다.
+- watcher는 감시를 시작하기 전에 변경이 생겼을 때 실행하는 hook의 명령을 검사합니다.
 
 명령에 표에 없는 변수가 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
@@ -204,6 +204,8 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 - 쌍점 앞의 위치는 설정에서 문제가 된 명령을 가리킵니다.
   - `onChange[1]`은 `onChange`의 두 번째 항목이고, `onChange[0].cmd[1]`은 첫 번째 항목의 `cmd` 목록에 있는 두 번째 명령입니다.
   - 전역 hook은 `global.lifeCycle.onBeforeChange[0]`처럼 `global.lifeCycle.`로 시작합니다.
+- `{{.Path.Missing}}`처럼 어떤 이벤트에서도 템플릿을 채우지 못하는 명령이 있어도 watcher는 끝나고, 그 오류에는 위치 뒤에 `can't execute command:`가 이어집니다.
+  - 변수의 값은 모두 문자열이므로, `.Missing`처럼 변수에서 필드를 읽으면 항상 실패합니다.
 
 - watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자리를 그 환경 변수를 읽는 셸 참조로 바꿉니다.
 - 참조 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)의 표에 있습니다.

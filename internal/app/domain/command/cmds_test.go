@@ -25,10 +25,10 @@ func TestCmdsSkipsEmptyCommand(t *testing.T) {
 	}
 }
 
-// 설정을 읽을 때 CheckTemplates는 템플릿 변수의 이름만 검사하므로, {{.Path.Missing}}처럼 문자열 값의 필드를
-// 읽는 명령은 검사를 통과하고 실행할 때 템플릿을 채우지 못한다.
+// 설정을 읽을 때 CheckTemplates는 실제 이벤트 값을 모르므로, {{index .Path 9}}처럼 값에 따라 실패하는 명령은
+// 검사를 통과하고, 경로가 9글자보다 짧은 이벤트에서 템플릿을 채우지 못한다.
 func TestCmdsFailsWhenCommandCannotBeBuilt(t *testing.T) {
-	unbuildable := command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo {{.Path.Missing}}"}
+	unbuildable := command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo {{index .Path 9}}"}
 	if err := unbuildable.CheckTemplates(); err != nil {
 		t.Fatalf("command is rejected before watching starts: %v", err)
 	}
