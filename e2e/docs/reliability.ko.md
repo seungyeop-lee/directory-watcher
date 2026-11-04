@@ -5,13 +5,14 @@
 ## 경합과 과부하 검증
 
 ```sh
-go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
+go test -count=3 -v -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
 go test -race ./...
 ```
 
 - 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.ko.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) 문서에 있습니다.
 - 반복 대상에는 [`TestQueueWarningCLI`](scenarios/queue-warning-cli.ko.md)와 [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md)도 포함됩니다.
+- [`TestBatchingOptions`](scenarios/batching-options.ko.md)의 최종 변경 순서와 지속 유입 중 최대 대기 flush도 반복합니다.
 
 ### 내부 테스트의 검증 범위
 

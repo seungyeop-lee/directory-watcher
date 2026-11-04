@@ -5,13 +5,14 @@
 ## Race and overload verification
 
 ```sh
-go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
+go test -count=3 -v -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
 go test -race ./...
 ```
 
 - What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), and [`TestRunInterrupt`](scenarios/run-interrupt.md) documents.
 - The repeated scenarios also include [`TestQueueWarningCLI`](scenarios/queue-warning-cli.md) and [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md).
+- [`TestBatchingOptions`](scenarios/batching-options.md) also repeats final-change ordering and maximum-wait flushes during continued inflow.
 
 ### Scope of the internal tests
 
