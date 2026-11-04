@@ -222,5 +222,6 @@ flowchart TD
 
 ## License
 
-- This project is licensed under the [GPL-3.0 License](LICENSE).
+- This project is licensed under the [MIT License](LICENSE).
 - See the license file for details.
+- Versions before 3.0.0 were released under GPL-3.0.
