@@ -17,11 +17,12 @@ func InterruptNames() []string { return interruptValues.names() }
 
 // InterruptConverter는 option.run.interrupt 값을 바꾼다. 값을 적지 않았으면 none을 쓴다.
 type InterruptConverter struct {
+	key       string
 	interrupt *string
 }
 
 func NewInterruptConverter(interrupt *string) *InterruptConverter {
-	return &InterruptConverter{interrupt: interrupt}
+	return &InterruptConverter{key: "interrupt", interrupt: interrupt}
 }
 
 func (c InterruptConverter) Convert() (domain.Interrupt, error) {
@@ -30,7 +31,7 @@ func (c InterruptConverter) Convert() (domain.Interrupt, error) {
 	}
 	interrupt, ok := interruptValues.lookup(*c.interrupt)
 	if !ok {
-		return 0, fmt.Errorf("interrupt: unknown value %q; use %s", *c.interrupt, interruptValues.list())
+		return 0, fmt.Errorf("%s: unknown value %q; use %s", c.key, *c.interrupt, interruptValues.list())
 	}
 	return interrupt, nil
 }

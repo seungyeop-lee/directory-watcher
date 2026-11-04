@@ -17,11 +17,12 @@ func DeliverNames() []string { return deliverValues.names() }
 
 // DeliverConverter는 option.hookBatch.deliver 값을 바꾼다. 값을 적지 않았으면 last를 쓴다.
 type DeliverConverter struct {
+	key     string
 	deliver *string
 }
 
 func NewDeliverConverter(deliver *string) *DeliverConverter {
-	return &DeliverConverter{deliver: deliver}
+	return &DeliverConverter{key: "deliver", deliver: deliver}
 }
 
 func (c DeliverConverter) Convert() (domain.Deliver, error) {
@@ -30,7 +31,7 @@ func (c DeliverConverter) Convert() (domain.Deliver, error) {
 	}
 	deliver, ok := deliverValues.lookup(*c.deliver)
 	if !ok {
-		return 0, fmt.Errorf("deliver: unknown value %q; use %s", *c.deliver, deliverValues.list())
+		return 0, fmt.Errorf("%s: unknown value %q; use %s", c.key, *c.deliver, deliverValues.list())
 	}
 	return deliver, nil
 }

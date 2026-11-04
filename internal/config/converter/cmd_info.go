@@ -9,29 +9,32 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config"
 )
 
+// CmdInfoConverter는 lifeCycle 아래 hook 하나의 명령을 만든다.
 type CmdInfoConverter struct {
-	cmdInfo config.CmdInfo
-	shell   cmd.Shell
+	key       string
+	cmdInfo   config.CmdInfo
+	shell     cmd.Shell
+	eventHook bool
 }
 
-func NewCmdInfoConverter(cmdInfo config.CmdInfo, shell cmd.Shell) *CmdInfoConverter {
-	return &CmdInfoConverter{
-		cmdInfo: cmdInfo,
-		shell:   shell,
-	}
+// NewCmdInfoConverter는 이벤트를 받지 않는 hook의 converter를 만든다. 이런 hook의 명령은 템플릿으로 해석하지 않고
+// 그대로 실행하므로, Convert는 오류를 내지 않는다.
+func NewCmdInfoConverter(key string, cmdInfo config.CmdInfo, shell cmd.Shell) *CmdInfoConverter {
+	return &CmdInfoConverter{key: key, cmdInfo: cmdInfo, shell: shell}
 }
 
-// Convert는 이벤트를 받지 않는 hook의 명령을 만든다. 이런 hook의 명령은 템플릿으로 해석하지 않고 그대로 실행한다.
-func (c CmdInfoConverter) Convert() domain.Cmd {
-	return cmd.NewManager(c.builder())
+// NewEventHookConverter는 이벤트를 받는 hook의 converter를 만든다. 명령이 모르는 템플릿 변수를 쓰면, Convert는
+// hook 안에서 그 명령의 위치(예: onChange[1].cmd[0])를 앞에 붙인 오류를 낸다.
+func NewEventHookConverter(key string, cmdInfo config.CmdInfo, shell cmd.Shell) *CmdInfoConverter {
+	return &CmdInfoConverter{key: key, cmdInfo: cmdInfo, shell: shell, eventHook: true}
 }
 
-// ConvertEventHook은 이벤트를 받는 hook의 명령을 만든다. 명령이 모르는 템플릿 변수를 쓰면, hook 안에서 그 명령의
-// 위치(예: [1].cmd[0])를 앞에 붙인 오류를 낸다.
-func (c CmdInfoConverter) ConvertEventHook() (domain.Cmd, error) {
+func (c CmdInfoConverter) Convert() (domain.Cmd, error) {
 	builder := c.builder()
-	if err := checkTemplates(builder); err != nil {
-		return nil, err
+	if c.eventHook {
+		if err := checkTemplates(builder); err != nil {
+			return nil, fmt.Errorf("%s%w", c.key, err)
+		}
 	}
 	return cmd.NewManager(builder), nil
 }

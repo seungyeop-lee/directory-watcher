@@ -13,6 +13,6 @@ func NewPathConverter(path config.Path) *PathConverter {
 	return &PathConverter{path: path}
 }
 
-func (c PathConverter) Convert() domain.Path {
-	return domain.Path(c.path)
+func (c PathConverter) Convert() (domain.Path, error) {
+	return domain.Path(c.path), nil
 }
