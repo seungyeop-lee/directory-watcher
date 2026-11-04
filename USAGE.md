@@ -211,8 +211,7 @@ The order of these steps is drawn in the [README diagrams](README.md#how-it-work
 
 ## Default exclusion
 
-- Files and folders whose names start with `.` or `_` are not watched. For example, creating `.env` or changing anything inside `.git` or `.idea` does not run hooks. The folder set as `path` is watched regardless of its name.
-- Files are excluded only when they are created. Modifying or deleting an existing `.env` runs hooks.
+- Files and folders whose names start with `.` or `_` are not watched. For example, creating, modifying, or deleting `.env`, or changing anything inside `.git` or `.idea`, does not run hooks. The folder set as `path` is watched regardless of its name.
 - Links to folders inside the watched folder are not followed. Changes in a folder outside the watched folder do not run hooks, even when a link inside the watched folder points to it.
 
 ## Limitations on folder event detection
