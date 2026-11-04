@@ -178,6 +178,10 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 
 - See the [E2E guide](e2e/README.md) for automated macOS, Linux, and Windows checks against the current worktree and instructions for adding scenarios.
 
+## Contributing
+
+- Bug reports and feature ideas are welcome as GitHub issues; pull requests are not accepted. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 - This project is licensed under the [MIT License](LICENSE).

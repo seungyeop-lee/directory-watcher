@@ -1,0 +1,72 @@
+name: Bug report
+description: Report something in Directory Watcher that does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        To report a security vulnerability, follow [SECURITY.md](https://github.com/seungyeop-lee/directory-watcher/blob/master/SECURITY.md) and do not open a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe what you saw, including any error message in the terminal.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `directory-watcher -c config.yml` with the config.yml below
+        2. Create or change ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: config.yml
+      description: The config file you ran, or the smallest one that reproduces the problem. Remove paths, commands, or other data you do not want to make public.
+      render: yaml
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: directory-watcher version
+      description: Output of `directory-watcher --version`. If you built it from the repository, give the commit hash from `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - Homebrew
+        - Scoop
+        - Docker image
+        - Downloaded from the releases page
+        - go install
+        - Built from the repository
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Name and version, for example macOS 15.5, Ubuntu 24.04, or Windows 11.
+    validations:
+      required: true
+  - type: textarea
+    id: debug-log
+    attributes:
+      label: Output with -l DEBUG
+      description: Run the watcher again with `-l DEBUG` and paste the output from around the time the problem happened. Remove paths or other data you do not want to make public.
+      render: text

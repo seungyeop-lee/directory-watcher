@@ -178,6 +178,10 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 
 - 현재 워크트리 소스를 사용하는 macOS·Linux·Windows 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.ko.md)를 확인하세요.
 
+## 기여
+
+- 버그 제보와 기능 제안은 GitHub 이슈로 받고, pull request는 받지 않습니다. 자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 확인하세요.
+
 ## 라이선스
 
 - 이 프로젝트는 [MIT 라이선스](LICENSE)에 따라 제공됩니다.
