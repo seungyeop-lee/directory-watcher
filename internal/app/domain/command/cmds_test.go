@@ -1,4 +1,4 @@
-package cmd_test
+package command_test
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 )
 
 func TestCmdsSkipsEmptyCommand(t *testing.T) {

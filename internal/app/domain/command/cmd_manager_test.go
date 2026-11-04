@@ -1,4 +1,4 @@
-package cmd_test
+package command_test
 
 import (
 	"fmt"
@@ -15,8 +15,7 @@ import (
 	"time"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 )
 
 // 훅 출력 테스트가 출력을 내는 실제 프로세스로 쓰려고 이 테스트 바이너리를 다시 실행한다.
@@ -83,38 +82,6 @@ func outputCommand(t *testing.T, mode string, count int) command.SingleCmd {
 	// -race로 빌드한 바이너리는 끝날 때 1초를 기다리므로, 이 바이너리를 여러 번 실행하는 테스트가 느려지지 않게 끈다.
 	t.Setenv("GORACE", strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
 	return command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^TestHookOutputProcess$" -- %s %d`, os.Args[0], mode, count)}
-}
-
-// capturedContext는 훅 출력이 가는 표준 출력을 파일로 바꾼 뒤 만든 실행 context와, 그 파일의 내용을 읽는 함수를 돌려준다.
-func capturedContext(t *testing.T) (*process.WatcherContext, func() string) {
-	t.Helper()
-	base, output := capturedBase(t)
-	return base.NewRun(), output
-}
-
-// capturedBase는 capturedContext와 같지만, NewRun이나 NewTimeoutRun으로 실행 context를 직접 만들 수 있게 바탕 context를 돌려준다.
-func capturedBase(t *testing.T) (*process.WatcherContext, func() string) {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "stdout")
-	file, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := os.Stdout
-	os.Stdout = file
-	base := process.NewWatcherContext("[test]")
-	os.Stdout = original
-	t.Cleanup(func() {
-		base.Cancel()
-		_ = file.Close()
-	})
-	return base, func() string {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(data)
-	}
 }
 
 func TestHookOutputIsCompleteWhenRunReturns(t *testing.T) {
@@ -262,6 +229,46 @@ func TestCommandIsNotStartedWhenWorkingDirectoryIsMissing(t *testing.T) {
 			}
 			if got := output(); got != "" {
 				t.Fatalf("command ran in a missing working directory: %q", got)
+			}
+		})
+	}
+}
+
+func TestCommandListSkipsRestAfterFailureInEveryShell(t *testing.T) {
+	for _, shell := range testedShells(t) {
+		t.Run(shell.String(), func(t *testing.T) {
+			ctx, output := capturedContext(t)
+			cmd := command.NewManager(command.MultiLineCmd{Cmds: []command.SingleCmd{
+				{Shell: shell, Cmd: "exit 3"},
+				{Shell: shell, Cmd: "echo after"},
+			}})
+			if err := cmd.Run(ctx, domain.Path(t.TempDir()), nil); err == nil {
+				t.Fatal("failing first command returned no error")
+			}
+			if got := hookLines(output()); len(got) != 0 {
+				t.Fatalf("command after the failed one ran: %q", got)
+			}
+		})
+	}
+}
+
+func TestErrorEnvironmentReachesCommandInEveryShell(t *testing.T) {
+	reference := map[string]string{
+		"sh":         `echo "$DW_ERROR_KIND"`,
+		"cmd":        `echo %DW_ERROR_KIND%`,
+		"powershell": `Write-Output $env:DW_ERROR_KIND`,
+	}
+	for _, shell := range testedShells(t) {
+		t.Run(shell.String(), func(t *testing.T) {
+			base, output := capturedBase(t)
+			ctx := base.NewTimeoutRun(10*time.Second, []string{"DW_ERROR_KIND=event_loss"})
+			defer ctx.Cancel()
+			cmd := command.NewManager(command.SingleCmd{Shell: shell, Cmd: reference[shell.String()]})
+			if err := cmd.Run(ctx, domain.Path(t.TempDir()), nil); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := hookLines(output()), []string{"event_loss"}; !equalLines(got, want) {
+				t.Fatalf("output = %q, want %q", got, want)
 			}
 		})
 	}

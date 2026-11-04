@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config/converter"
 	"gopkg.in/yaml.v3"
@@ -49,7 +49,7 @@ type GlobalConfig struct {
 	LifeCycle GlobalLifeCycleConfig `yaml:"lifeCycle"`
 }
 
-func (c GlobalConfig) BuildCommandSet(shell cmd.Shell) (domain.GlobalCommandSet, error) {
+func (c GlobalConfig) BuildCommandSet(shell command.Shell) (domain.GlobalCommandSet, error) {
 	lifeCycle, err := c.LifeCycle.BuildLifeCycle(shell)
 	if err != nil {
 		return domain.GlobalCommandSet{}, converter.WithKey("global", err)
@@ -66,7 +66,7 @@ type GlobalLifeCycleConfig struct {
 	OnQueueWarning config.CmdInfo `yaml:"onQueueWarning"`
 }
 
-func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.GlobalLifeCycle, error) {
+func (c GlobalLifeCycleConfig) BuildLifeCycle(shell command.Shell) (domain.GlobalLifeCycle, error) {
 	var lifeCycle domain.GlobalLifeCycle
 	err := buildHooks([]hook{
 		{converter.NewCmdInfoConverter("onStartWatch", c.OnStartWatch, shell), &lifeCycle.OnStartWatch},
@@ -84,7 +84,7 @@ func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.GlobalLif
 
 type WatchTargetsConfigs []WatchTargetsConfig
 
-func (cs WatchTargetsConfigs) BuildCommandSets(shell cmd.Shell) (domain.WatchTargetsCommandSets, error) {
+func (cs WatchTargetsConfigs) BuildCommandSets(shell command.Shell) (domain.WatchTargetsCommandSets, error) {
 	result := domain.WatchTargetsCommandSets{}
 	for i, c := range cs {
 		commandSet, err := c.BuildCommandSet(shell)
@@ -102,7 +102,7 @@ type WatchTargetsConfig struct {
 	Option    WatchTargetsOptionConfig    `yaml:"option"`
 }
 
-func (c WatchTargetsConfig) BuildCommandSet(shell cmd.Shell) (domain.WatchTargetsCommandSet, error) {
+func (c WatchTargetsConfig) BuildCommandSet(shell command.Shell) (domain.WatchTargetsCommandSet, error) {
 	option, err := c.Option.BuildOption()
 	if err != nil {
 		return domain.WatchTargetsCommandSet{}, err
@@ -128,7 +128,7 @@ type WatchTargetsLifeCycleConfig struct {
 	OnFinishWatch config.CmdInfo `yaml:"onFinishWatch"`
 }
 
-func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.WatchTargetsLifeCycle, error) {
+func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell command.Shell) (domain.WatchTargetsLifeCycle, error) {
 	var lifeCycle domain.WatchTargetsLifeCycle
 	err := buildHooks([]hook{
 		{converter.NewCmdInfoConverter("onStartWatch", c.OnStartWatch, shell), &lifeCycle.OnStartWatch},

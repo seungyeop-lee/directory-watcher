@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/service"
 	yamlconfig "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
 	"gopkg.in/yaml.v3"

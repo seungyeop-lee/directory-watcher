@@ -1,7 +1,7 @@
 package converter
 
 import (
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config"
 )
 
@@ -13,9 +13,9 @@ func NewShellConverter(shell config.Shell) *ShellConverter {
 	return &ShellConverter{shell: shell}
 }
 
-func (c ShellConverter) Convert() (cmd.Shell, error) {
+func (c ShellConverter) Convert() (command.Shell, error) {
 	if c.shell == "" {
-		return cmd.DefaultShell(), nil
+		return command.DefaultShell(), nil
 	}
-	return cmd.LookupShell(string(c.shell))
+	return command.LookupShell(string(c.shell))
 }

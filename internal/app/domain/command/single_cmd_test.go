@@ -1,85 +1,18 @@
-package cmd_test
+package command_test
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"runtime"
-	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
 )
-
-// 셸 테스트는 이 OS에서 쓸 수 있는 셸만 실행한다. sh는 macOS와 Linux에서, cmd와 powershell은
-// Windows에서 확인한다.
-func testedShells(t *testing.T) []command.Shell {
-	t.Helper()
-	names := []string{"sh"}
-	if runtime.GOOS == "windows" {
-		names = []string{"cmd", "powershell"}
-	}
-	var shells []command.Shell
-	for _, name := range names {
-		shell, err := command.LookupShell(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		shells = append(shells, shell)
-	}
-	return shells
-}
-
-// shellSyntax는 셸마다 같은 일을 하는 명령이다. 각 셸의 문법 규칙대로 해석될 때만 want가 나온다.
-var shellSyntax = map[string]map[string]struct {
-	command string
-	want    []string
-}{
-	"sh": {
-		"quotes":       {`echo 'single  $HOME' "double  quoted"`, []string{"single  $HOME double  quoted"}},
-		"substitution": {`echo "x$(echo inner)"`, []string{"xinner"}},
-		"and":          {`echo first && echo second`, []string{"first", "second"}},
-		"redirection":  {`echo redirected > out.txt && cat out.txt`, []string{"redirected"}},
-	},
-	"cmd": {
-		"quotes":       {`echo "a & b"`, []string{`"a & b"`}},
-		"substitution": {`for /f "delims=" %i in ('echo inner') do @echo x%i`, []string{"xinner"}},
-		"and":          {`echo first&& echo second`, []string{"first", "second"}},
-		"redirection":  {`echo redirected>out.txt&& type out.txt`, []string{"redirected"}},
-	},
-	// Windows PowerShell 5.1에는 &&가 없으므로, 앞 명령이 성공했을 때만 뒤 명령을 실행하는 if ($?)로 확인한다.
-	"powershell": {
-		"quotes":       {`Write-Output 'single $HOME' "double $(1+1)"`, []string{"single $HOME", "double 2"}},
-		"substitution": {`Write-Output "x$(Write-Output inner)"`, []string{"xinner"}},
-		"and":          {`Write-Output first; if ($?) { Write-Output second }`, []string{"first", "second"}},
-		"redirection":  {`Write-Output redirected > out.txt; Get-Content out.txt`, []string{"redirected"}},
-	},
-}
-
-func TestShellInterpretsCommandWithItsOwnSyntax(t *testing.T) {
-	for _, shell := range testedShells(t) {
-		for name, tc := range shellSyntax[shell.String()] {
-			t.Run(shell.String()+"/"+name, func(t *testing.T) {
-				ctx, output := capturedContext(t)
-				runDir := t.TempDir()
-				cmd := command.NewManager(command.SingleCmd{Shell: shell, Cmd: tc.command})
-				if err := cmd.Run(ctx, domain.Path(runDir), nil); err != nil {
-					t.Fatal(err)
-				}
-				if got := hookLines(output()); !equalLines(got, tc.want) {
-					t.Fatalf("output = %q, want %q", got, tc.want)
-				}
-			})
-		}
-	}
-}
 
 // TestShellArgsProcess는 템플릿 값 테스트가 인자를 받는 실제 프로그램으로 쓰려고 이 테스트 바이너리를
 // 다시 실행한다. 테스트 플래그 뒤의 인자를 JSON 배열 한 줄로 쓰고, 이름이 DW_로 시작하는 환경 변수를
@@ -305,115 +238,4 @@ func TestFailureWithoutTemplatesShowsOnlyTheCommand(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "with values") {
 		t.Fatalf("failure of a command without templates = %v, want no filled-in command", err)
 	}
-}
-
-func TestCommandListSkipsRestAfterFailureInEveryShell(t *testing.T) {
-	for _, shell := range testedShells(t) {
-		t.Run(shell.String(), func(t *testing.T) {
-			ctx, output := capturedContext(t)
-			cmd := command.NewManager(command.MultiLineCmd{Cmds: []command.SingleCmd{
-				{Shell: shell, Cmd: "exit 3"},
-				{Shell: shell, Cmd: "echo after"},
-			}})
-			if err := cmd.Run(ctx, domain.Path(t.TempDir()), nil); err == nil {
-				t.Fatal("failing first command returned no error")
-			}
-			if got := hookLines(output()); len(got) != 0 {
-				t.Fatalf("command after the failed one ran: %q", got)
-			}
-		})
-	}
-}
-
-func TestErrorEnvironmentReachesCommandInEveryShell(t *testing.T) {
-	reference := map[string]string{
-		"sh":         `echo "$DW_ERROR_KIND"`,
-		"cmd":        `echo %DW_ERROR_KIND%`,
-		"powershell": `Write-Output $env:DW_ERROR_KIND`,
-	}
-	for _, shell := range testedShells(t) {
-		t.Run(shell.String(), func(t *testing.T) {
-			base, output := capturedBase(t)
-			ctx := base.NewTimeoutRun(10*time.Second, []string{"DW_ERROR_KIND=event_loss"})
-			defer ctx.Cancel()
-			cmd := command.NewManager(command.SingleCmd{Shell: shell, Cmd: reference[shell.String()]})
-			if err := cmd.Run(ctx, domain.Path(t.TempDir()), nil); err != nil {
-				t.Fatal(err)
-			}
-			if got, want := hookLines(output()), []string{"event_loss"}; !equalLines(got, want) {
-				t.Fatalf("output = %q, want %q", got, want)
-			}
-		})
-	}
-}
-
-func TestLookupShellRejectsUnknownName(t *testing.T) {
-	_, err := command.LookupShell("bash")
-	if err == nil || !strings.Contains(err.Error(), `"bash"`) || !strings.Contains(err.Error(), "sh, cmd, powershell") {
-		t.Fatalf("error does not name the value and the choices: %v", err)
-	}
-}
-
-// schema의 shell.enum은 코드의 셸 목록을 손으로 옮겨 적은 것이라, 셸을 추가하거나 바꿀 때 함께 고쳐야 한다.
-func TestSchemaListsSameShellsAsCode(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "directory-watcher.schema.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var schema struct {
-		Properties struct {
-			Shell struct {
-				Enum []string `json:"enum"`
-			} `json:"shell"`
-		} `json:"properties"`
-	}
-	if err := json.Unmarshal(data, &schema); err != nil {
-		t.Fatal(err)
-	}
-	got, want := schema.Properties.Shell.Enum, command.ShellNames()
-	slices.Sort(got)
-	slices.Sort(want)
-	if !slices.Equal(got, want) {
-		t.Fatalf("schema shell.enum = %q, want %q", got, want)
-	}
-}
-
-func TestWindowsShellsAreRejectedOutsideWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		return
-	}
-	for _, name := range []string{"cmd", "powershell"} {
-		if _, err := command.LookupShell(name); err == nil || !strings.Contains(err.Error(), "only on Windows") {
-			t.Errorf("LookupShell(%q) error = %v, want a Windows-only error", name, err)
-		}
-	}
-}
-
-func TestDefaultShellMatchesOS(t *testing.T) {
-	want := "sh"
-	if runtime.GOOS == "windows" {
-		want = "cmd"
-	}
-	if got := command.DefaultShell().String(); got != want {
-		t.Fatalf("default shell = %q, want %q", got, want)
-	}
-}
-
-var ansiCode = regexp.MustCompile("\x1b\\[[0-9;]*m")
-
-// hookLines는 capturedContext가 모은 출력에서 각 줄의 출력 주체와 색상 코드를 빼고 hook이 쓴 글자만 돌려준다.
-// Windows의 echo가 붙이는 줄 끝 공백도 뺀다.
-func hookLines(output string) []string {
-	var lines []string
-	for _, line := range strings.Split(strings.TrimRight(output, "\n"), "\n") {
-		_, text, ok := strings.Cut(ansiCode.ReplaceAllString(line, ""), " | ")
-		if ok {
-			lines = append(lines, strings.TrimRight(text, " \r"))
-		}
-	}
-	return lines
-}
-
-func equalLines(got, want []string) bool {
-	return strings.Join(got, "\n") == strings.Join(want, "\n") && len(got) == len(want)
 }
