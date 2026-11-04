@@ -56,6 +56,19 @@ func TestUsageListsSameHookVariablesAsCode(t *testing.T) {
 	}
 }
 
+// 오류 예시 줄은 {{len .Path}}를 쓴 명령의 실제 오류 메시지를 옮겨 적은 것이다.
+func TestUsageShowsUnsupportedTemplateActionError(t *testing.T) {
+	err := command.SingleCmd{Cmd: "echo {{len .Path}}"}.CheckTemplates()
+	if err == nil {
+		t.Fatal("CheckTemplates accepted a function call")
+	}
+	for _, file := range usageFiles {
+		if !strings.Contains(readDoc(t, file), err.Error()) {
+			t.Errorf("%s has no error example %q", file, err.Error())
+		}
+	}
+}
+
 func TestUsageListsSameErrorVariablesAsCode(t *testing.T) {
 	want := service.ErrorVariableNames()
 	for _, file := range usageFiles {

@@ -244,8 +244,17 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 - 쌍점 앞의 위치는 설정에서 문제가 된 명령을 가리킵니다.
   - `onChange[1]`은 `onChange`의 두 번째 항목이고, `onChange[0].cmd[1]`은 첫 번째 항목의 `cmd` 목록에 있는 두 번째 명령입니다.
   - 전역 hook은 `global.lifeCycle.onBeforeChange[0]`처럼 `global.lifeCycle.`로 시작합니다.
-- `{{.Path.Missing}}`처럼 어떤 이벤트에서도 템플릿을 채우지 못하는 명령이 있어도 watcher는 끝나고, 그 오류에는 위치 뒤에 `can't execute command:`가 이어집니다.
-  - 변수의 값은 모두 문자열이므로, `.Missing`처럼 변수에서 필드를 읽으면 항상 실패합니다.
+
+- 명령에는 `{{.Path}}`나 `{{$.Path}}`처럼 표의 변수를 그대로 넣는 자리만 쓸 수 있습니다.
+- watcher는 변수 자리를 셸 참조로 바꾼 명령을 셸에 넘기므로, 템플릿 안에 쓴 조건이나 함수는 실제 값이 아니라 참조 문자열을 보고 평가됩니다.
+
+명령에 `{{if eq .Event "C"}}` 같은 조건(`if`, `with`, `range`), `{{len .Path}}` 같은 함수, `{{.Path | printf "%q"}}` 같은 pipeline이 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].lifeCycle.onChange[0]: unsupported template action {{len .Path}}; only template variables such as {{.Path}} are supported
+```
+
+- 값에 따라 명령을 다르게 실행하려면 조건을 셸 명령에 씁니다. `sh`에서는 `if [ {{.Event}} = C ]; then echo created; fi`처럼 씁니다.
 
 - watcher는 변수의 값을 표의 환경 변수에 넣고, 명령의 변수 자리를 그 환경 변수를 읽는 셸 참조로 바꿉니다.
 - 참조 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)의 표에 있습니다.
@@ -774,7 +783,7 @@ Error: watchTargets[0].option.watchEvent is no longer supported; use option.watc
 | `watchEvent: CU` | `watch: {fileEvent: CU}` |
 | `watchEvent: ''` | `watch: {fileEvent: CUD}`, 또는 `fileEvent`를 적지 않음 |
 
-- 폴더 이벤트는 기본으로 켜집니다. `cat {{.Path}}`처럼 파일 경로를 기대하는 hook은 `{{.IsDir}}`를 확인하거나, 그 감시 대상에 `watch.dirEvent: none`을 적어야 합니다.
+- 폴더 이벤트는 기본으로 켜집니다. `cat {{.Path}}`처럼 파일 경로를 기대하는 hook은 `if [ {{.IsDir}} = false ]; then cat {{.Path}}; fi`처럼 셸에서 `{{.IsDir}}`를 확인하거나, 그 감시 대상에 `watch.dirEvent: none`을 적어야 합니다.
 - 버전 3 전에는 폴더에 대해 hook이 다음 이벤트를 받았습니다.
   - 폴더를 만들거나 옮겨 와도 hook이 실행되지 않았습니다. 폴더를 만든 직후에 쓴 파일은 hook을 실행하기도 했지만, 이제는 폴더 `C`에 흡수됩니다.
   - 폴더를 지우면 hook이 폴더 경로의 `D`를 파일 이벤트와 구별 없이 받았고, Linux와 macOS에서는 안의 파일마다 `D`도 받았습니다. 이제는 폴더 `D` 하나만 받습니다.

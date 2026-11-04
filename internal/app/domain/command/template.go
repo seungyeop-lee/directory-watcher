@@ -49,83 +49,63 @@ func (c SingleCmd) parseTemplate() (*template.Template, error) {
 	return t, nil
 }
 
-// CheckTemplates는 이벤트를 받는 hook의 명령을 감시를 시작하기 전에 검사한다. 명령이 eventVariables에 없는
-// 템플릿 변수를 쓰거나, 템플릿을 실행할 때 반드시 실패하면 오류를 낸다.
+// CheckTemplates는 이벤트를 받는 hook의 명령을 감시를 시작하기 전에 검사한다. 명령에는 {{.Path}}나 {{$.Path}}처럼
+// eventVariables의 변수를 그대로 넣는 자리만 쓸 수 있고, 다른 형태를 쓰거나 모르는 변수를 쓰면 오류를 낸다.
+//   - Build가 셸에 넘기는 명령은 변수 자리를 셸 참조로 채운 템플릿 결과다. 그래서 {{if eq .Event "C"}}나
+//     {{len .Path}} 같은 조건과 함수는 실제 값이 아니라 "$DW_PATH" 같은 참조 문자열을 보고 평가된다.
 //   - Go 템플릿은 값 map에 없는 변수를 만나도 오류 없이 <no value>를 넣으므로, 변수 이름은 따로 검사한다.
-//   - 실행 검사는 Build의 첫 실행과 같은 c.Shell의 참조 값으로 템플릿을 실행한다. {{.Path.Missing}}처럼
-//     어떤 이벤트에서도 실패하는 명령은 여기서 걸리고, {{index .Path 9}}처럼 실제 값에 따라 실패하는 명령은
-//     실행할 때 실패한다.
+//   - 끝으로 Build의 첫 실행과 같은 c.Shell의 참조 값으로 템플릿을 한 번 실행해 본다.
 func (c SingleCmd) CheckTemplates() error {
 	t, err := c.parseTemplate()
 	if err != nil {
 		return err
 	}
-	names, _ := EventVariableNames()
 	for _, defined := range t.Templates() {
-		for _, name := range referencedVariables(defined.Root) {
+		if defined.Name() != t.Name() {
+			return unsupportedActionError(fmt.Sprintf("{{define %q}}", defined.Name()))
+		}
+	}
+	names, _ := EventVariableNames()
+	// if, range, with는 만나는 즉시 거부하므로, 그 안의 node는 따로 보지 않는다.
+	for _, node := range t.Root.Nodes {
+		switch n := node.(type) {
+		case *parse.TextNode:
+		case *parse.ActionNode:
+			name, ok := substitutedVariable(n.Pipe)
+			if !ok {
+				return unsupportedActionError(n.String())
+			}
 			if !slices.Contains(names, name) {
 				return fmt.Errorf("unknown template variable %q; available: %s", name, strings.Join(names, ", "))
 			}
+		default:
+			return unsupportedActionError(node.String())
 		}
 	}
 	_, err = execute(t, c.templateRefs())
 	return err
 }
 
-// referencedVariables는 템플릿 node 아래에서 {{.Path}}나 {{$.Path}}처럼 템플릿 값에서 읽는 변수 이름을 모은다.
-func referencedVariables(node parse.Node) []string {
-	switch n := node.(type) {
+// substitutedVariable은 pipe가 {{.Path}}나 {{$.Path}}처럼 변수 하나를 그대로 읽으면 그 변수 이름을 돌려준다.
+func substitutedVariable(pipe *parse.PipeNode) (name string, ok bool) {
+	if len(pipe.Decl) > 0 || len(pipe.Cmds) != 1 || len(pipe.Cmds[0].Args) != 1 {
+		return "", false
+	}
+	switch arg := pipe.Cmds[0].Args[0].(type) {
 	case *parse.FieldNode:
-		return n.Ident[:1]
+		if len(arg.Ident) == 1 {
+			return arg.Ident[0], true
+		}
 	case *parse.VariableNode:
-		if n.Ident[0] == "$" && len(n.Ident) > 1 {
-			return n.Ident[1:2]
+		if len(arg.Ident) == 2 && arg.Ident[0] == "$" {
+			return arg.Ident[1], true
 		}
-	case *parse.ChainNode:
-		return referencedVariables(n.Node)
-	case *parse.ListNode:
-		return referencedVariablesIn(n.Nodes)
-	case *parse.ActionNode:
-		return referencedVariables(n.Pipe)
-	case *parse.PipeNode:
-		// {{template "name"}}처럼 값을 넘기지 않는 TemplateNode는 Pipe가 nil이다.
-		if n == nil {
-			return nil
-		}
-		var names []string
-		for _, cmd := range n.Cmds {
-			names = append(names, referencedVariables(cmd)...)
-		}
-		return names
-	case *parse.CommandNode:
-		return referencedVariablesIn(n.Args)
-	case *parse.TemplateNode:
-		return referencedVariables(n.Pipe)
-	case *parse.IfNode:
-		return referencedVariablesInBranch(n.BranchNode)
-	case *parse.RangeNode:
-		return referencedVariablesInBranch(n.BranchNode)
-	case *parse.WithNode:
-		return referencedVariablesInBranch(n.BranchNode)
 	}
-	return nil
+	return "", false
 }
 
-func referencedVariablesIn(nodes []parse.Node) []string {
-	var names []string
-	for _, node := range nodes {
-		names = append(names, referencedVariables(node)...)
-	}
-	return names
-}
-
-func referencedVariablesInBranch(b parse.BranchNode) []string {
-	names := referencedVariables(b.Pipe)
-	names = append(names, referencedVariables(b.List)...)
-	if b.ElseList != nil {
-		names = append(names, referencedVariables(b.ElseList)...)
-	}
-	return names
+func unsupportedActionError(action string) error {
+	return fmt.Errorf("unsupported template action %s; only template variables such as {{.Path}} are supported", action)
 }
 
 func execute(t *template.Template, data map[string]string) (string, error) {

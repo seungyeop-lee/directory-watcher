@@ -190,12 +190,12 @@ func TestUnknownTemplateVariableInEventHookStopsBuild(t *testing.T) {
 		},
 		{
 			name: "global onBeforeChange",
-			data: "global:\n  lifeCycle:\n    onBeforeChange: ['echo {{if .Event}}{{.DirAbsPath}}{{end}}']\nwatchTargets: []\n",
+			data: "global:\n  lifeCycle:\n    onBeforeChange: ['echo {{.DirAbsPath}}']\nwatchTargets: []\n",
 			want: `global.lifeCycle.onBeforeChange[0]: unknown template variable "DirAbsPath"; ` + available,
 		},
 		{
 			name: "global onAfterChange",
-			data: "global:\n  lifeCycle:\n    onAfterChange: ['echo {{$.Path}} {{printf \"%s\" $.Unknown}}']\nwatchTargets: []\n",
+			data: "global:\n  lifeCycle:\n    onAfterChange: ['echo {{$.Path}} {{$.Unknown}}']\nwatchTargets: []\n",
 			want: `global.lifeCycle.onAfterChange[0]: unknown template variable "Unknown"; ` + available,
 		},
 	}
@@ -209,12 +209,12 @@ func TestUnknownTemplateVariableInEventHookStopsBuild(t *testing.T) {
 	}
 }
 
-func TestTemplateThatFailsToRunInEventHookStopsBuild(t *testing.T) {
-	data := "watchTargets:\n  - path: site\n    lifeCycle:\n      onChange: ['echo first {{.Path.Missing}}', 'echo second-ran']\n"
+func TestConditionInEventHookStopsBuild(t *testing.T) {
+	data := "watchTargets:\n  - path: site\n    lifeCycle:\n      onChange: ['echo {{if eq .Event \"C\"}}created{{else}}other{{end}}', 'echo second-ran']\n"
 	_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
-	const want = "watchTargets[0].lifeCycle.onChange[0]: can't execute command: "
-	if err == nil || !strings.HasPrefix(err.Error(), want) || !strings.Contains(err.Error(), "Missing") {
-		t.Fatalf("BuildCommandSet error = %v, want an error starting with %q", err, want)
+	const want = `watchTargets[0].lifeCycle.onChange[0]: unsupported template action {{if eq .Event "C"}}created{{else}}other{{end}}; only template variables such as {{.Path}} are supported`
+	if err == nil || err.Error() != want {
+		t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
 	}
 }
 

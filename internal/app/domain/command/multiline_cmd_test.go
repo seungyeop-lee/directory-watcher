@@ -25,13 +25,9 @@ func TestMultiLineCmdSkipsEmptyCommand(t *testing.T) {
 	}
 }
 
-// 설정을 읽을 때 CheckTemplates는 실제 이벤트 값을 모르므로, {{index .Path 9}}처럼 값에 따라 실패하는 명령은
-// 검사를 통과하고, 경로가 9글자보다 짧은 이벤트에서 템플릿을 채우지 못한다.
+// 설정을 읽을 때 CheckTemplates는 {{.Path.Missing}}을 거부하므로, 이 테스트는 검사를 거치지 않은 명령으로 Build가 실패하는 경우를 만든다.
 func TestMultiLineCmdFailsWhenCommandCannotBeBuilt(t *testing.T) {
-	unbuildable := command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo {{index .Path 9}}"}
-	if err := unbuildable.CheckTemplates(); err != nil {
-		t.Fatalf("command is rejected before watching starts: %v", err)
-	}
+	unbuildable := command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo {{.Path.Missing}}"}
 	event := &domain.Event{Path: "b.txt", Operation: domain.Operation(fsnotify.Create)}
 	ctx, output := capturedContext(t)
 	builder := command.MultiLineCmd{Cmds: []command.SingleCmd{unbuildable, {Shell: command.DefaultShell(), Cmd: "echo after"}}}
