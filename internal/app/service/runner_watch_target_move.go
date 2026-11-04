@@ -264,6 +264,9 @@ func (r *watchTargetRunner) rebuildWatcher() error {
 //
 // 새 watcher는 폴더를 모두 넣은 뒤에 생긴 변경만 받으므로, 그 전의 변경은 예전 watcher의 이벤트로 넘긴다.
 // 새 watcher에 폴더를 넣은 뒤 예전 watcher를 닫기까지 생긴 변경은 hook에 두 번 갈 수 있다.
+//
+// handleEvent가 rebuildWatcher를 부를 수 있으므로, Run의 select에서 handleEvent로 이벤트를 넘기는 case는 모두
+// 끝에 이 함수를 부른다. 그래야 예전 watcher의 이벤트가 새 watcher의 다음 이벤트보다 먼저 간다.
 func (r *watchTargetRunner) retireWatcher(events *runQueue) error {
 	old := r.retiring
 	if old == nil {

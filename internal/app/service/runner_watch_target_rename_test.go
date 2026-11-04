@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
@@ -390,5 +391,81 @@ func TestManyRenamesNotifyDeleteBeforeCreate(t *testing.T) {
 				t.Errorf("rename %d-%d: D at %d (%v), C at %d (%v)", k, i, d, okD, c, okC)
 			}
 		}
+	}
+}
+
+// 옛 경로의 Rename을 기다리다 보류 시간이 끝나 넘긴 Create가 watcher를 다시 만들어도, 예전 watcher가 닫히기 전에
+// 받은 이벤트가 새 watcher가 받은 다음 이벤트보다 먼저 hook에 가는지 확인한다.
+//
+// 보류는 kqueue에서만, 감시를 풀지 못한 폴더는 주로 Windows에서 생기므로 두 상태를 직접 만든다. 감시 대상 밖
+// 폴더의 감시를 남겨, 풀지 못한 폴더 d의 Create가 rebuildIfLeaked에서 watcher를 다시 만들게 한다.
+func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
+	target, outside := t.TempDir(), t.TempDir()
+	dir := filepath.Join(target, "d")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
+		Path: domain.Path(target),
+		Option: domain.WatchTargetsOption{
+			Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}, DirEvent: domain.WatchEvent{Create: true}},
+			HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+			Queue:     domain.QueueOption{Size: testQueueSize},
+		},
+	}, newMockLogger())
+	t.Cleanup(func() {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		r.Stop(&wg)
+	})
+	if err := r.watcher.Add(outside); err != nil {
+		t.Fatal(err)
+	}
+	retired, retiredErrors := controlledSource(r)
+	holdTimeout := make(chan time.Time)
+	r.held = []fsnotify.Event{{Name: dir, Op: fsnotify.Create}}
+	r.renameSource = filepath.Join(target, "old")
+	r.holdTimeout = holdTimeout
+	r.unreleasedDirs[dir] = struct{}{}
+	changed := make(chan string, testQueueSize)
+	r.runStartHook = func() {}
+	r.runChangeHook = func(event domain.Event) {
+		if rel, err := filepath.Rel(target, event.Path.String()); err == nil {
+			changed <- filepath.ToSlash(rel)
+		}
+	}
+	r.runFinishHook = func() {}
+	result := make(chan error, 1)
+	go func() { result <- r.Run() }()
+
+	var got []string
+	await := func(want string) {
+		t.Helper()
+		for !slices.Contains(got, want) {
+			select {
+			case rel := <-changed:
+				got = append(got, rel)
+			case err := <-result:
+				t.Fatalf("run stopped: %v", err)
+			case <-time.After(5 * time.Second):
+				t.Fatalf("%s did not reach the hook (got %v)", want, got)
+			}
+		}
+	}
+	holdTimeout <- time.Now()
+	await("d")
+	// 감시 루프가 예전 watcher의 이벤트를 새 watcher의 다음 이벤트 뒤에 받으면, 그때까지 보내기가 멈추므로 따로 보낸다.
+	go func() {
+		retired <- fsnotify.Event{Name: filepath.Join(target, "retired.txt"), Op: fsnotify.Create}
+		close(retired)
+		close(retiredErrors)
+	}()
+	if err := os.WriteFile(filepath.Join(target, "next.txt"), []byte("event"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	await("retired.txt")
+	await("next.txt")
+	if slices.Index(got, "retired.txt") > slices.Index(got, "next.txt") {
+		t.Fatalf("event of the retired watcher reached the hook after the next event: %v", got)
 	}
 }

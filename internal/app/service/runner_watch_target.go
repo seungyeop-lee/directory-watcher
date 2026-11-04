@@ -179,6 +179,9 @@ func (r *watchTargetRunner) Run() error {
 			if err := r.releaseHeld(events); err != nil {
 				return r.exitError(err)
 			}
+			if err := r.retireWatcher(events); err != nil {
+				return r.exitError(err)
+			}
 		case <-r.leakCheck:
 			r.leakCheck = nil
 			if err := r.releaseLeakedWatches(events); err != nil {
