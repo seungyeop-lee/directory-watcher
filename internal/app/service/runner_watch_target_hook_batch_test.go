@@ -321,6 +321,63 @@ func TestRunsFromSeparateWaitsAreNotMerged(t *testing.T) {
 	}
 }
 
+// 폴더 삭제가 폴더 이벤트 묶음 두 개로 나뉘어 한 번 기다리는 동안 모이면, lastPerPath는 최종 변화가 D인 폴더
+// 아래의 D를 넘기지 않는지 확인한다. last와 each의 결과는 hookBatch가 폴더 이벤트를 흡수하지 않을 때와 같다.
+func TestLastPerPathDropsDeletesUnderDeletedFolder(t *testing.T) {
+	cases := []struct {
+		deliver  domain.Deliver
+		name     string
+		dirEvent domain.WatchEvent
+		want     []string
+	}{
+		{domain.DeliverLastPerPath, "lastPerPath", domain.WatchEvent{Create: true, Delete: true}, []string{"D d/"}},
+		{domain.DeliverLastPerPath, "lastPerPath with dirEvent none", domain.WatchEvent{}, []string{}},
+		{domain.DeliverLast, "last", domain.WatchEvent{Create: true, Delete: true}, []string{"D d/"}},
+		{domain.DeliverEach, "each", domain.WatchEvent{Create: true, Delete: true}, []string{"D d/sub/g.txt", "D d/f.txt", "D d/sub/", "D d/"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			mkdir(t, filepath.Join(root, "d"))
+			mkdir(t, filepath.Join(root, "d", "sub"))
+			writeFile(t, filepath.Join(root, "d", "f.txt"))
+			writeFile(t, filepath.Join(root, "d", "sub", "g.txt"))
+			option := hookBatchOption(300, 2000, tc.deliver)
+			option.DirEventWait, option.DirEventMaxWait = 20, 20
+			option.WatchDirEvent = tc.dirEvent
+			f := startHookBatchRunner(t, root, option, nil)
+			removeAll(f.t, f.path("d"))
+			// 파일 삭제와 폴더 삭제 사이에 dirBatch.waitMillisecond보다 긴 틈을 두어 폴더 이벤트 묶음을 나눈다.
+			f.send(fsnotify.Remove, "d/sub/g.txt")
+			f.send(fsnotify.Remove, "d/f.txt")
+			time.Sleep(100 * time.Millisecond)
+			f.send(fsnotify.Remove, "d/sub")
+			time.Sleep(100 * time.Millisecond)
+			f.send(fsnotify.Remove, "d")
+			if got := f.collect(600 * time.Millisecond); !slices.Equal(got, tc.want) {
+				t.Fatalf("runs = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// 폴더 생성과 그 안의 파일 생성이 폴더 이벤트 묶음 두 개로 나뉘어 한 번 기다리는 동안 모이면, lastPerPath가
+// 파일의 C도 넘기는지 확인한다. 폴더의 C를 받은 hook이 그 뒤에 생긴 파일을 놓치지 않아야 한다.
+func TestLastPerPathKeepsCreatesUnderCreatedFolder(t *testing.T) {
+	root := t.TempDir()
+	option := hookBatchOption(300, 2000, domain.DeliverLastPerPath)
+	option.DirEventWait, option.DirEventMaxWait = 20, 20
+	f := startHookBatchRunner(t, root, option, nil)
+	mkdir(f.t, f.path("d"))
+	f.send(fsnotify.Create, "d")
+	time.Sleep(100 * time.Millisecond)
+	writeFile(f.t, f.path("d/f.txt"))
+	f.send(fsnotify.Create, "d/f.txt")
+	if got, want := f.collect(600*time.Millisecond), []string{"C d/", "C d/f.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("runs = %v, want %v", got, want)
+	}
+}
+
 func mkdir(t *testing.T, path string) {
 	t.Helper()
 	if err := os.Mkdir(path, 0700); err != nil {

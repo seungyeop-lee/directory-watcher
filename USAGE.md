@@ -587,13 +587,17 @@ A hook can rely on the following:
 - A folder `C` means that the folder appeared together with everything in it. The hook reads what is inside the folder itself: the watcher sends no file events for the files a folder brings with it, even when the folder is moved in.
 - A folder `D` means that the folder and everything in it are gone.
 - Events of the files and subfolders inside a folder that arrive while its folder event is being collected are absorbed into that folder event. They are absorbed in the same way with `watch.dirEvent: none`, so a change of a whole folder then runs no hook.
+- Among the events collected in one wait, `hookBatch.deliver: lastPerPath` drops the `D` of each path under a folder whose final change is `D`. A folder deletion split across several collections of folder events therefore reaches the hook as one folder `D` when one wait collects it.
+  - These `D`s are dropped in the same way with `watch.dirEvent: none`, so that folder deletion then runs no hook.
+  - The `C` of a path under a folder `C` is not dropped, because the path may have appeared after the hook that received the folder `C` read the folder.
+  - `last` passes only its last run, and `each` passes every split deletion as it is.
 - With `hookBatch.deliver: each`, the hook receives the events of a target in the order they happened. While folder events are being collected, the file events of that target wait with them.
 - The hook can receive the same change twice. For example, after the hook receives `C` for a folder and reads it, it can receive `C` for a file in that folder.
 
 ### Collecting folder events
 
 - After a folder is created or deleted, the watcher collects the events of the target and sends them once no event has arrived for `dirBatch.waitMillisecond` (default 100).
-- When events keep arriving, the watcher sends what it has collected `dirBatch.maxWaitMillisecond` (default 1000, or `dirBatch.waitMillisecond` if larger) after the first event. Events inside the folder after that reach the hook on their own and are not absorbed.
+- When events keep arriving, the watcher sends what it has collected `dirBatch.maxWaitMillisecond` (default 1000, or `dirBatch.waitMillisecond` if larger) after the first event. Events inside the folder after that reach the hook on their own and are not absorbed. `hookBatch.deliver: lastPerPath` still drops the `D`s under a folder `D` collected in the same wait.
 - Deleting a file inside a subfolder of the target also starts collecting, because deleting a whole folder reports the files inside it before the folder. Even with `hookBatch.waitMillisecond: 0`, such a deletion and the events after it reach the hook up to `dirBatch.waitMillisecond` later.
 - With `dirBatch.waitMillisecond: 0`, the watcher does not collect, so the hook also receives the events of the files and subfolders inside a folder that is created or deleted.
 - If a written `dirBatch.maxWaitMillisecond` is less than `dirBatch.waitMillisecond`, the watcher runs no hook, prints an error such as `Error: watchTargets[0].option.dirBatch: maxWaitMillisecond 200 is less than waitMillisecond 500`, and exits with code 1.

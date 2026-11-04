@@ -53,7 +53,8 @@ func (r *watchTargetRunner) flushHookBatch(events *runQueue) error {
 // 고르지 않은 종류의 실행은 뺀다.
 //
 // each는 이벤트마다 실행을 만든다. last와 lastPerPath는 경로마다 finalChange로 최종 변화를 계산하고, 경로가
-// 마지막으로 바뀐 순서대로 둔다. last는 그 가운데 마지막 실행 하나만 남긴다.
+// 마지막으로 바뀐 순서대로 둔다. last는 그 가운데 마지막 실행 하나만 남기고, lastPerPath는 최종 변화가 D인 폴더
+// 아래 경로의 D를 뺀다.
 func (r *watchTargetRunner) runsOf(changes []change) []domain.Event {
 	var runs []domain.Event
 	if r.deliver == domain.DeliverEach {
@@ -85,8 +86,17 @@ func (r *watchTargetRunner) runsOf(changes []change) []domain.Event {
 		paths = append(paths, p)
 	}
 	slices.SortFunc(paths, func(a, b *pathChanges) int { return a.at - b.at })
+	var finals []domain.Event
 	for _, p := range paths {
-		if run, ok := finalChange(p.existed, p.last); ok && r.listens(run) {
+		if run, ok := finalChange(p.existed, p.last); ok {
+			finals = append(finals, run)
+		}
+	}
+	if r.deliver == domain.DeliverLastPerPath {
+		finals = withoutRemovesUnderRemovedDirs(finals)
+	}
+	for _, run := range finals {
+		if r.listens(run) {
 			runs = append(runs, run)
 		}
 	}
@@ -94,6 +104,24 @@ func (r *watchTargetRunner) runsOf(changes []change) []domain.Event {
 		runs = runs[len(runs)-1:]
 	}
 	return runs
+}
+
+// withoutRemovesUnderRemovedDirs는 최종 변화 finals에서, 최종 변화가 D인 폴더 아래 경로의 D를 뺀다. 폴더 이벤트
+// 묶음이 나뉘면 폴더의 D가 그 안의 삭제를 흡수하지 못하므로, 한 번 기다리는 동안 모인 삭제를 여기서 흡수한다.
+// watchDirEvent에서 폴더 D를 고르지 않았어도 폴더 이벤트 묶음처럼 똑같이 흡수한다.
+//
+// 폴더 C 아래의 C는 빼지 않는다. 폴더 C를 받은 hook이 폴더를 읽은 뒤에 생긴 항목일 수 있기 때문이다.
+func withoutRemovesUnderRemovedDirs(finals []domain.Event) []domain.Event {
+	var removedDirs []domain.Path
+	for _, run := range finals {
+		if run.IsDir && fsnotify.Op(run.Operation) == fsnotify.Remove {
+			removedDirs = append(removedDirs, run.Path)
+		}
+	}
+	return slices.DeleteFunc(finals, func(run domain.Event) bool {
+		return fsnotify.Op(run.Operation) == fsnotify.Remove &&
+			slices.ContainsFunc(removedDirs, func(dir domain.Path) bool { return isUnder(run.Path, dir) })
+	})
 }
 
 // finalChange는 경로가 한 번 기다리기 전에 기록에 있었는지 existed와 지금 디스크에 있는지로 최종 변화를 정한다.

@@ -595,13 +595,17 @@ hook은 다음 약속에 기댈 수 있습니다.
 - 폴더 `C`는 그 폴더가 안에 든 것과 함께 생겼다는 뜻입니다. 폴더 안의 내용은 hook이 직접 읽습니다. 폴더를 옮겨 와도 watcher는 그 폴더와 함께 들어온 파일의 이벤트를 만들지 않습니다.
 - 폴더 `D`는 그 폴더와 그 안의 모든 것이 사라졌다는 뜻입니다.
 - 폴더 이벤트를 모으는 동안 온, 그 폴더 안의 파일과 하위 폴더의 이벤트는 폴더 이벤트에 흡수합니다. `watch.dirEvent: none`이어도 똑같이 흡수하므로, 이때 폴더 단위의 변경은 hook을 실행하지 않습니다.
+- `hookBatch.deliver: lastPerPath`는 한 번 기다리는 동안 모은 이벤트에서, 최종 변화가 `D`인 폴더 아래 경로의 `D`를 넘기지 않습니다. 그래서 폴더 삭제가 폴더 이벤트 묶음 여러 개로 나뉘어도, 한 번 기다리는 동안 모이면 폴더 `D` 하나로 hook에 갑니다.
+  - `watch.dirEvent: none`이어도 똑같이 빼므로, 이때는 그 폴더 삭제로 hook이 실행되지 않습니다.
+  - 폴더 `C` 아래 경로의 `C`는 빼지 않습니다. 폴더 `C`를 받은 hook이 폴더를 읽은 뒤에 생긴 항목일 수 있기 때문입니다.
+  - `last`는 마지막 실행 하나만, `each`는 나뉜 삭제를 모두 그대로 넘깁니다.
 - `hookBatch.deliver: each`에서는 한 감시 대상의 이벤트를 생긴 순서대로 hook에 넘깁니다. 폴더 이벤트를 모으는 동안에는 그 대상의 파일 이벤트도 함께 기다립니다.
 - hook은 같은 변경을 두 번 받을 수 있습니다. 예를 들어 폴더 `C`를 받고 안을 읽은 뒤, 그 폴더 안 파일의 `C`를 또 받을 수 있습니다.
 
 ### 폴더 이벤트를 모으는 시간
 
 - 폴더가 생기거나 사라지면 watcher는 그 감시 대상의 이벤트를 모으고, `dirBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없으면 모은 이벤트를 보냅니다.
-- 이벤트가 계속 오면 첫 이벤트부터 `dirBatch.maxWaitMillisecond`(기본 1000, `dirBatch.waitMillisecond`가 더 크면 그 값)가 지났을 때 그때까지 모은 이벤트를 보냅니다. 그 뒤에 그 폴더 안에서 생긴 이벤트는 흡수하지 않고 따로 hook에 갑니다.
+- 이벤트가 계속 오면 첫 이벤트부터 `dirBatch.maxWaitMillisecond`(기본 1000, `dirBatch.waitMillisecond`가 더 크면 그 값)가 지났을 때 그때까지 모은 이벤트를 보냅니다. 그 뒤에 그 폴더 안에서 생긴 이벤트는 흡수하지 않고 따로 hook에 갑니다. 다만 `hookBatch.deliver: lastPerPath`는 한 번 기다리는 동안 모인 폴더 `D` 아래의 `D`를 넘기지 않습니다.
 - 감시 대상의 하위 폴더 안에서 파일을 지워도 이벤트를 모으기 시작합니다. 폴더를 통째로 지우면 폴더 안의 파일을 지운 이벤트가 폴더의 이벤트보다 먼저 오기 때문입니다. 그래서 `hookBatch.waitMillisecond: 0`에서도 이런 삭제와 그 뒤의 이벤트는 최대 `dirBatch.waitMillisecond`만큼 늦게 hook에 갑니다.
 - `dirBatch.waitMillisecond: 0`이면 이벤트를 모으지 않으므로, hook은 생기거나 사라진 폴더 안의 파일과 하위 폴더의 이벤트도 받습니다.
 - 직접 적은 `dirBatch.maxWaitMillisecond`가 `dirBatch.waitMillisecond`보다 작으면, watcher는 hook을 하나도 실행하지 않고 `Error: watchTargets[0].option.dirBatch: maxWaitMillisecond 200 is less than waitMillisecond 500` 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
