@@ -18,7 +18,7 @@
 | `harness/cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증. 같은 `Run`을 거치는 하네스 패키지의 `TestMain` 포함 |
 | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 이미 쓰고 있는 기록된 PID를 사라진 것으로 보는지, 기록된 hook이 실행 중이면 지연 hook 부재 대기가 여전히 실패하는지 검증 |
 | `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램. 옵션은 [`hookrec` 프로세스 트리와 지연 hook](#hookrec-프로세스-트리와-지연-hook)에 있음 |
-| `hookrec/main_test.go` | `--error-context`와 `--queue-context`가 이름이 `DW_ERROR_`나 `DW_QUEUE_`로 시작하는 환경 변수를, 코드에 나열하지 않은 이름까지 모두 담고 다른 변수는 담지 않은 JSON으로 `--line` 기록보다 먼저 기록하는지, `--error-context`가 작업 디렉터리도 기록하는지, `--exit-code`가 종료 코드를 정하는지, `--label`이 프로세스 트리의 레이블을 그 세대의 `start` 기록보다 먼저 기록하는지 검증 |
+| `hookrec/main_test.go` | `--error-context`와 `--queue-context`가 이름이 `DW_ERROR_`나 `DW_QUEUE_`로 시작하는 환경 변수를, 코드에 나열하지 않은 이름까지 모두 담고 다른 변수는 담지 않은 JSON으로 `--line` 기록보다 먼저 기록하는지, `--error-context`가 작업 디렉터리도 기록하는지, `--workdir`이 작업 디렉터리를 줄 기록 앞에 기록하는지, `--exit-code`가 종료 코드를 정하는지, `--label`이 프로세스 트리의 레이블을 그 세대의 `start` 기록보다 먼저 기록하는지 검증 |
 | `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
 | `worktree/` | Linux·Windows 실행기에 넘기도록 현재 작업 트리를 항목이 `src/` 아래에 놓이는 tar 스트림으로 묶음(`Root`, `Files`, `Archive`). 추적 중인 파일과, 추적하지 않지만 무시되지도 않는 파일을 담으며, 커밋하지 않은 수정·추가·삭제가 반영됨 |
 | `worktree/worktree_test.go` | `Archive`가 수정한 파일과 추적하지 않는 파일의 작업 트리 내용을 담고, 목록에 있지만 작업 트리에서 사라진 파일은 건너뛰는지 검증 |
@@ -43,6 +43,10 @@
 | 시나리오 | 파일 | 검증 내용 | 사용하는 지원 코드 |
 |---|---|---|---|
 | [`TestGoldenPath`](scenarios/golden-path.ko.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 8개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestHookWorkingDirectory`](scenarios/hook-working-directory.ko.md) | `scenarios/shell_test.go` | `dir` 유무에 따른 전역·대상 hook 실행 위치 | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestPowershellEventVariables`](scenarios/powershell-event-variables.ko.md) | `scenarios/shell_windows_test.go` | Windows PowerShell의 이벤트 변수 여덟 개 원문 전달과 명령 주입 방지 | `Start`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestWindowsShellEmptyArgument`](scenarios/windows-shell-empty-argument.ko.md) | `scenarios/shell_windows_test.go` | `cmd`의 빈 인자 하나 전달과 Windows PowerShell의 빈 인자 생략 | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestWindowsShellRejectedOnUnix`](scenarios/windows-shell-rejected-on-unix.ko.md) | `scenarios/shell_unix_test.go` | Unix의 `shell: cmd` 선택 시 hook 미실행·정확한 오류·종료 코드 1 | `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines` |
 | [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나, 감시 중에 생기거나 옮겨 온 폴더 안에 나중에 만든 파일, 밖으로 옮긴 폴더의 hook 미실행 | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md) | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) | `scenarios/process_test.go` | `hookBatch.deliver`·`run.interrupt` 네 조합의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
@@ -107,6 +111,8 @@ func TestCreateAnotherFile(t *testing.T) {
 - `hookrec`은 `--file=<기록 파일>`로 받은 파일에 한 줄 기록을 덧붙이며, `--file`이 없으면 기록하지 않고 종료 코드 2로 끝납니다.
   - `s.Hook`은 시나리오의 기록 파일로 `--file`을 붙이므로, `exec.Command(harness.HookrecBin(), "--file="+s.Records, ...)`처럼 `hookrec`을 직접 실행할 때만 `--file`을 직접 넘깁니다.
 - `--depth`가 없으면 `hookrec`은 `--line=<기록>`의 값을 한 줄로 기록하고 끝납니다.
+- `--workdir`을 더하면 줄 기록이나 프로세스 트리 기록 앞에 `WORKDIR|<작업 디렉터리>`를 기록합니다.
+  - `TestHookWorkingDirectory`는 각 hook 레이블 앞의 이 기록으로 오류 알림 환경 변수와 독립적으로 실행 위치를 확인합니다.
 
 ### 프로세스 트리
 

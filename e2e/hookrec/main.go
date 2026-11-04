@@ -21,6 +21,7 @@ func main() {
 	delay := flag.Duration("delay", 0, "delay before completing a line record")
 	errorContext := flag.Bool("error-context", false, "record error notification environment and working directory")
 	queueContext := flag.Bool("queue-context", false, "record queue warning environment")
+	workdir := flag.Bool("workdir", false, "record working directory before the line")
 	exitCode := flag.Int("exit-code", 0, "exit status after recording")
 	cancelExitCode := flag.Int("cancel-exit-code", 0, "exit status after recording a canceled delay")
 	releaseFile := flag.String("release-file", "", "exit parent when this file appears, leaving descendants running")
@@ -41,6 +42,14 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	}
+	if *workdir {
+		dir, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		appendLine("WORKDIR|" + dir)
 	}
 	if *errorContext {
 		context := environWithPrefix("DW_ERROR_")

@@ -18,7 +18,7 @@
 | `harness/cleanup_windows_test.go` | Verifies on Windows that failing to delete the run folder or binaries surfaces as an abnormal exit. Includes the harness package's `TestMain`, which goes through the same `Run` |
 | `harness/process_observer_windows_test.go` | Verifies on Windows that a recorded PID already held by another program counts as gone, and that the wait for delayed hooks still fails while a recorded hook runs |
 | `hookrec/` | Helper program that writes one-line records or creates real parent, child, and grandchild processes. Its options are in [`hookrec` process trees and delayed hooks](#hookrec-process-trees-and-delayed-hooks) |
-| `hookrec/main_test.go` | Verifies that `--error-context` and `--queue-context` record every environment variable whose name starts with `DW_ERROR_` or `DW_QUEUE_`, including names the code does not list, and no other variable, as JSON before the `--line` record; that `--error-context` also records the working directory; that `--exit-code` sets the exit status; and that `--label` records the label of a process tree before the `start` record of its generation |
+| `hookrec/main_test.go` | Verifies that `--error-context` and `--queue-context` record every environment variable whose name starts with `DW_ERROR_` or `DW_QUEUE_`, including names the code does not list, and no other variable, as JSON before the `--line` record; that `--error-context` also records the working directory; that `--workdir` records the working directory before the line; that `--exit-code` sets the exit status; and that `--label` records the label of a process tree before the `start` record of its generation |
 | `linux/` | Entry point that passes a copy of the current source to an isolated Linux container and runs the same Go E2E |
 | `worktree/` | Packs the current working tree into a tar stream with entries under `src/` for the Linux and Windows runners (`Root`, `Files`, `Archive`). The archive holds tracked files and untracked files that are not ignored, with uncommitted modifications, additions, and deletions |
 | `worktree/worktree_test.go` | Verifies that `Archive` writes the working tree contents of modified and untracked files and skips listed files that are gone from the working tree |
@@ -43,6 +43,10 @@
 | Scenario | File | What it verifies | Supporting code used |
 |---|---|---|---|
 | [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | Create, update, delete, hook order, 8 event variables | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestHookWorkingDirectory`](scenarios/hook-working-directory.md) | `scenarios/shell_test.go` | Global and target hook execution locations with and without `dir` | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestPowershellEventVariables`](scenarios/powershell-event-variables.md) | `scenarios/shell_windows_test.go` | Eight literal event variables and injection prevention in Windows PowerShell | `Start`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestWindowsShellEmptyArgument`](scenarios/windows-shell-empty-argument.md) | `scenarios/shell_windows_test.go` | One empty argument in `cmd`, omitted empty argument in Windows PowerShell | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestWindowsShellRejectedOnUnix`](scenarios/windows-shell-rejected-on-unix.md) | `scenarios/shell_unix_test.go` | No hook, exact error, and exit 1 when Unix selects `shell: cmd` | `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines` |
 | [`TestFolderEvents`](scenarios/folder-events.md) | `scenarios/folder_events_test.go` | Events the hook receives for each folder and file action, one event for the top folder, a file created later in a folder created or moved in during watching, and no hook for a folder moved out | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.md) | `scenarios/process_test.go` | Three processes of the start hook, restart after the previous generation completes, finish hook order, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) | `scenarios/process_test.go` | Start hook shutdown and replacement in the four `hookBatch.deliver`·`run.interrupt` combinations | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
@@ -107,6 +111,8 @@ After writing the test, create the scenario documents and update the scenario li
 - `hookrec` appends one-line records to the file given with `--file=<record file>`, and exits with code 2 without recording when `--file` is missing.
   - `s.Hook` adds `--file` with the scenario's record file, so pass `--file` yourself only when starting `hookrec` directly, as with `exec.Command(harness.HookrecBin(), "--file="+s.Records, ...)`.
 - Without `--depth`, `hookrec` writes the `--line=<record>` value as one record and exits.
+- With `--workdir`, `hookrec` writes `WORKDIR|<working directory>` before the line or process tree records.
+  - `TestHookWorkingDirectory` uses this record before each hook label to check the execution location independently of error notification variables.
 
 ### Process trees
 

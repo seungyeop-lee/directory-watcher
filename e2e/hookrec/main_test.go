@@ -10,6 +10,25 @@ import (
 	"testing"
 )
 
+func TestWorkingDirectoryBeforeLine(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "records.log")
+	cmd := exec.Command("go", "run", ".", "--file="+file, "--workdir", "--line=HOOK")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("hookrec failed: %v %s", err, out)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workdir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "WORKDIR|"+workdir+"\nHOOK\n"; got != want {
+		t.Fatalf("records = %q, want %q", got, want)
+	}
+}
+
 func TestErrorContextAndFailureExit(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "records.log")
 	cmd := exec.Command("go", "run", ".", "--file="+file, "--error-context", "--exit-code=7", "--line=NOTIFY")
