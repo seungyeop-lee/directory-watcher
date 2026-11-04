@@ -273,3 +273,36 @@ func TestErrorEnvironmentReachesCommandInEveryShell(t *testing.T) {
 		})
 	}
 }
+
+func TestManagerStringShowsConfiguredCommands(t *testing.T) {
+	shell := command.DefaultShell()
+	cases := map[string]struct {
+		builder command.ExecCmdBuilder
+		want    string
+	}{
+		"single command": {command.Cmds{command.SingleCmd{Shell: shell, Cmd: "echo 'global start'"}}, "echo 'global start'"},
+		"command list": {command.Cmds{
+			command.SingleCmd{Shell: shell, Cmd: "echo a"},
+			command.MultiLineCmd{Cmds: []command.SingleCmd{{Shell: shell, Cmd: "echo b"}, {Shell: shell, Cmd: "echo c"}}},
+		}, "echo a; echo b; echo c"},
+		"command with dir": {command.Cmds{
+			command.StructuredCmd{Cmd: command.MultiLineCmd{Cmds: []command.SingleCmd{{Shell: shell, Cmd: "echo b"}, {Shell: shell, Cmd: "echo c"}}}, Dir: "sub"},
+			command.SingleCmd{Shell: shell, Cmd: "echo d"},
+		}, "(in sub: echo b; echo c); echo d"},
+		"empty commands are skipped": {command.Cmds{
+			command.SingleCmd{Shell: shell, Cmd: ""},
+			command.SingleCmd{Shell: shell, Cmd: "echo a"},
+			command.StructuredCmd{Cmd: command.EmptyCmd{}},
+		}, "echo a"},
+		"no hook":      {command.EmptyCmd{}, "(none)"},
+		"empty list":   {command.Cmds{}, "(none)"},
+		"only empties": {command.Cmds{command.SingleCmd{Shell: shell, Cmd: ""}}, "(none)"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := command.NewManager(tc.builder).String(); got != tc.want {
+				t.Fatalf("String() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

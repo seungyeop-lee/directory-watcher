@@ -20,6 +20,8 @@ import (
 
 type ExecCmdBuilder interface {
 	Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]Command, error)
+	// String은 설정 파일에 적힌 명령을 로그에 보여 줄 문자열로 돌려준다. 빌드할 명령이 없으면 빈 문자열이다.
+	fmt.Stringer
 }
 
 // Command는 실행할 프로세스와, 실패 로그에 함께 보여 줄 템플릿 값을 채운 명령 문자열이다.
@@ -48,6 +50,14 @@ func NewManager(builder ExecCmdBuilder) *Manager {
 }
 
 var _ domain.Cmd = (*Manager)(nil)
+
+// String은 hook이 실행할 명령을 돌려준다. 명령이 없는 hook이면 (none)이다.
+func (c *Manager) String() string {
+	if s := c.builder.String(); s != "" {
+		return s
+	}
+	return "(none)"
+}
 
 func (c *Manager) Run(ctx *process.WatcherContext, runDir domain.Path, event *domain.Event) error {
 	cmds, err := c.builder.Build(ctx.Context(), runDir, event)

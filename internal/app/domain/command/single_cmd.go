@@ -40,6 +40,10 @@ func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.
 	return []Command{{Cmd: cmd, Filled: filled}}, nil
 }
 
+func (c SingleCmd) String() string {
+	return c.Cmd
+}
+
 // replaceTemplates는 실행할 명령과, 실패 로그에 보여 줄 명령을 만든다. 실행할 명령은 템플릿 변수 자리를
 // 값을 담은 환경 변수의 참조로 바꾼다. 값을 명령 문자열에 넣지 않으므로 파일 이름이 셸 명령으로 해석되지
 // 않는다. 실패 로그에 보여 줄 명령은 그 자리에 값을 그대로 넣고, 템플릿 변수가 없으면 비워 둔다.

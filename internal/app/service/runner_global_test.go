@@ -32,3 +32,31 @@ func TestGlobalHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 		})
 	}
 }
+
+// debugLog는 notificationLog가 모으는 ERROR 로그에 더해 DEBUG 로그를 따로 모은다.
+type debugLog struct {
+	notificationLog
+	debug []string
+}
+
+func (l *debugLog) Debug(s string) { l.debug = append(l.debug, s) }
+
+func TestGlobalHookDebugLogShowsCommand(t *testing.T) {
+	logger := &debugLog{}
+	start := command.NewManager(command.Cmds{command.SingleCmd{Shell: command.DefaultShell(), Cmd: "exit 0"}})
+	finish := command.NewManager(command.EmptyCmd{})
+	g := NewGlobalRunner(domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: start, OnFinishWatch: finish}}, logger)
+
+	g.CallOnStartWatch()
+	g.CallOnFinishWatch()
+
+	want := []string{
+		"CallOnStartWatch start: exit 0",
+		"CallOnStartWatch finished: exit 0",
+		"CallOnFinishWatch start: (none)",
+		"CallOnFinishWatch finished: (none)",
+	}
+	if strings.Join(logger.debug, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("debug log = %q, want %q", logger.debug, want)
+	}
+}

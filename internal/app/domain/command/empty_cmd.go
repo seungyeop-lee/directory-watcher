@@ -13,3 +13,7 @@ var _ ExecCmdBuilder = (*EmptyCmd)(nil)
 func (e EmptyCmd) Build(_ context.Context, _ domain.Path, _ *domain.Event) ([]Command, error) {
 	return []Command{}, nil
 }
+
+func (EmptyCmd) String() string {
+	return ""
+}
