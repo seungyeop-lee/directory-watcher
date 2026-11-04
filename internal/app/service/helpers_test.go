@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -291,26 +292,17 @@ func (f *renameFixture) changes() []string {
 	}
 	var got []string
 	for len(waiting) > 0 {
-		select {
-		case ev := <-f.changed:
-			rel, err := filepath.Rel(f.target, ev.Path.String())
-			if err != nil {
-				f.t.Fatal(err)
-			}
-			rel = filepath.ToSlash(rel)
-			if strings.HasPrefix(filepath.Base(rel), "zz-sentinel-") {
-				delete(waiting, rel)
-				continue
-			}
-			if ev.IsDir {
-				rel += "/"
-			}
-			got = append(got, ev.Operation.String()+" "+rel)
-		case err := <-f.result:
-			f.t.Fatalf("run stopped: %v", err)
-		case <-time.After(5 * time.Second):
-			f.t.Fatalf("sentinels %v did not reach the hook (got %v)", waiting, got)
+		ev := awaitHookEvent(f.t, f.changed, f.result)
+		rel, err := filepath.Rel(f.target, ev.Path.String())
+		if err != nil {
+			f.t.Fatal(err)
 		}
+		rel = filepath.ToSlash(rel)
+		if strings.HasPrefix(filepath.Base(rel), "zz-sentinel-") {
+			delete(waiting, rel)
+			continue
+		}
+		got = append(got, describeRun(f.t, f.target, ev))
 	}
 	return got
 }
@@ -318,23 +310,7 @@ func (f *renameFixture) changes() []string {
 // next는 hook이 받은 다음 이벤트를 changes와 같은 꼴로 돌려준다.
 func (f *renameFixture) next() string {
 	f.t.Helper()
-	select {
-	case ev := <-f.changed:
-		rel, err := filepath.Rel(f.target, ev.Path.String())
-		if err != nil {
-			f.t.Fatal(err)
-		}
-		rel = filepath.ToSlash(rel)
-		if ev.IsDir {
-			rel += "/"
-		}
-		return ev.Operation.String() + " " + rel
-	case err := <-f.result:
-		f.t.Fatalf("run stopped: %v", err)
-	case <-time.After(5 * time.Second):
-		f.t.Fatal("no event reached the hook")
-	}
-	return ""
+	return describeRun(f.t, f.target, awaitHookEvent(f.t, f.changed, f.result))
 }
 
 // assertNoWatchUnder는 감시 목록에 rel과 그 아래 경로가 없는지 확인한다.
@@ -400,4 +376,146 @@ func assertRecordMatchesDisk(t *testing.T, tree *watchTree, root string, gone ..
 	for _, rel := range gone {
 		assertRecorded(t, tree, root, rel, false, false)
 	}
+}
+
+// controlledFixture는 fsnotify 이벤트를 직접 넣는 감시 대상 runner와, hook이 받은 실행을 둔다. 실제 watcher의
+// 이벤트는 받지 않으므로, 디스크를 바꾼 뒤 그 이벤트를 send로 넣는다.
+type controlledFixture struct {
+	t      *testing.T
+	root   string
+	events chan<- fsnotify.Event
+	runs   <-chan domain.Event
+	result <-chan error
+}
+
+// startControlledRunner는 root를 option으로 감시하는 runner를 시작한다. onChange는 hook이 실행을 받을 때 먼저 실행한다.
+func startControlledRunner(t *testing.T, root string, option domain.WatchTargetsOption, onChange func(domain.Event)) *controlledFixture {
+	t.Helper()
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
+	events, _ := controlledSource(r)
+	runs, result := startRunner(t, r, onChange)
+	return &controlledFixture{t: t, root: root, events: events, runs: runs, result: result}
+}
+
+func (f *controlledFixture) path(rel string) string {
+	return filepath.Join(f.root, filepath.FromSlash(rel))
+}
+
+// send는 감시 대상 기준 상대 경로 rel의 fsnotify 이벤트 op를 감시 루프에 넣는다.
+func (f *controlledFixture) send(op fsnotify.Op, rel string) {
+	f.t.Helper()
+	select {
+	case f.events <- fsnotify.Event{Name: f.path(rel), Op: op}:
+	case err := <-f.result:
+		f.t.Fatalf("run stopped: %v", err)
+	}
+}
+
+// collect는 hook이 quiet 동안 실행을 더 받지 않을 때까지 받은 실행을 describeRun의 꼴로 돌려준다.
+func (f *controlledFixture) collect(quiet time.Duration) []string {
+	f.t.Helper()
+	got := []string{}
+	for {
+		select {
+		case run := <-f.runs:
+			got = append(got, describeRun(f.t, f.root, run))
+		case err := <-f.result:
+			f.t.Fatalf("run stopped: %v", err)
+		case <-time.After(quiet):
+			return got
+		}
+	}
+}
+
+func appendFile(t *testing.T, name string) {
+	t.Helper()
+	f, err := os.OpenFile(name, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString("y\n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// waitPlainEvent는 plain.txt에서 op 이벤트가 hook에 도착할 때까지 기다리며, 그 사이에 기본 제외 대상의
+// 이벤트로 hook이 실행되면 실패한다.
+func waitPlainEvent(t *testing.T, changed <-chan domain.Event, op fsnotify.Op) {
+	t.Helper()
+	for {
+		got := awaitHookEvent(t, changed, nil)
+		if got.Path.IsDefaultExcludeFile() {
+			t.Fatalf("%s of default-excluded name ran the hook: %s", got.Operation, got.Path)
+		}
+		if got.Path.Name() == "plain.txt" && fsnotify.Op(got.Operation).Has(op) {
+			return
+		}
+	}
+}
+
+// awaitHookPath는 hook이 path의 이벤트를 받을 때까지 기다리며, 그 사이에 받은 이벤트의 경로를 돌려준다.
+func awaitHookPath(t *testing.T, changed <-chan domain.Event, result <-chan error, path string) []string {
+	t.Helper()
+	var seen []string
+	for {
+		got := awaitHookEvent(t, changed, result)
+		seen = append(seen, got.Path.String())
+		if got.Path.String() == path {
+			return seen
+		}
+	}
+}
+
+// eventLogger는 감시 루프가 받은 이벤트의 DEBUG 로그를 lines로 보낸다.
+type eventLogger struct{ lines chan string }
+
+func (l *eventLogger) Info(string)  {}
+func (l *eventLogger) Error(string) {}
+func (l *eventLogger) Debug(msg string) {
+	if strings.HasPrefix(msg, "event: ") {
+		l.lines <- msg
+	}
+}
+
+// await는 name이 든 이벤트 로그가 올 때까지 기다린다.
+func (l *eventLogger) await(t *testing.T, name string) {
+	t.Helper()
+	for {
+		select {
+		case line := <-l.lines:
+			if strings.Contains(line, name) {
+				return
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("watcher did not receive an event of %s", name)
+		}
+	}
+}
+
+// hookEnvironment는 ctx로 명령을 실행할 때 명령에 더하는 환경 변수를 돌려준다.
+func hookEnvironment(ctx *process.WatcherContext) map[string]string {
+	cmd := exec.Command("hook")
+	cmd.Env = []string{}
+	ctx.ApplyGracefulShutdown(cmd)
+	env := map[string]string{}
+	for _, kv := range cmd.Env {
+		key, value, _ := strings.Cut(kv, "=")
+		env[key] = value
+	}
+	return env
+}
+
+// awaitHookEvent는 hook이 받은 다음 이벤트를 기다린다. result가 nil이면 runner 종료는 기다리지 않는다.
+func awaitHookEvent(t *testing.T, changed <-chan domain.Event, result <-chan error) domain.Event {
+	t.Helper()
+	select {
+	case event := <-changed:
+		return event
+	case err := <-result:
+		t.Fatalf("run stopped: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event reached the hook")
+	}
+	return domain.Event{}
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
@@ -191,6 +193,110 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 			}
 			if (mode == "failure" || mode == "timeout") && !strings.Contains(logger.String(), "onError notification failed") {
 				t.Fatalf("missing failure diagnostic: %s", logger.String())
+			}
+		})
+	}
+}
+
+func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
+	helper.GlobalLogger = newMockLogger()
+	r := NewRunner(testCommandSet(t.TempDir(), t.TempDir()), newMockLogger())
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
+	_, firstErrors := controlledSource(r.watchTargets[0])
+	secondErrors := make(chan error, 1)
+	r.watchTargets[1].tree.errs = secondErrors
+	go r.Run()
+	firstErrors <- fsnotify.ErrEventOverflow
+	first := <-r.Errors()
+	var fatal *FatalError
+	if !errors.As(first, &fatal) || fatal.Path != r.watchTargets[0].path || !errors.Is(first, fsnotify.ErrEventOverflow) {
+		t.Fatalf("lost target/cause: %v", first)
+	}
+	secondErrors <- errors.New("later error")
+	r.Stop()
+	select {
+	case later := <-r.Errors():
+		t.Fatalf("second error escaped: %v", later)
+	default:
+	}
+}
+
+func TestTargetThatFailedToStartSkipsFinishHook(t *testing.T) {
+	set := testCommandSet(filepath.Join(t.TempDir(), "missing-dir"), t.TempDir())
+	var missingFinished, startedFinished, globalFinished atomic.Int32
+	counter := func(calls *atomic.Int32) domain.Cmd {
+		return runnerCommand(func(*process.WatcherContext, *domain.Event) error { calls.Add(1); return nil })
+	}
+	set.WatchTargets[0].LifeCycle.OnFinishWatch = counter(&missingFinished)
+	set.WatchTargets[1].LifeCycle.OnFinishWatch = counter(&startedFinished)
+	set.Global.LifeCycle.OnFinishWatch = counter(&globalFinished)
+	r := NewRunner(set, newMockLogger())
+	assertWatchDirectoriesRemovable(t, r.watchTargets[1])
+	go r.Run()
+	if err := <-r.Errors(); err == nil {
+		t.Fatal("missing target path did not stop the watcher")
+	}
+	r.Stop()
+	if missingFinished.Load() != 0 {
+		t.Fatal("onFinishWatch ran for the target that failed to start watching")
+	}
+	if startedFinished.Load() != 1 || globalFinished.Load() != 1 {
+		t.Fatalf("finish hooks of started target=%d global=%d, want 1 each", startedFinished.Load(), globalFinished.Load())
+	}
+}
+
+// queue.size를 넘는 실행은 deliver 값마다 감시를 멈추고 onError를 한 번 실행한다.
+func TestQueueSizeOverflowStopsWatchingAndNotifies(t *testing.T) {
+	for name, deliver := range map[string]domain.Deliver{"last": domain.DeliverLast, "lastPerPath": domain.DeliverLastPerPath, "each": domain.DeliverEach} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			set := testCommandSet(root)
+			set.WatchTargets[0].Option = hookBatchOption(0, 1000, deliver)
+			set.WatchTargets[0].Option.Queue.Size = 4
+			entered, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			set.WatchTargets[0].LifeCycle.OnChange = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
+				once.Do(func() { close(entered) })
+				select {
+				case <-release:
+				case <-ctx.Context().Done():
+				}
+				return nil
+			})
+			notified := make(chan error, 2)
+			set.Global.LifeCycle.OnError = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
+				notified <- errors.New(hookEnvironment(ctx)["DW_ERROR_CAUSE"])
+				return nil
+			})
+			r := NewRunner(set, &notificationLog{})
+			assertWatchDirectoriesRemovable(t, r.watchTargets...)
+			defer close(release)
+			events, _ := controlledSource(r.watchTargets[0])
+			go r.Run()
+			send := func(name string) {
+				path := filepath.Join(root, name)
+				writeFile(t, path)
+				events <- fsnotify.Event{Name: path, Op: fsnotify.Create}
+			}
+			send("first")
+			<-entered
+			for n := range 5 {
+				send(fmt.Sprint(n))
+			}
+			select {
+			case err := <-r.Errors():
+				if !errors.Is(err, fsnotify.ErrEventOverflow) || !strings.Contains(err.Error(), "dispatch queue full (capacity 4)") {
+					t.Fatalf("fatal error = %v, want dispatch queue full (capacity 4)", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("queue overflow did not stop watching")
+			}
+			r.Stop()
+			if len(notified) != 1 {
+				t.Fatalf("onError ran %d times, want 1", len(notified))
+			}
+			if cause := <-notified; !strings.Contains(cause.Error(), "dispatch queue full (capacity 4)") {
+				t.Fatalf("DW_ERROR_CAUSE = %q", cause)
 			}
 		})
 	}
