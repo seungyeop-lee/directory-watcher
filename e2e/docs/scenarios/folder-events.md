@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](folder-events.ko.md)
 
-- Runs folder and file actions one after another in the watch folder and checks that the hook receives, for each action, exactly the events in the [Folder events](../../../USAGE.md#folder-events) table of USAGE, including one event for the top folder when a folder appears or disappears with its contents.
+- Runs folder and file actions one after another in the watch folder and checks that the hook receives, for each action, exactly the events in the [Folder events](../../../docs/guide/events.md#folder-events) table of the usage guide, including one event for the top folder when a folder appears or disappears with its contents.
 
 ## What it checks and success criteria
 

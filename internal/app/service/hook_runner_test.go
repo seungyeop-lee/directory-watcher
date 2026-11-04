@@ -229,7 +229,7 @@ func TestConcurrencyStartsRunsInOrderUpToLimit(t *testing.T) {
 	}
 }
 
-// 각 interrupt 값이 concurrency 1과 2에서 USAGE의 표대로 실행을 취소하거나 자리가 날 때까지 기다린다.
+// 각 interrupt 값이 concurrency 1과 2에서 docs/guide/running.md의 interrupt 표대로 실행을 취소하거나 자리가 날 때까지 기다린다.
 func TestInterruptCancelsRunsByPolicy(t *testing.T) {
 	tests := []struct {
 		name     string

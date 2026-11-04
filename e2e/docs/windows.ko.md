@@ -24,7 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 - `CTRL_C_EVENT`의 그룹 지정이나 `TASKKILL /F`를 정상 종료 증거로 사용하지 않습니다.
 - 보조 프로세스는 콘솔·그룹을 상속하고 신호를 처리하며 자손 종료를 기다립니다.
 - 새 콘솔을 만들거나 신호를 무시하는 임의의 외부 프로그램에 같은 정상 종료 보장을 적용하지 않습니다.
-- watcher는 첫 CTRL+BREAK 뒤 20초가 지나도 남은 hook 프로세스를 그 hook의 Job Object로 강제로 끝내며, 이 종료는 정상 종료가 아닙니다([과부하와 종료](../../USAGE.ko.md#과부하와-종료)).
+- watcher는 첫 CTRL+BREAK 뒤 20초가 지나도 남은 hook 프로세스를 그 hook의 Job Object로 강제로 끝내며, 이 종료는 정상 종료가 아닙니다([과부하와 종료](../../docs/guide/running.ko.md#과부하와-종료)).
 
 ## hook 취소 검증
 

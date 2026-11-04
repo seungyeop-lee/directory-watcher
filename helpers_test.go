@@ -12,14 +12,29 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var usageFiles = []string{"USAGE.md", "USAGE.ko.md"}
+// guideLanguages는 docs/guide 문서 두 판의 확장자다. 영어판은 <주제>.md, 한국어판은 <주제>.ko.md다.
+var guideLanguages = []string{".md", ".ko.md"}
+
+// guideFile은 docs/guide 아래 topic 문서에서 ext 판의 경로다.
+func guideFile(topic, ext string) string {
+	return "docs/guide/" + topic + ext
+}
+
+// guideFiles는 docs/guide 아래 topic 문서의 영어판과 한국어판 경로다.
+func guideFiles(topic string) []string {
+	var files []string
+	for _, ext := range guideLanguages {
+		files = append(files, guideFile(topic, ext))
+	}
+	return files
+}
 
 const (
 	schemaFile        = "directory-watcher.schema.json"
 	exampleConfigFile = "config.example.yml"
 )
 
-// readDoc은 저장소 루트의 문서 file을 읽는다.
+// readDoc은 저장소 루트를 기준으로 한 경로 file의 문서를 읽는다.
 // Windows의 git은 줄 끝을 CRLF로 바꿔 받을 수 있으므로, 줄 단위로 맞추는 검사가 OS와 관계없이 같도록 줄 끝을 LF로 바꾼다.
 func readDoc(t *testing.T, file string) string {
 	t.Helper()
@@ -30,8 +45,8 @@ func readDoc(t *testing.T, file string) string {
 	return strings.ReplaceAll(string(data), "\r\n", "\n")
 }
 
-// usageConfigBlock은 USAGE의 "## config.yml" 절에 있는 첫 yaml 블록을 돌려준다.
-func usageConfigBlock(t *testing.T, file string) string {
+// guideConfigBlock은 설정 파일 문서의 "## config.yml" 절에 있는 첫 yaml 블록을 돌려준다.
+func guideConfigBlock(t *testing.T, file string) string {
 	t.Helper()
 	_, section, found := strings.Cut(readDoc(t, file), "\n## config.yml\n")
 	_, block, _ := strings.Cut(section, "```yaml\n")

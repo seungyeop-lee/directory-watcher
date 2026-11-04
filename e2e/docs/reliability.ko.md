@@ -43,7 +43,7 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 - macOS·Linux·Windows의 알림 자손 정리 방식은 [플랫폼별 자손 정리](scenarios/event-loss-notification-cli.ko.md#플랫폼별-자손-정리)에 있습니다.
 
 - 내부 YAML 설정 테스트 `go test -count=1 -run '^TestDecoded' ./internal/config/yaml`은 디코딩된 구조화 명령을 실제로 실행하여 환경 변수의 원문 전달과 `dir` 작업 디렉토리, 기존 설정 호환성을 검사합니다.
-- 알림의 환경 변수 및 고정 5초 실행 제한·최대 20초 취소 정리 계약은 [이벤트 유실 알림](../../USAGE.ko.md#이벤트-유실-알림)을 따릅니다.
+- 알림의 환경 변수 및 고정 5초 실행 제한·최대 20초 취소 정리 계약은 [이벤트 유실 알림](../../docs/guide/running.ko.md#이벤트-유실-알림)을 따릅니다.
 
 ## 유실 검증의 구분
 

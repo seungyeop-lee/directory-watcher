@@ -14,9 +14,9 @@ import (
 )
 
 // 이 파일의 테스트는 스키마의 watchTargets.option 아래에 손으로 적은 default가 코드의 기본값과 같은지,
-// USAGE 두 판의 config.yml 블록과 config.example.yml의 주석에 적은 기본값이 스키마의 default와 같은지 확인한다.
+// 설정 파일 문서 두 판의 config.yml 블록과 config.example.yml의 주석에 적은 기본값이 스키마의 default와 같은지 확인한다.
 // 키 하나에 스키마의 default를 적은 설정이 아무 키도 적지 않은 설정과 같은 옵션을 만들면 두 값이 같다고 본다.
-// 실패하면 directory-watcher.schema.json의 default를 코드의 기본값에 맞추고, 같은 기본값을 적은 USAGE 두 판과
+// 실패하면 directory-watcher.schema.json의 default를 코드의 기본값에 맞추고, 같은 기본값을 적은 설정 파일 문서 두 판과
 // config.example.yml의 주석도 함께 고친다.
 
 // schemaOptionDefaults는 스키마의 watchTargets.option 아래에서 default가 있는 속성을 hookBatch.deliver처럼
@@ -109,6 +109,7 @@ func documentedOptionDefaults(doc string, phrase *regexp.Regexp) map[string][]st
 func TestDocumentedOptionDefaultsMatchSchema(t *testing.T) {
 	// 기본값 문구는 값으로 시작하고, maxWaitMillisecond처럼 규칙으로 정하는 기본값은 값 뒤에 규칙이 붙으므로
 	// 문구의 첫 낱말만 스키마의 default와 비교한다. 정규식의 \w는 ASCII만 받아서 "1000이고"에서도 1000을 뽑는다.
+	englishConfigFile, koreanConfigFile := guideFile("configuration", ".md"), guideFile("configuration", ".ko.md")
 	docs := []struct {
 		location string
 		text     string
@@ -117,8 +118,8 @@ func TestDocumentedOptionDefaultsMatchSchema(t *testing.T) {
 		// config.example.yml은 예시에 쓴 키에만 주석을 달기 때문에 all이 아니다.
 		all bool
 	}{
-		{"USAGE.md config.yml block", usageConfigBlock(t, "USAGE.md"), regexp.MustCompile(`default is "?(\w+)`), true},
-		{"USAGE.ko.md config.yml block", usageConfigBlock(t, "USAGE.ko.md"), regexp.MustCompile(`default는 "?(\w+)`), true},
+		{englishConfigFile + " config.yml block", guideConfigBlock(t, englishConfigFile), regexp.MustCompile(`default is "?(\w+)`), true},
+		{koreanConfigFile + " config.yml block", guideConfigBlock(t, koreanConfigFile), regexp.MustCompile(`default는 "?(\w+)`), true},
 		{exampleConfigFile + " comments", readDoc(t, exampleConfigFile), regexp.MustCompile(`# default (\w+)`), false},
 	}
 	schemaDefaults := schemaOptionDefaults(t)

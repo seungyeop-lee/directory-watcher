@@ -12,7 +12,7 @@ import (
 )
 
 // windowsBreakGrace는 watcher가 취소된 hook에 첫 CTRL+BREAK를 보낸 뒤 프로세스 트리를 강제로 끝내기까지
-// 기다리는 시간이다(USAGE의 과부하와 종료).
+// 기다리는 시간이다(docs/guide/running.md의 과부하와 종료).
 const windowsBreakGrace = 20 * time.Second
 
 // 명령 목록의 첫 프로그램이 실행 중일 때 취소하면, cmd.exe가 그 뒤에 시작한 다음 프로그램도 CTRL+BREAK를 받고 끝나야 한다.

@@ -6,7 +6,7 @@
 - Six modes check that, even when the notification is absent, its executable is missing, it fails or times out, or only its parent exits first, the original error and the finish hooks are preserved and only the notification's descendants are cleaned up.
 
 - This saturation is a loss in the application queue and is not evidence of an observed OS overflow.
-- The notification's environment variables and its run and cleanup time limit contract follow [Event-loss notification](../../../USAGE.md#event-loss-notification).
+- The notification's environment variables and its run and cleanup time limit contract follow [Event-loss notification](../../../docs/guide/running.md#event-loss-notification).
 
 ## What it checks and success criteria
 

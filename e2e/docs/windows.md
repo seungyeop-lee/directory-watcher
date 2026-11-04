@@ -24,7 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 - Neither a group-targeted `CTRL_C_EVENT` nor `TASKKILL /F` is used as evidence of graceful shutdown.
 - Helper processes inherit the console and group, handle the signal, and wait for their descendants to exit.
 - The same graceful shutdown guarantee does not apply to arbitrary external programs that create a new console or ignore the signal.
-- The watcher forcibly ends hook processes that are still running 20 seconds after the first CTRL+BREAK through that hook's Job Object, and this termination is not a graceful shutdown ([Overload and shutdown](../../USAGE.md#overload-and-shutdown)).
+- The watcher forcibly ends hook processes that are still running 20 seconds after the first CTRL+BREAK through that hook's Job Object, and this termination is not a graceful shutdown ([Overload and shutdown](../../docs/guide/running.md#overload-and-shutdown)).
 
 ## Hook cancellation checks
 

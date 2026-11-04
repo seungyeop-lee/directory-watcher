@@ -11,9 +11,9 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config/converter"
 )
 
-// 이 파일의 테스트는 정해진 값만 받는 옵션에서, 스키마의 enum·pattern과 USAGE 두 판, config.example.yml에 손으로 적은
+// 이 파일의 테스트는 정해진 값만 받는 옵션에서, 스키마의 enum·pattern과 docs/guide 문서 두 판, config.example.yml에 손으로 적은
 // 값 목록이 코드가 받는 값 목록과 같은지 확인한다.
-// 실패하면 directory-watcher.schema.json, USAGE 두 판의 config.yml 블록·표·오류 예시, config.example.yml의 주석에서
+// 실패하면 directory-watcher.schema.json, docs/guide 문서 두 판의 config.yml 블록·표·오류 예시, config.example.yml의 주석에서
 // 그 옵션의 값 목록을 코드 목록에 맞춰 함께 고친다. 스키마에 enum이나 pattern을 새로 적었으면 fixedValueOptions에도 더한다.
 
 // fixedValueOption은 정해진 값만 받는 옵션이다.
@@ -22,19 +22,21 @@ type fixedValueOption struct {
 	values []string // 코드가 받는 값
 	// letters이면 values의 글자를 하나 이상 이어 적거나 none을 적는다(fileEvent: CU). 아니면 values에서 하나를 적는다.
 	letters bool
+	// tableTopic은 값마다 행을 둔 표가 있는 docs/guide 문서의 주제다. letters 옵션은 표가 없어 비워 둔다.
+	tableTopic string
 }
 
 func fixedValueOptions() []fixedValueOption {
 	return []fixedValueOption{
-		{key: "shell", values: command.ShellNames()},
+		{key: "shell", values: command.ShellNames(), tableTopic: "configuration"},
 		{key: "watchTargets.option.watch.fileEvent", values: strings.Split(converter.FileEventKinds, ""), letters: true},
 		{key: "watchTargets.option.watch.dirEvent", values: strings.Split(converter.DirEventKinds, ""), letters: true},
-		{key: "watchTargets.option.hookBatch.deliver", values: converter.DeliverNames()},
-		{key: "watchTargets.option.run.interrupt", values: converter.InterruptNames()},
+		{key: "watchTargets.option.hookBatch.deliver", values: converter.DeliverNames(), tableTopic: "running"},
+		{key: "watchTargets.option.run.interrupt", values: converter.InterruptNames(), tableTopic: "running"},
 	}
 }
 
-// name은 USAGE의 표 머리 행처럼 키 경로의 마지막 키만 쓰는 곳에서 옵션을 부르는 이름이다.
+// name은 docs/guide 문서의 표 머리 행처럼 키 경로의 마지막 키만 쓰는 곳에서 옵션을 부르는 이름이다.
 func (o fixedValueOption) name() string {
 	return o.key[strings.LastIndex(o.key, ".")+1:]
 }
@@ -99,19 +101,19 @@ func TestSchemaFixedValuesMatchCode(t *testing.T) {
 const noneValue = "none"
 
 var (
-	// usageChoiceList는 USAGE config.yml 블록의 주석이 값을 "(last, lastPerPath, each)"처럼 괄호 안에 적은 목록이다.
-	usageChoiceList = regexp.MustCompile(`\(([\w, ]+)\)`)
+	// guideChoiceList는 설정 파일 문서의 config.yml 블록 주석이 값을 "(last, lastPerPath, each)"처럼 괄호 안에 적은 목록이다.
+	guideChoiceList = regexp.MustCompile(`\(([\w, ]+)\)`)
 	// letterLabel은 글자마다 뜻을 붙인 "C: create or move in"에서 글자다.
 	letterLabel = regexp.MustCompile(`\b([A-Z]): `)
-	// tableValueCell은 USAGE 표의 첫 칸 "`last` (default)"에서 값이다.
+	// tableValueCell은 docs/guide 문서 표의 첫 칸 "`last` (default)"에서 값이다.
 	tableValueCell = regexp.MustCompile("^`(\\w+)`")
 )
 
-func TestUsageListsSameFixedValuesAsCode(t *testing.T) {
-	for _, file := range usageFiles {
+func TestGuideListsSameFixedValuesAsCode(t *testing.T) {
+	for _, ext := range guideLanguages {
+		file := guideFile("configuration", ext)
 		lines := map[string]string{}
-		eachYAMLKey(usageConfigBlock(t, file), func(_, key, line string) { lines[key] = line })
-		tables := markdownTables(readDoc(t, file))
+		eachYAMLKey(guideConfigBlock(t, file), func(_, key, line string) { lines[key] = line })
 		for _, option := range fixedValueOptions() {
 			line, ok := lines[option.key]
 			if !ok {
@@ -123,7 +125,7 @@ func TestUsageListsSameFixedValuesAsCode(t *testing.T) {
 				for _, m := range letterLabel.FindAllStringSubmatch(line, -1) {
 					got = append(got, m[1])
 				}
-			} else if m := usageChoiceList.FindStringSubmatch(line); m != nil {
+			} else if m := guideChoiceList.FindStringSubmatch(line); m != nil {
 				got = strings.Split(m[1], ", ")
 			}
 			if !sameSet(got, option.values) {
@@ -134,8 +136,9 @@ func TestUsageListsSameFixedValuesAsCode(t *testing.T) {
 			if option.letters {
 				continue
 			}
+			tableFile := guideFile(option.tableTopic, ext)
 			got = nil
-			for _, table := range tables {
+			for _, table := range markdownTables(readDoc(t, tableFile)) {
 				if table.header[0] != "`"+option.name()+"`" {
 					continue
 				}
@@ -146,7 +149,7 @@ func TestUsageListsSameFixedValuesAsCode(t *testing.T) {
 				}
 			}
 			if !sameSet(got, option.values) {
-				t.Errorf("%s `%s` table = %q, want %q", file, option.name(), got, option.values)
+				t.Errorf("%s `%s` table = %q, want %q", tableFile, option.name(), got, option.values)
 			}
 		}
 	}
@@ -183,26 +186,27 @@ func TestExampleConfigListsSameFixedValuesAsCode(t *testing.T) {
 	}
 }
 
-// USAGE 두 판의 오류 예시는 아래 값을 적었을 때의 실제 오류 메시지를 옮겨 적은 것이라서, 값 목록이 바뀌면 메시지도 바뀐다.
-func TestUsageErrorExamplesListSameValuesAsCode(t *testing.T) {
+// docs/guide 문서 두 판의 오류 예시는 아래 값을 적었을 때의 실제 오류 메시지를 옮겨 적은 것이라서, 값 목록이 바뀌면 메시지도 바뀐다.
+func TestGuideErrorExamplesListSameValuesAsCode(t *testing.T) {
 	_, shellErr := command.LookupShell("bash")
 	interrupt := "true"
 	_, interruptErr := converter.NewInterruptConverter(&interrupt).Convert()
 	dirEvent := config.WatchEvent("U")
 	_, dirEventErr := converter.NewDirEventConverter(&dirEvent).Convert()
 	examples := []struct {
-		key string
-		err error
+		key   string
+		err   error
+		topic string // 오류 예시가 있는 docs/guide 문서의 주제
 	}{
-		{"shell", shellErr},
-		{"run.interrupt", interruptErr},
-		{"watch.dirEvent", dirEventErr},
+		{"shell", shellErr, "configuration"},
+		{"run.interrupt", interruptErr, "running"},
+		{"watch.dirEvent", dirEventErr, "events"},
 	}
 	for _, example := range examples {
 		if example.err == nil {
 			t.Fatalf("%s: the code accepted the value of the error example", example.key)
 		}
-		for _, file := range usageFiles {
+		for _, file := range guideFiles(example.topic) {
 			if !strings.Contains(readDoc(t, file), example.err.Error()) {
 				t.Errorf("%s has no error example %q", file, example.err.Error())
 			}

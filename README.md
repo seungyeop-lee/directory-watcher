@@ -38,13 +38,13 @@ watchTargets:
 ### Restart your dev server safely on every save
 
 - Each save stops the running server and the processes it started, waits for the server to exit, and only then starts it again, so the old and new servers never run at the same time.
-- The 30-second example above restarts its server this way. See [Running hooks with run](USAGE.md#running-hooks-with-run).
+- The 30-second example above restarts its server this way. See [Running hooks with run](docs/guide/running.md#running-hooks-with-run).
 
 ### Run once when hundreds of files change at once
 
 - When a formatter or a branch switch changes hundreds of files, your command runs once for the whole burst instead of once per file.
 - The command runs 100 ms after the last change, or 1 second after the first change if changes keep coming.
-- You can also run it once for each changed file or once for each event. See [Waiting and merging with hookBatch](USAGE.md#waiting-and-merging-with-hookbatch).
+- You can also run it once for each changed file or once for each event. See [Waiting and merging with hookBatch](docs/guide/running.md#waiting-and-merging-with-hookbatch).
 
 ### Get one event when a whole folder appears or disappears
 
@@ -55,7 +55,7 @@ watchTargets:
 | `mkdir -p src/a/b/c` | One folder-created event for `src/a` |
 | `rm -rf src/pkg` with 300 files inside | One folder-deleted event for `src/pkg` |
 
-- Moving a folder in or out of a watched directory works the same way. See [Folder events](USAGE.md#folder-events).
+- Moving a folder in or out of a watched directory works the same way. See [Folder events](docs/guide/events.md#folder-events).
 
 ### Run setup and cleanup when watching starts and stops
 
@@ -75,8 +75,8 @@ global:
 
 ### Find out when changes may have been missed
 
-- When changes pile up faster than your commands can handle, or the OS reports that it dropped events, the watcher stops instead of growing its backlog without limit and runs a notification command of your choice once. See [Event-loss notification](USAGE.md#event-loss-notification).
-- Another command of your choice can warn you earlier, when a target's backlog reaches 70% and 90% of its limit. See [Queue size and warnings](USAGE.md#queue-size-and-warnings).
+- When changes pile up faster than your commands can handle, or the OS reports that it dropped events, the watcher stops instead of growing its backlog without limit and runs a notification command of your choice once. See [Event-loss notification](docs/guide/running.md#event-loss-notification).
+- Another command of your choice can warn you earlier, when a target's backlog reaches 70% and 90% of its limit. See [Queue size and warnings](docs/guide/running.md#queue-size-and-warnings).
 
 ### Install one executable anywhere
 
@@ -92,18 +92,18 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 | Feature | Usage guide |
 |---|---|
-| Watch several directories, each with its own commands | [`config.yml`](USAGE.md#configyml) |
-| Pass the changed file's path, name, extension, or event type to a command, without file names ever running as commands | [Variables in commands](USAGE.md#variables-in-commands) |
-| Choose which file and folder events run commands | [Folder events](USAGE.md#folder-events) |
-| Exclude files and folders with path patterns; names that start with `.` or `_`, such as `.git`, are skipped by default | [Excluding paths with exclude](USAGE.md#excluding-paths-with-exclude), [Default exclusion](USAGE.md#default-exclusion) |
-| Run several changes of one target at the same time | [Running hooks with run](USAGE.md#running-hooks-with-run) |
-| Run commands in `sh`, `cmd`, or Windows PowerShell | [Shell that runs hook commands](USAGE.md#shell-that-runs-hook-commands) |
-| Watch overlapping paths, where one change runs the commands of each target | [Overlapping target paths](USAGE.md#overlapping-target-paths) |
+| Watch several directories, each with its own commands | [`config.yml`](docs/guide/configuration.md#configyml) |
+| Pass the changed file's path, name, extension, or event type to a command, without file names ever running as commands | [Variables in commands](docs/guide/configuration.md#variables-in-commands) |
+| Choose which file and folder events run commands | [Folder events](docs/guide/events.md#folder-events) |
+| Exclude files and folders with path patterns; names that start with `.` or `_`, such as `.git`, are skipped by default | [Excluding paths with exclude](docs/guide/events.md#excluding-paths-with-exclude), [Default exclusion](docs/guide/events.md#default-exclusion) |
+| Run several changes of one target at the same time | [Running hooks with run](docs/guide/running.md#running-hooks-with-run) |
+| Run commands in `sh`, `cmd`, or Windows PowerShell | [Shell that runs hook commands](docs/guide/configuration.md#shell-that-runs-hook-commands) |
+| Watch overlapping paths, where one change runs the commands of each target | [Overlapping target paths](docs/guide/events.md#overlapping-target-paths) |
 
 ## Installation
 
 > [!NOTE]
-> The Homebrew cask needs Homebrew 5.1.14 or later. For updating Homebrew and moving from the version 2.x formula, see [Installing with Homebrew](USAGE.md#installing-with-homebrew).
+> The Homebrew cask needs Homebrew 5.1.14 or later. For updating Homebrew and moving from the version 2.x formula, see [Installing with Homebrew](docs/guide/installation.md#installing-with-homebrew).
 
 Use a package manager:
 
@@ -125,8 +125,8 @@ docker run --rm \
   ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
 ```
 
-- Hooks then run inside the container. See [Running with Docker](USAGE.md#running-with-docker) for the paths and tools they can use and a known issue with bind mounts.
-- To add the executable to an image you build, see [Adding the watcher to your own image](USAGE.md#adding-the-watcher-to-your-own-image).
+- Hooks then run inside the container. See [Running with Docker](docs/guide/installation.md#running-with-docker) for the paths and tools they can use and a known issue with bind mounts.
+- To add the executable to an image you build, see [Adding the watcher to your own image](docs/guide/installation.md#adding-the-watcher-to-your-own-image).
 
 Or, download it:
 
@@ -161,14 +161,14 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 
 3. Change a file under `src`. `make test` runs 100 ms after the last change.
 
-- **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `watch.exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option.watch`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
+- **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `watch.exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option.watch`. See [Stopping a hook from rerunning itself](docs/guide/events.md#stopping-a-hook-from-rerunning-itself).
 - **Stop:** press Ctrl+C or send SIGTERM. The watcher cancels running commands, runs the finish commands, and exits.
-- **More:** the [usage guide](USAGE.md) covers installing with Homebrew, command-line options, running with Docker, running on Windows, the full `config.yml` format, where commands run, template variables, folder events, excluding paths, overlapping target paths, event-loss notification, the limits of overload, shutdown, and folder events, and diagrams of how the watcher handles changes. For a fuller example, see [`config.example.yml`](config.example.yml).
+- **More:** the [usage guide](USAGE.md) has recipes for common setups, such as running tests on save and running the watcher in Docker, and lists the topic guides: [Installing and running](docs/guide/installation.md), [Configuration file](docs/guide/configuration.md), [Events and watched paths](docs/guide/events.md), [Running hooks](docs/guide/running.md), and [How it works](docs/guide/how-it-works.md). For a fuller example, see [`config.example.yml`](config.example.yml).
 
 ## Requirements
 
 - macOS or Linux. The watcher has been verified to work correctly on these systems.
-- Windows, with limits on console output and on how quickly some hooks stop. See [Running on Windows](USAGE.md#running-on-windows).
+- Windows, with limits on console output and on how quickly some hooks stop. See [Running on Windows](docs/guide/installation.md#running-on-windows).
 
 ## Development checks
 
