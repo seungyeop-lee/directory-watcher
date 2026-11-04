@@ -151,7 +151,7 @@ func (g guestTest) send() error {
 		return err
 	}
 	var source bytes.Buffer
-	if err := worktree.Archive(&source, root, files); err != nil {
+	if err := archiveSource(&source, root, files); err != nil {
 		return err
 	}
 	sum := sha256.Sum256(source.Bytes())
@@ -183,6 +183,25 @@ func (g guestTest) send() error {
 		return err
 	}
 	return g.push("guest.exe", programData)
+}
+
+// archiveSource는 files에서 심볼릭 링크를 뺀 나머지를 worktree.Archive로 묶는다.
+// 게스트의 guestrun.Extract는 일반 파일이 아닌 항목을 거부하고, 게스트에서 링크를
+// 만드는 것은 Windows 권한에 따라 실패할 수 있다. 저장소의 링크(.agents/skills)는
+// 게스트 테스트에 쓰이지 않는다.
+func archiveSource(out io.Writer, root string, files []string) error {
+	var sent []string
+	for _, name := range files {
+		info, err := os.Lstat(filepath.Join(root, name))
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		sent = append(sent, name)
+	}
+	return worktree.Archive(out, root, sent)
 }
 
 // recordSource는 이번 실행이 쓴 소스와 테스트 범위를 Mac에 남긴다.

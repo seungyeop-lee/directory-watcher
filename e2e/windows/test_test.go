@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/seungyeop-lee/directory-watcher/v3/e2e/windows/guestrun"
 )
 
 const fakeRunDir = `C:\dw-e2e\20261103-223804-8cbc351a9c24e6c8`
@@ -217,5 +219,35 @@ func TestStartGuestProgramReportsAProgramThatDidNotStart(t *testing.T) {
 	err := g.startGuestProgram()
 	if err == nil || !strings.Contains(err.Error(), "guest program did not start") || !strings.Contains(err.Error(), staleExecAnswer) {
 		t.Fatalf("startGuestProgram = %v; want the missing started file and the exec answer", err)
+	}
+}
+
+func TestArchiveSourceLeavesOutSymlinksSoTheGuestCanExtractIt(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".claude", "skills"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".claude", "skills", "SKILL.md"), []byte("skill"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".agents"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../.claude/skills", filepath.Join(root, ".agents", "skills")); err != nil {
+		t.Fatal(err)
+	}
+	var source bytes.Buffer
+	if err := archiveSource(&source, root, []string{".agents/skills", ".claude/skills/SKILL.md", ""}); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := guestrun.Extract(&source, dir); err != nil {
+		t.Fatalf("Extract = %v; want the source to extract without the symlink", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "src", ".claude", "skills", "SKILL.md")); err != nil || string(got) != "skill" {
+		t.Fatalf("SKILL.md = %q, %v; want the regular file", got, err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "src", ".agents", "skills")); !os.IsNotExist(err) {
+		t.Fatalf("symlink entry was extracted: %v", err)
 	}
 }

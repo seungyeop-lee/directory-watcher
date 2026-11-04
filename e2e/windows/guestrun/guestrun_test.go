@@ -87,3 +87,21 @@ func TestExtractRejectsPathsLeavingTheTarget(t *testing.T) {
 		t.Fatalf("escape file exists: %v", err)
 	}
 }
+
+func TestExtractRejectsSymlinks(t *testing.T) {
+	var data bytes.Buffer
+	archive := tar.NewWriter(&data)
+	if err := archive.WriteHeader(&tar.Header{Name: "src/.agents/skills", Linkname: "../.claude/skills", Mode: 0777, Typeflag: tar.TypeSymlink}); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := Extract(&data, dir); err == nil || !strings.Contains(err.Error(), "is not a regular file") {
+		t.Fatalf("Extract = %v; want the symlink entry rejected", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "src", ".agents", "skills")); !os.IsNotExist(err) {
+		t.Fatalf("symlink entry was extracted: %v", err)
+	}
+}
