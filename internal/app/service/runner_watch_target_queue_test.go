@@ -133,7 +133,7 @@ func TestSlowQueueWarningKeepsOnlyLatestAndDoesNotBlockWatching(t *testing.T) {
 		return nil
 	})}}
 	option := hookBatchOption(0, 1000, domain.DeliverEach)
-	option.QueueSize = 10
+	option.Queue.Size = 10
 	r := NewWatchTargetRunner(global, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
@@ -210,7 +210,7 @@ func TestQueueSizeOverflowStopsWatchingAndNotifies(t *testing.T) {
 			root := t.TempDir()
 			set := testCommandSet(root)
 			set.WatchTargets[0].Option = hookBatchOption(0, 1000, deliver)
-			set.WatchTargets[0].Option.QueueSize = 4
+			set.WatchTargets[0].Option.Queue.Size = 4
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once sync.Once
 			set.WatchTargets[0].LifeCycle.OnChange = runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {

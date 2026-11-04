@@ -13,14 +13,14 @@ import (
 
 func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 	for _, recursive := range []bool{false, true} {
-		t.Run(fmt.Sprintf("watchSubDir=%t", recursive), func(t *testing.T) {
+		t.Run(fmt.Sprintf("subDir=%t", recursive), func(t *testing.T) {
 			path := t.TempDir()
 			if err := os.Mkdir(filepath.Join(path, "child"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: recursive, WatchFileEvent: domain.WatchEvent{Create: true}},
+				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: recursive, FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
 			}, newMockLogger())
 			assertWatchDirectoriesRemovable(t, r)
 			stop := func() {
@@ -63,9 +63,9 @@ func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 	}
 }
 
-func TestWatchSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
-	for _, watchSubDir := range []bool{false, true} {
-		t.Run(fmt.Sprintf("watchSubDir=%t", watchSubDir), func(t *testing.T) {
+func TestSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
+	for _, subDir := range []bool{false, true} {
+		t.Run(fmt.Sprintf("subDir=%t", subDir), func(t *testing.T) {
 			path := t.TempDir()
 			child := filepath.Join(path, "child")
 			if err := os.Mkdir(child, 0700); err != nil {
@@ -73,7 +73,7 @@ func TestWatchSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: watchSubDir, WatchFileEvent: domain.WatchEvent{Create: true}},
+				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: subDir, FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
 			}, newMockLogger())
 			assertWatchDirectoriesRemovable(t, r)
 			stop := func() {
@@ -107,7 +107,7 @@ func TestWatchSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 				t.Fatal(err)
 			}
 			nestedSeen, sentinelSeen := false, false
-			for !sentinelSeen || (watchSubDir && !nestedSeen) {
+			for !sentinelSeen || (subDir && !nestedSeen) {
 				select {
 				case got := <-changed:
 					nestedSeen = nestedSeen || got.String() == nested
@@ -116,8 +116,8 @@ func TestWatchSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 					t.Fatalf("events did not reach the hook: nested=%t sentinel=%t", nestedSeen, sentinelSeen)
 				}
 			}
-			if !watchSubDir && nestedSeen {
-				t.Fatal("change in existing subdirectory ran the hook with watchSubDir=false")
+			if !subDir && nestedSeen {
+				t.Fatal("change in existing subdirectory ran the hook with subDir=false")
 			}
 		})
 	}

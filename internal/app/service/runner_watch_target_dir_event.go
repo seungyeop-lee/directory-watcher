@@ -72,20 +72,20 @@ func (r *watchTargetRunner) opensBatch(e domain.Event) bool {
 }
 
 // collect는 e를 batchForHook으로 넘긴다. 폴더 이벤트를 모으는 동안에는 e도 묶음에 넣어, 감시 대상의 이벤트가
-// 생긴 순서대로 hook에 가게 한다. dirEventWait가 0이면 폴더 이벤트를 모으지 않는다.
+// 생긴 순서대로 hook에 가게 한다. dirBatchWait가 0이면 폴더 이벤트를 모으지 않는다.
 //
-// 묶음은 마지막 이벤트 뒤 dirEventWait 동안 이벤트가 없거나, 첫 이벤트부터 dirEventMaxWait가 지나면 flushBatch가
+// 묶음은 마지막 이벤트 뒤 dirBatchWait 동안 이벤트가 없거나, 첫 이벤트부터 dirBatchMaxWait가 지나면 flushBatch가
 // 내보낸다. 폴더 이벤트를 대기열에 넣기 전에 모으므로, 큰 폴더를 지워도 대기열에는 폴더 이벤트 하나만 들어간다.
 func (r *watchTargetRunner) collect(e change, events *runQueue) error {
 	now := time.Now()
 	if r.batch == nil {
-		if r.dirEventWait == 0 || !r.opensBatch(e.Event) {
+		if r.dirBatchWait == 0 || !r.opensBatch(e.Event) {
 			return r.passOn(e, events)
 		}
 		r.batch = &eventBatch{start: now}
 	}
 	r.batch.add(e)
-	wait := min(r.dirEventWait, r.batch.start.Add(r.dirEventMaxWait).Sub(now))
+	wait := min(r.dirBatchWait, r.batch.start.Add(r.dirBatchMaxWait).Sub(now))
 	r.batchDue = time.After(wait)
 	return nil
 }

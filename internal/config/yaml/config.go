@@ -222,22 +222,22 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 	if err != nil {
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.watch.%w", err)
 	}
-	fileEvent, err := converter.NewWatchFileEventConverter(c.Watch.FileEvent).Convert()
+	fileEvent, err := converter.NewFileEventConverter(c.Watch.FileEvent).Convert()
 	if err != nil {
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.watch.%w", err)
 	}
-	dirEvent, err := converter.NewWatchDirEventConverter(c.Watch.DirEvent).Convert()
+	dirEvent, err := converter.NewDirEventConverter(c.Watch.DirEvent).Convert()
 	if err != nil {
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.watch.%w", err)
 	}
 	if fileEvent.IsNone() && dirEvent.IsNone() {
 		return domain.WatchTargetsOption{}, errors.New("option.watch: fileEvent and dirEvent are both none; onChange would never run")
 	}
-	dirWait, dirMaxWait, err := buildBatchWait("dirBatch", c.DirBatch.WaitMillisecond, c.DirBatch.MaxWaitMillisecond)
+	dirBatchWait, dirBatchMaxWait, err := buildBatchWait("dirBatch", c.DirBatch.WaitMillisecond, c.DirBatch.MaxWaitMillisecond)
 	if err != nil {
 		return domain.WatchTargetsOption{}, err
 	}
-	wait, maxWait, err := buildBatchWait("hookBatch", c.HookBatch.WaitMillisecond, c.HookBatch.MaxWaitMillisecond)
+	hookBatchWait, hookBatchMaxWait, err := buildBatchWait("hookBatch", c.HookBatch.WaitMillisecond, c.HookBatch.MaxWaitMillisecond)
 	if err != nil {
 		return domain.WatchTargetsOption{}, err
 	}
@@ -264,17 +264,16 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.run.%w", err)
 	}
 	return domain.WatchTargetsOption{
-		Exclude:            exclude,
-		WaitMillisecond:    wait,
-		MaxWaitMillisecond: maxWait,
-		Deliver:            deliver,
-		WatchSubDir:        converter.NewWatchSubDirConverter(c.Watch.SubDir).Convert(),
-		WatchFileEvent:     fileEvent,
-		WatchDirEvent:      dirEvent,
-		DirEventWait:       dirWait,
-		DirEventMaxWait:    dirMaxWait,
-		QueueSize:          queueSize,
-		Run:                domain.RunPolicy{Concurrency: concurrency, Interrupt: interrupt},
+		Watch: domain.WatchOption{
+			SubDir:    converter.NewSubDirConverter(c.Watch.SubDir).Convert(),
+			Exclude:   exclude,
+			FileEvent: fileEvent,
+			DirEvent:  dirEvent,
+		},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: dirBatchWait, MaxWaitMillisecond: dirBatchMaxWait},
+		HookBatch: domain.HookBatchOption{WaitMillisecond: hookBatchWait, MaxWaitMillisecond: hookBatchMaxWait, Deliver: deliver},
+		Queue:     domain.QueueOption{Size: queueSize},
+		Run:       domain.RunPolicy{Concurrency: concurrency, Interrupt: interrupt},
 	}, nil
 }
 

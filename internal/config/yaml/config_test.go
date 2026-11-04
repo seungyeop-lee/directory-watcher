@@ -180,16 +180,11 @@ func readTrimmed(t *testing.T, path string) string {
 func TestGroupedOptionsBuildOption(t *testing.T) {
 	// defaults는 설정 파일에 option을 적지 않았을 때의 값이다. 각 경우는 이 값에서 바뀌는 필드만 고친다.
 	defaults := domain.WatchTargetsOption{
-		WaitMillisecond:    100,
-		MaxWaitMillisecond: 1000,
-		Deliver:            domain.DeliverLast,
-		WatchSubDir:        true,
-		WatchFileEvent:     domain.WatchAllEvent(),
-		WatchDirEvent:      domain.WatchEvent{Create: true, Delete: true},
-		DirEventWait:       100,
-		DirEventMaxWait:    1000,
-		QueueSize:          2048,
-		Run:                domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptNone},
+		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+		HookBatch: domain.HookBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000, Deliver: domain.DeliverLast},
+		Queue:     domain.QueueOption{Size: 2048},
+		Run:       domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptNone},
 	}
 	with := func(change func(o *domain.WatchTargetsOption)) domain.WatchTargetsOption {
 		o := defaults
@@ -211,45 +206,43 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
       queue: {size: 4096}
       run: {concurrency: 3, interrupt: samePath}`,
 			want: domain.WatchTargetsOption{
-				Exclude:            domain.ExcludePatterns{"dist/**"},
-				WaitMillisecond:    700,
-				MaxWaitMillisecond: 3000,
-				Deliver:            domain.DeliverLastPerPath,
-				WatchSubDir:        false,
-				WatchFileEvent:     domain.WatchEvent{Create: true, Update: true},
-				WatchDirEvent:      domain.WatchEvent{Delete: true},
-				DirEventWait:       300,
-				DirEventMaxWait:    5000,
-				QueueSize:          4096,
-				Run:                domain.RunPolicy{Concurrency: 3, Interrupt: domain.InterruptSamePath},
+				Watch:     domain.WatchOption{SubDir: false, Exclude: domain.ExcludePatterns{"dist/**"}, FileEvent: domain.WatchEvent{Create: true, Update: true}, DirEvent: domain.WatchEvent{Delete: true}},
+				DirBatch:  domain.DirBatchOption{WaitMillisecond: 300, MaxWaitMillisecond: 5000},
+				HookBatch: domain.HookBatchOption{WaitMillisecond: 700, MaxWaitMillisecond: 3000, Deliver: domain.DeliverLastPerPath},
+				Queue:     domain.QueueOption{Size: 4096},
+				Run:       domain.RunPolicy{Concurrency: 3, Interrupt: domain.InterruptSamePath},
 			},
 		},
 		{
 			name:   "zero waits are kept",
 			option: "{dirBatch: {waitMillisecond: 0, maxWaitMillisecond: 0}, hookBatch: {waitMillisecond: 0, deliver: each}}",
 			want: with(func(o *domain.WatchTargetsOption) {
-				o.WaitMillisecond, o.Deliver, o.DirEventWait, o.DirEventMaxWait = 0, domain.DeliverEach, 0, 0
+				o.HookBatch.WaitMillisecond, o.HookBatch.Deliver, o.DirBatch.WaitMillisecond, o.DirBatch.MaxWaitMillisecond = 0, domain.DeliverEach, 0, 0
 			}),
 		},
 		{
 			name:   "hookBatch max wait follows a wait above its default",
 			option: "{hookBatch: {waitMillisecond: 2000}}",
-			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond, o.MaxWaitMillisecond = 2000, 2000 }),
+			want: with(func(o *domain.WatchTargetsOption) {
+				o.HookBatch.WaitMillisecond, o.HookBatch.MaxWaitMillisecond = 2000, 2000
+			}),
 		},
 		{
 			name:   "dirBatch max wait follows a wait above its default",
 			option: "{dirBatch: {waitMillisecond: 2000}}",
-			want:   with(func(o *domain.WatchTargetsOption) { o.DirEventWait, o.DirEventMaxWait = 2000, 2000 }),
+			want: with(func(o *domain.WatchTargetsOption) {
+				o.DirBatch.WaitMillisecond, o.DirBatch.MaxWaitMillisecond = 2000, 2000
+			}),
 		},
 		{
 			name:   "max wait keeps its default for a wait below it",
 			option: "{dirBatch: {waitMillisecond: 500}, hookBatch: {waitMillisecond: 500}}",
-			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond, o.DirEventWait = 500, 500 }),
+			want:   with(func(o *domain.WatchTargetsOption) { o.HookBatch.WaitMillisecond, o.DirBatch.WaitMillisecond = 500, 500 }),
 		},
 		{
 			name:   "queue of one",
 			option: "{queue: {size: 1}}",
-			want:   with(func(o *domain.WatchTargetsOption) { o.QueueSize = 1 }),
+			want:   with(func(o *domain.WatchTargetsOption) { o.Queue.Size = 1 }),
 		},
 		{
 			name:   "interrupt oldest",
@@ -270,14 +263,14 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 			name:   "files only",
 			option: "{watch: {fileEvent: CD, dirEvent: none}}",
 			want: with(func(o *domain.WatchTargetsOption) {
-				o.WatchFileEvent, o.WatchDirEvent = domain.WatchEvent{Create: true, Delete: true}, domain.WatchEvent{}
+				o.Watch.FileEvent, o.Watch.DirEvent = domain.WatchEvent{Create: true, Delete: true}, domain.WatchEvent{}
 			}),
 		},
 		{
 			name:   "folders only",
 			option: "{watch: {fileEvent: none, dirEvent: D}}",
 			want: with(func(o *domain.WatchTargetsOption) {
-				o.WatchFileEvent, o.WatchDirEvent = domain.WatchEvent{}, domain.WatchEvent{Delete: true}
+				o.Watch.FileEvent, o.Watch.DirEvent = domain.WatchEvent{}, domain.WatchEvent{Delete: true}
 			}),
 		},
 	}
@@ -423,7 +416,7 @@ func TestInvalidWatchEventOptionStopsBuild(t *testing.T) {
 
 func TestExcludeBuildsPatterns(t *testing.T) {
 	commands := buildCommandSet(t, "watchTargets:\n  - path: site\n    option:\n      watch:\n        exclude: ['dist/**', '**/*.log', '!important.log']\n")
-	got := commands.WatchTargets[0].Option.Exclude
+	got := commands.WatchTargets[0].Option.Watch.Exclude
 	if !slices.Equal(got, domain.ExcludePatterns{"dist/**", "**/*.log", "!important.log"}) {
 		t.Fatalf("Exclude = %q", got)
 	}

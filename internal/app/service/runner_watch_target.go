@@ -75,16 +75,16 @@ type watchTargetRunner struct {
 	// queueWarner는 대기열의 단계 변화로 onQueueWarning hook을 실행한다. OnQueueWarning이 없으면 nil이다.
 	queueWarner *queueWarner
 
-	exclude         domain.ExcludePatterns
-	hookWait        time.Duration
-	hookMaxWait     time.Duration
-	deliver         domain.Deliver
-	watchSubDir     bool
-	watchFileEvent  domain.WatchEvent
-	watchDirEvent   domain.WatchEvent
-	dirEventWait    time.Duration
-	dirEventMaxWait time.Duration
-	queueSize       int
+	subDir           bool
+	exclude          domain.ExcludePatterns
+	fileEvent        domain.WatchEvent
+	dirEvent         domain.WatchEvent
+	dirBatchWait     time.Duration
+	dirBatchMaxWait  time.Duration
+	hookBatchWait    time.Duration
+	hookBatchMaxWait time.Duration
+	deliver          domain.Deliver
+	queueSize        int
 
 	logger      helper.Logger
 	watcher     *fsnotify.Watcher
@@ -110,31 +110,31 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 	hookFunc := hookFuncBuilder(commandSet.Path)
 
 	result := &watchTargetRunner{
-		path:            commandSet.Path,
-		runStartHook:    hookFunc.RunStartHook,
-		runChangeHook:   hookFunc.RunChangeHook,
-		runFinishHook:   hookFunc.RunFinishHook,
-		cancelHook:      hookFunc.Cancel,
-		exclude:         commandSet.Option.Exclude,
-		hookWait:        commandSet.Option.WaitMillisecond.Duration(),
-		hookMaxWait:     commandSet.Option.MaxWaitMillisecond.Duration(),
-		deliver:         commandSet.Option.Deliver,
-		watchSubDir:     commandSet.Option.WatchSubDir,
-		watchFileEvent:  commandSet.Option.WatchFileEvent,
-		watchDirEvent:   commandSet.Option.WatchDirEvent,
-		dirEventWait:    commandSet.Option.DirEventWait.Duration(),
-		dirEventMaxWait: commandSet.Option.DirEventMaxWait.Duration(),
-		queueSize:       commandSet.Option.QueueSize,
-		logger:          logger,
-		watcher:         watcher,
-		watchedDirs:     map[string]map[string]entryInfo{},
-		entryPaths:      map[fileID]string{},
-		selfRenames:     map[string]time.Time{},
-		unreleasedDirs:  map[string]struct{}{},
-		initErr:         err,
-		stop:            make(chan struct{}),
-		done:            make(chan struct{}),
-		handlerDone:     make(chan struct{}),
+		path:             commandSet.Path,
+		runStartHook:     hookFunc.RunStartHook,
+		runChangeHook:    hookFunc.RunChangeHook,
+		runFinishHook:    hookFunc.RunFinishHook,
+		cancelHook:       hookFunc.Cancel,
+		subDir:           commandSet.Option.Watch.SubDir,
+		exclude:          commandSet.Option.Watch.Exclude,
+		fileEvent:        commandSet.Option.Watch.FileEvent,
+		dirEvent:         commandSet.Option.Watch.DirEvent,
+		dirBatchWait:     commandSet.Option.DirBatch.WaitMillisecond.Duration(),
+		dirBatchMaxWait:  commandSet.Option.DirBatch.MaxWaitMillisecond.Duration(),
+		hookBatchWait:    commandSet.Option.HookBatch.WaitMillisecond.Duration(),
+		hookBatchMaxWait: commandSet.Option.HookBatch.MaxWaitMillisecond.Duration(),
+		deliver:          commandSet.Option.HookBatch.Deliver,
+		queueSize:        commandSet.Option.Queue.Size,
+		logger:           logger,
+		watcher:          watcher,
+		watchedDirs:      map[string]map[string]entryInfo{},
+		entryPaths:       map[fileID]string{},
+		selfRenames:      map[string]time.Time{},
+		unreleasedDirs:   map[string]struct{}{},
+		initErr:          err,
+		stop:             make(chan struct{}),
+		done:             make(chan struct{}),
+		handlerDone:      make(chan struct{}),
 	}
 	if hook := globalCommandSet.LifeCycle.OnQueueWarning; hook != nil {
 		result.queueWarner = &queueWarner{hook: hook, target: commandSet.Path, logger: logger}
@@ -262,7 +262,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events *runQueue) err
 		if err == nil {
 			r.addEntry(ev.Name, isDir)
 		}
-		if isDir && r.watchSubDir && !r.isExcluded(ev.Name) {
+		if isDir && r.subDir && !r.isExcluded(ev.Name) {
 			if err := r.addDirTree(ev.Name); err != nil {
 				return err
 			}
@@ -324,12 +324,12 @@ func (r *watchTargetRunner) warnQueue(w queueWarning) {
 	}
 }
 
-// listens는 e가 watchFileEvent나 watchDirEvent에서 고른 이벤트 종류인지 판단한다.
+// listens는 e가 fileEvent나 dirEvent에서 고른 이벤트 종류인지 판단한다.
 func (r *watchTargetRunner) listens(e domain.Event) bool {
 	if e.IsDir {
-		return r.watchDirEvent.Has(e.Operation)
+		return r.dirEvent.Has(e.Operation)
 	}
-	return r.watchFileEvent.Has(e.Operation)
+	return r.fileEvent.Has(e.Operation)
 }
 
 func (r *watchTargetRunner) addDir() error {
@@ -340,8 +340,8 @@ func (r *watchTargetRunner) addDir() error {
 		return err
 	}
 
-	// watchSubDir이 false이면 하위 폴더를 감시하지 않는다.
-	if !r.watchSubDir {
+	// subDir가 false이면 하위 폴더를 감시하지 않는다.
+	if !r.subDir {
 		r.logger.Debug(fmt.Sprint("add path:", r.watchRoot))
 		if err := r.watcher.Add(r.watchRoot); err != nil {
 			return err

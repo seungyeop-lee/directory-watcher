@@ -23,14 +23,14 @@ type changeBatch struct {
 	start time.Time
 }
 
-// batchForHook은 e를 hook에 넘길 실행으로 만든다. hookWait가 0이면 e 하나로 곧바로 실행을 만들어 대기열 events에
-// 넣는다.
+// batchForHook은 e를 hook에 넘길 실행으로 만든다. hookBatchWait가 0이면 e 하나로 곧바로 실행을 만들어 대기열
+// events에 넣는다.
 //
-// hookWait가 0이 아니면 e를 모으고, 마지막 이벤트 뒤 hookWait 동안 이벤트가 없거나 첫 이벤트부터 hookMaxWait가
-// 지나면 flushHookBatch가 모은 이벤트로 실행을 만든다. 대기열에 넣기 전에 모으므로 hook이 도는 동안에도 기다리는
-// 시간이 끝날 때마다 실행이 대기열에 쌓이고, 다른 때 만든 실행끼리는 합치지 않는다.
+// hookBatchWait가 0이 아니면 e를 모으고, 마지막 이벤트 뒤 hookBatchWait 동안 이벤트가 없거나 첫 이벤트부터
+// hookBatchMaxWait가 지나면 flushHookBatch가 모은 이벤트로 실행을 만든다. 대기열에 넣기 전에 모으므로 hook이 도는
+// 동안에도 기다리는 시간이 끝날 때마다 실행이 대기열에 쌓이고, 다른 때 만든 실행끼리는 합치지 않는다.
 func (r *watchTargetRunner) batchForHook(e change, events *runQueue) error {
-	if r.hookWait == 0 {
+	if r.hookBatchWait == 0 {
 		return r.enqueue(r.runsOf([]change{e}), events)
 	}
 	now := time.Now()
@@ -38,7 +38,7 @@ func (r *watchTargetRunner) batchForHook(e change, events *runQueue) error {
 		r.hookBatch = &changeBatch{start: now}
 	}
 	r.hookBatch.changes = append(r.hookBatch.changes, e)
-	r.hookBatchDue = time.After(min(r.hookWait, r.hookBatch.start.Add(r.hookMaxWait).Sub(now)))
+	r.hookBatchDue = time.After(min(r.hookBatchWait, r.hookBatch.start.Add(r.hookBatchMaxWait).Sub(now)))
 	return nil
 }
 
@@ -49,7 +49,7 @@ func (r *watchTargetRunner) flushHookBatch(events *runQueue) error {
 	return r.enqueue(r.runsOf(batch.changes), events)
 }
 
-// runsOf는 한 번 기다리는 동안 모은 changes를 deliver에 따라 실행으로 합친다. watchFileEvent와 watchDirEvent에서
+// runsOf는 한 번 기다리는 동안 모은 changes를 deliver에 따라 실행으로 합친다. fileEvent와 dirEvent에서
 // 고르지 않은 종류의 실행은 뺀다.
 //
 // each는 이벤트마다 실행을 만든다. last와 lastPerPath는 경로마다 finalChange로 최종 변화를 계산하고, 경로가
@@ -108,7 +108,7 @@ func (r *watchTargetRunner) runsOf(changes []change) []domain.Event {
 
 // withoutRemovesUnderRemovedDirs는 최종 변화 finals에서, 최종 변화가 D인 폴더 아래 경로의 D를 뺀다. 폴더 이벤트
 // 묶음이 나뉘면 폴더의 D가 그 안의 삭제를 흡수하지 못하므로, 한 번 기다리는 동안 모인 삭제를 여기서 흡수한다.
-// watchDirEvent에서 폴더 D를 고르지 않았어도 폴더 이벤트 묶음처럼 똑같이 흡수한다.
+// dirEvent에서 폴더 D를 고르지 않았어도 폴더 이벤트 묶음처럼 똑같이 흡수한다.
 //
 // 폴더 C 아래의 C는 빼지 않는다. 폴더 C를 받은 hook이 폴더를 읽은 뒤에 생긴 항목일 수 있기 때문이다.
 func withoutRemovesUnderRemovedDirs(finals []domain.Event) []domain.Event {

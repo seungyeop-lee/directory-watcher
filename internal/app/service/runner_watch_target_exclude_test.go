@@ -60,7 +60,7 @@ func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 			path := tt.watchPath(t)
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchEvent{Create: true}},
+				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
 			}, newMockLogger())
 			t.Cleanup(func() {
 				var wg sync.WaitGroup
@@ -138,7 +138,7 @@ func TestDefaultExcludeChecksModifiedAndRemovedName(t *testing.T) {
 			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()},
+				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
 			}, newMockLogger())
 			t.Cleanup(func() {
 				var wg sync.WaitGroup
@@ -220,7 +220,7 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	}
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 		Path:   domain.Path(target),
-		Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}},
+		Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
 	}, newMockLogger())
 	t.Cleanup(func() {
 		var wg sync.WaitGroup
@@ -336,13 +336,10 @@ func TestExcludedFolderStaysOutOfWatchList(t *testing.T) {
 				makeDirs()
 			}
 			r, changed, result := startExcludeRunner(t, target, domain.WatchTargetsOption{
-				Deliver:         domain.DeliverEach,
-				DirEventWait:    100,
-				DirEventMaxWait: 1000,
-				QueueSize:       testQueueSize,
-				WatchSubDir:     true,
-				WatchFileEvent:  domain.WatchEvent{Create: true},
-				Exclude:         exclude,
+				Watch:     domain.WatchOption{SubDir: true, Exclude: exclude, FileEvent: domain.WatchEvent{Create: true}},
+				DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+				HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+				Queue:     domain.QueueOption{Size: testQueueSize},
 			}, newMockLogger(), nil)
 			if !atStart {
 				makeDirs()
@@ -395,7 +392,7 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 			target := t.TempDir()
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(target),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent(), Exclude: tc.exclude},
+				Option: domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchAllEvent()}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}},
 			}, newMockLogger())
 			t.Cleanup(func() {
 				var wg sync.WaitGroup
@@ -463,13 +460,10 @@ func TestHookOutputInExcludedPathDoesNotRerunHook(t *testing.T) {
 	var mu sync.Mutex
 	var runs []string // hook이 시작하고 끝난 순서
 	_, changed, result := startExcludeRunner(t, target, domain.WatchTargetsOption{
-		Deliver:         domain.DeliverEach,
-		DirEventWait:    100,
-		DirEventMaxWait: 1000,
-		QueueSize:       testQueueSize,
-		WatchSubDir:     true,
-		WatchFileEvent:  domain.WatchAllEvent(),
-		Exclude:         domain.ExcludePatterns{"out.txt"},
+		Watch:     domain.WatchOption{SubDir: true, Exclude: domain.ExcludePatterns{"out.txt"}, FileEvent: domain.WatchAllEvent()},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+		Queue:     domain.QueueOption{Size: testQueueSize},
 	}, logger, func(event domain.Event) {
 		mu.Lock()
 		runs = append(runs, "start "+event.Path.Name())

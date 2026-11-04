@@ -83,13 +83,10 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 					Path: domain.Path(target),
 					Option: domain.WatchTargetsOption{
-						Deliver:         domain.DeliverEach,
-						DirEventWait:    100,
-						DirEventMaxWait: 1000,
-						QueueSize:       testQueueSize,
-						WatchSubDir:     true,
-						Exclude:         tc.exclude,
-						WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
+						Watch:     domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}},
+						DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+						HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+						Queue:     domain.QueueOption{Size: testQueueSize},
 					},
 				}, newMockLogger())
 				t.Cleanup(func() {
@@ -177,28 +174,28 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 	}
 }
 
-// 감시 대상 path가 폴더를 가리키는 링크이면 watchSubDir와 관계없이 링크가 가리키는 폴더를 감시하고,
+// 감시 대상 path가 폴더를 가리키는 링크이면 subDir와 관계없이 링크가 가리키는 폴더를 감시하고,
 // exclude 패턴도 그 폴더의 같은 위치를 빼는지 확인한다.
 func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 	cases := []struct {
-		name        string
-		watchSubDir bool
-		startDirs   []string // 감시 시작 전에 링크가 가리키는 폴더 안에 만들 폴더
-		laterDirs   []string // 감시 중에 링크가 가리키는 폴더 안에 만들 폴더
-		exclude     []string
-		probe       string
-		want        bool
+		name      string
+		subDir    bool
+		startDirs []string // 감시 시작 전에 링크가 가리키는 폴더 안에 만들 폴더
+		laterDirs []string // 감시 중에 링크가 가리키는 폴더 안에 만들 폴더
+		exclude   []string
+		probe     string
+		want      bool
 	}{
-		{name: "file in linked folder without watchSubDir", probe: "a.txt", want: true},
-		{name: "file in linked folder with watchSubDir", watchSubDir: true, probe: "a.txt", want: true},
-		{name: "existing subfolder", watchSubDir: true, startDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
-		{name: "subfolder created while watching", watchSubDir: true, laterDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
+		{name: "file in linked folder without subDir", probe: "a.txt", want: true},
+		{name: "file in linked folder with subDir", subDir: true, probe: "a.txt", want: true},
+		{name: "existing subfolder", subDir: true, startDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
+		{name: "subfolder created while watching", subDir: true, laterDirs: []string{"sub"}, probe: "sub/a.txt", want: true},
 		// exclude 패턴이 있으면 감시 루프가 새 폴더를 감시 목록에 넣기까지 시간이 늘어, macOS에서 reAddDirs가
 		// 되돌리는 fsnotify의 등록 경합이 자주 일어난다.
-		{name: "subfolder created while watching with exclude", watchSubDir: true, laterDirs: []string{"sub"}, exclude: []string{"other/**"}, probe: "sub/a.txt", want: true},
-		{name: "existing excluded folder", watchSubDir: true, startDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
-		{name: "excluded folder created while watching", watchSubDir: true, laterDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
-		{name: "excluded file", watchSubDir: true, exclude: []string{"skip.txt"}, probe: "skip.txt", want: false},
+		{name: "subfolder created while watching with exclude", subDir: true, laterDirs: []string{"sub"}, exclude: []string{"other/**"}, probe: "sub/a.txt", want: true},
+		{name: "existing excluded folder", subDir: true, startDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
+		{name: "excluded folder created while watching", subDir: true, laterDirs: []string{"ex"}, exclude: []string{"ex/**"}, probe: "ex/a.txt", want: false},
+		{name: "excluded file", subDir: true, exclude: []string{"skip.txt"}, probe: "skip.txt", want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -227,13 +224,10 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path: domain.Path(link),
 				Option: domain.WatchTargetsOption{
-					Deliver:         domain.DeliverEach,
-					DirEventWait:    100,
-					DirEventMaxWait: 1000,
-					QueueSize:       testQueueSize,
-					WatchSubDir:     tc.watchSubDir,
-					Exclude:         tc.exclude,
-					WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
+					Watch:     domain.WatchOption{SubDir: tc.subDir, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}},
+					DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+					HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+					Queue:     domain.QueueOption{Size: testQueueSize},
 				},
 			}, newMockLogger())
 			t.Cleanup(func() {

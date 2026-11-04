@@ -153,13 +153,10 @@ func TestFolderEventIsSentWithinMaxWaitDuringContinuousWrites(t *testing.T) {
 	const maxWait = 500 * time.Millisecond
 	f := newRenameFixture(t)
 	f.startWith(domain.WatchTargetsOption{
-		Deliver:         domain.DeliverEach,
-		WatchSubDir:     true,
-		WatchFileEvent:  domain.WatchAllEvent(),
-		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
-		DirEventWait:    100,
-		DirEventMaxWait: domain.Millisecond(maxWait / time.Millisecond),
-		QueueSize:       testQueueSize,
+		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: domain.Millisecond(maxWait / time.Millisecond)},
+		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+		Queue:     domain.QueueOption{Size: testQueueSize},
 	})
 	stop, writing := make(chan struct{}), make(chan struct{})
 	defer func() { close(stop); <-writing }()
@@ -201,12 +198,12 @@ func TestFolderEventIsSentWithinMaxWaitDuringContinuousWrites(t *testing.T) {
 	await(func(ev domain.Event) bool { return ev.Path.String() == f.path("other.txt") }, "write of other.txt")
 }
 
-// watchDirEvent가 none이면 폴더 이벤트도, 폴더 이벤트에 흡수된 파일 이벤트도 hook에 가지 않는지 확인한다.
+// dirEvent가 none이면 폴더 이벤트도, 폴더 이벤트에 흡수된 파일 이벤트도 hook에 가지 않는지 확인한다.
 func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
 	f := newRenameFixture(t)
 	f.fill("src/pkg", 5)
 	f.fill("../outside/x", 3)
-	f.startWith(domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()})
+	f.startWith(domain.WatchTargetsOption{Watch: domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}, DirBatch: domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000}, HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach}, Queue: domain.QueueOption{Size: testQueueSize}})
 	f.mkdirAll("src/a/b")
 	f.write("src/a/b/c.txt")
 	f.move("../outside/x", "src/x")
@@ -220,18 +217,16 @@ func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
 	}
 }
 
-// watchSubDir가 false이면 감시하지 않는 대상 바로 아래 폴더도 만들거나 지우면 폴더 이벤트로 알리는지 확인한다.
-func TestFolderEventWithoutWatchSubDir(t *testing.T) {
+// subDir가 false이면 감시하지 않는 대상 바로 아래 폴더도 만들거나 지우면 폴더 이벤트로 알리는지 확인한다.
+func TestFolderEventWithoutSubDir(t *testing.T) {
 	f := newRenameFixture(t)
 	f.sentinelDirs = []string{""}
 	f.fill("src", 3)
 	f.startWith(domain.WatchTargetsOption{
-		Deliver:         domain.DeliverEach,
-		DirEventWait:    100,
-		DirEventMaxWait: 1000,
-		QueueSize:       testQueueSize,
-		WatchFileEvent:  domain.WatchAllEvent(),
-		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
+		Watch:     domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+		Queue:     domain.QueueOption{Size: testQueueSize},
 	})
 	f.removeAll("src")
 	if got, want := f.changes(), []string{"D src/"}; !slices.Equal(got, want) {
@@ -295,13 +290,10 @@ func TestBatchLargerThanQueueOverflows(t *testing.T) {
 	f.fill("src", files)
 	release := make(chan struct{})
 	f.runner, f.changed, f.result = startExcludeRunner(t, f.target, domain.WatchTargetsOption{
-		Deliver:         domain.DeliverEach,
-		DirEventWait:    100,
-		DirEventMaxWait: 1000,
-		QueueSize:       queueSize,
-		WatchSubDir:     true,
-		WatchFileEvent:  domain.WatchAllEvent(),
-		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
+		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+		Queue:     domain.QueueOption{Size: queueSize},
 	}, newMockLogger(), func(domain.Event) { <-release })
 	t.Cleanup(func() { close(release) })
 	for i := 0; i < files; i++ {

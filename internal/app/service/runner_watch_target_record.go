@@ -19,7 +19,7 @@ type entryInfo struct {
 // recorded는 감시 대상 안의 경로 path가 기록에 있는지와 폴더인지를 돌려준다.
 //
 // 기록은 감시를 시작할 때 감시 대상을 훑어 채우고, 항목의 생성과 삭제, 이름 바꾸기, 옮겨 오기와 옮겨 나가기
-// 이벤트를 받을 때 고친다. exclude와 기본 제외에 걸린 경로와, watchSubDir가 false일 때 감시 대상 바로 아래 폴더
+// 이벤트를 받을 때 고친다. exclude와 기본 제외에 걸린 경로와, subDir가 false일 때 감시 대상 바로 아래 폴더
 // 안의 항목은 기록에 없다.
 func (r *watchTargetRunner) recorded(path string) (isDir, ok bool) {
 	if path == r.watchRoot {

@@ -31,16 +31,11 @@ const testQueueSize = 2048
 // hookBatchOption은 설정 파일에 option을 적지 않았을 때의 감시 대상 옵션에서 hookBatch 값만 바꾼다.
 func hookBatchOption(wait, maxWait domain.Millisecond, deliver domain.Deliver) domain.WatchTargetsOption {
 	return domain.WatchTargetsOption{
-		WaitMillisecond:    wait,
-		MaxWaitMillisecond: maxWait,
-		Deliver:            deliver,
-		WatchSubDir:        true,
-		WatchFileEvent:     domain.WatchAllEvent(),
-		WatchDirEvent:      domain.WatchEvent{Create: true, Delete: true},
-		DirEventWait:       100,
-		DirEventMaxWait:    1000,
-		QueueSize:          testQueueSize,
-		Run:                domain.RunPolicy{Concurrency: 1},
+		Watch:     domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+		HookBatch: domain.HookBatchOption{WaitMillisecond: wait, MaxWaitMillisecond: maxWait, Deliver: deliver},
+		Queue:     domain.QueueOption{Size: testQueueSize},
+		Run:       domain.RunPolicy{Concurrency: 1},
 	}
 }
 
@@ -343,8 +338,8 @@ func TestLastPerPathDropsDeletesUnderDeletedFolder(t *testing.T) {
 			writeFile(t, filepath.Join(root, "d", "f.txt"))
 			writeFile(t, filepath.Join(root, "d", "sub", "g.txt"))
 			option := hookBatchOption(300, 2000, tc.deliver)
-			option.DirEventWait, option.DirEventMaxWait = 20, 20
-			option.WatchDirEvent = tc.dirEvent
+			option.DirBatch.WaitMillisecond, option.DirBatch.MaxWaitMillisecond = 20, 20
+			option.Watch.DirEvent = tc.dirEvent
 			f := startHookBatchRunner(t, root, option, nil)
 			removeAll(f.t, f.path("d"))
 			// 파일 삭제와 폴더 삭제 사이에 dirBatch.waitMillisecond보다 긴 틈을 두어 폴더 이벤트 묶음을 나눈다.
@@ -366,7 +361,7 @@ func TestLastPerPathDropsDeletesUnderDeletedFolder(t *testing.T) {
 func TestLastPerPathKeepsCreatesUnderCreatedFolder(t *testing.T) {
 	root := t.TempDir()
 	option := hookBatchOption(300, 2000, domain.DeliverLastPerPath)
-	option.DirEventWait, option.DirEventMaxWait = 20, 20
+	option.DirBatch.WaitMillisecond, option.DirBatch.MaxWaitMillisecond = 20, 20
 	f := startHookBatchRunner(t, root, option, nil)
 	mkdir(f.t, f.path("d"))
 	f.send(fsnotify.Create, "d")

@@ -20,12 +20,12 @@ type WatchEventConverter struct {
 	fallback string // 값을 적지 않았을 때 쓰는 값
 }
 
-func NewWatchFileEventConverter(value *config.WatchEvent) *WatchEventConverter {
+func NewFileEventConverter(value *config.WatchEvent) *WatchEventConverter {
 	return &WatchEventConverter{key: "fileEvent", value: value, kinds: "CUD", noun: "file", fallback: "CUD"}
 }
 
 // 폴더 이벤트에는 U가 없다. 폴더 안의 변경은 그 안의 파일 이벤트로 알린다.
-func NewWatchDirEventConverter(value *config.WatchEvent) *WatchEventConverter {
+func NewDirEventConverter(value *config.WatchEvent) *WatchEventConverter {
 	return &WatchEventConverter{key: "dirEvent", value: value, kinds: "CD", noun: "folder", fallback: "CD"}
 }
 

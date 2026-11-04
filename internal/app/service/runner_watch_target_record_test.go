@@ -31,7 +31,7 @@ func (f *renameFixture) assertRecorded(rel string, want, wantDir bool) {
 }
 
 // assertRecordMatchesDisk는 감시 대상 안에 있는 모든 항목이 기록에 같은 종류로 있고, gone의 경로는 기록에
-// 없는지 확인한다. exclude와 watchSubDir: false가 기록에서 빼는 항목이 없는 감시 대상에서만 쓴다.
+// 없는지 확인한다. exclude와 subDir: false가 기록에서 빼는 항목이 없는 감시 대상에서만 쓴다.
 func (f *renameFixture) assertRecordMatchesDisk(gone ...string) {
 	f.t.Helper()
 	err := filepath.WalkDir(f.target, func(p string, d fs.DirEntry, err error) error {
@@ -179,20 +179,18 @@ func TestRecordSkipsExcludedPaths(t *testing.T) {
 	f.assertRecorded("src/added.txt", true, false)
 }
 
-// watchSubDir가 false이면 감시 대상 바로 아래 항목만 기록하고, 그 아래 폴더 안의 항목은 기록하지 않는지 확인한다.
-func TestRecordWithoutWatchSubDirHoldsOnlyDirectChildren(t *testing.T) {
+// subDir가 false이면 감시 대상 바로 아래 항목만 기록하고, 그 아래 폴더 안의 항목은 기록하지 않는지 확인한다.
+func TestRecordWithoutSubDirHoldsOnlyDirectChildren(t *testing.T) {
 	f := newRenameFixture(t)
 	f.sentinelDirs = []string{""}
 	f.write("top.txt")
 	f.fill("src/sub", 2)
 	f.fill("gone", 2)
 	f.startWith(domain.WatchTargetsOption{
-		Deliver:         domain.DeliverEach,
-		DirEventWait:    100,
-		DirEventMaxWait: 1000,
-		QueueSize:       testQueueSize,
-		WatchFileEvent:  domain.WatchAllEvent(),
-		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
+		Watch:     domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}},
+		DirBatch:  domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000},
+		HookBatch: domain.HookBatchOption{Deliver: domain.DeliverEach},
+		Queue:     domain.QueueOption{Size: testQueueSize},
 	})
 	f.fill("new", 2)
 	f.write("added.txt")
