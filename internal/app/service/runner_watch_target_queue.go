@@ -106,7 +106,7 @@ func (q *runQueue) first(stop <-chan struct{}) (domain.Event, bool) {
 	}
 }
 
-// pop은 맨 앞의 실행을 뺀다. 대기열에서 실행을 빼는 쪽은 runChanges 하나뿐이므로, first가 돌려준 실행을 뺀다.
+// pop은 맨 앞의 실행을 뺀다. 대기열에서 실행을 빼는 쪽은 dispatcher.run 하나뿐이므로, first가 돌려준 실행을 뺀다.
 func (q *runQueue) pop() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -250,4 +250,95 @@ func (qw *queueWarner) stop() {
 	qw.stopped, qw.pending = true, nil
 	qw.mu.Unlock()
 	qw.idle.Wait()
+}
+
+// dispatcher는 감시 대상의 실행을 대기열에 받아 넣은 순서대로 hook에 넘긴다. 감시를 시작하고 끝낼 때의 hook과
+// 대기열 경고 hook도 실행한다.
+type dispatcher struct {
+	hooks hookFunc
+	queue *runQueue
+	// warner는 대기열의 단계 변화로 onQueueWarning hook을 실행한다. OnQueueWarning이 없으면 nil이다.
+	warner *queueWarner
+	// stop은 감시를 멈추면 닫힌다. 닫힌 뒤에는 실행을 받지 않고 hook에 넘기지도 않는다.
+	stop <-chan struct{}
+	// done은 start가 띄운 고루틴이 끝나거나 skip을 부르면 닫힌다.
+	done chan struct{}
+}
+
+func newDispatcher(hooks hookFunc, queueSize int, warner *queueWarner, stop <-chan struct{}) *dispatcher {
+	d := &dispatcher{hooks: hooks, warner: warner, stop: stop, done: make(chan struct{})}
+	d.queue = newRunQueue(queueSize, d.warn)
+	return d
+}
+
+// start는 onStartWatch를 시작한 뒤 대기열의 실행을 hook에 넘기는 고루틴을 띄운다.
+func (d *dispatcher) start() {
+	go func() {
+		defer close(d.done)
+		d.hooks.runStartHook()
+		d.run()
+	}()
+}
+
+// skip은 감시를 시작하지 못해 start를 부르지 않을 때 done을 닫아, finish가 기다리지 않게 한다.
+func (d *dispatcher) skip() {
+	close(d.done)
+}
+
+// enqueue는 실행 runs를 차례로 대기열에 넣는다. 대기열이 가득 차면 기다리지 않고 오류를 돌려준다.
+func (d *dispatcher) enqueue(runs []domain.Event) error {
+	for _, run := range runs {
+		select {
+		case <-d.stop:
+			return errStopped
+		default:
+		}
+		if err := d.queue.push(run); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// run은 대기열의 실행을 넣은 순서대로 hook에 넘긴다. 실행은 hook이 시작할 때까지 대기열에 남겨, 자리를 기다리는
+// 실행도 대기열의 용량과 경고에 들어가게 한다.
+func (d *dispatcher) run() {
+	for {
+		event, ok := d.queue.first(d.stop)
+		if !ok {
+			return
+		}
+		// 감시를 멈춘 뒤에 본 실행은 hook에 넘기지 않는다.
+		select {
+		case <-d.stop:
+			return
+		default:
+		}
+		d.hooks.runChangeHook(event)
+		d.queue.pop()
+	}
+}
+
+// warn은 대기열의 단계 변화 w로 onQueueWarning hook을 실행한다.
+func (d *dispatcher) warn(w queueWarning) {
+	if d.warner != nil {
+		d.warner.notify(w)
+	}
+}
+
+// cancel은 돌고 있는 hook 실행을 모두 취소하고, 새 실행을 시작하지 않게 한다.
+func (d *dispatcher) cancel() {
+	d.hooks.cancel()
+}
+
+// finish는 done이 닫히기를 기다린 뒤 대기열 경고 hook을 멈추고, started이면 onFinishWatch를 실행한다. 감시를
+// 시작하지 못한 대상은 onStartWatch를 실행하지 않았으므로 그 짝인 onFinishWatch도 실행하지 않는다.
+func (d *dispatcher) finish(started bool) {
+	<-d.done
+	if d.warner != nil {
+		d.warner.stop()
+	}
+	if started {
+		d.hooks.runFinishHook()
+	}
 }

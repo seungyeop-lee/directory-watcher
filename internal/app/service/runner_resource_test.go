@@ -23,7 +23,7 @@ func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 			changed, result := startRunner(t, r, nil)
 			// finish hook은 Stop을 부른 고루틴이 실행하므로, 감시를 시작한 뒤에 바꿔도 Run과 겹치지 않는다.
 			finished := make(chan struct{})
-			r.runFinishHook = func() { close(finished) }
+			r.dispatcher.hooks.runFinishHook = func() { close(finished) }
 			if err := os.WriteFile(filepath.Join(path, "actual.txt"), []byte("event"), 0600); err != nil {
 				t.Fatal(err)
 			}

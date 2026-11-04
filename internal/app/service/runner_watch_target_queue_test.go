@@ -103,6 +103,19 @@ func TestQueueWarningListsMostQueuedPaths(t *testing.T) {
 	}
 }
 
+func TestDispatcherRunTerminatesWhenStopCloses(t *testing.T) {
+	stop := make(chan struct{})
+	d := newDispatcher(hookFunc{runChangeHook: func(domain.Event) {}}, testQueueSize, nil, stop)
+	done := make(chan struct{})
+	go func() { d.run(); close(done) }()
+	close(stop)
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stop leaked the run loop waiting on an empty queue")
+	}
+}
+
 // hookEnvironment는 ctx로 명령을 실행할 때 명령에 더하는 환경 변수를 돌려준다.
 func hookEnvironment(ctx *process.WatcherContext) map[string]string {
 	cmd := exec.Command("hook")
@@ -138,9 +151,9 @@ func TestSlowQueueWarningKeepsOnlyLatestAndDoesNotBlockWatching(t *testing.T) {
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, releaseChange, changed := make(chan struct{}), make(chan struct{}), make(chan string, 16)
-	r.runStartHook = func() {}
-	r.runFinishHook = func() {}
-	r.runChangeHook = func(e domain.Event) {
+	r.dispatcher.hooks.runStartHook = func() {}
+	r.dispatcher.hooks.runFinishHook = func() {}
+	r.dispatcher.hooks.runChangeHook = func(e domain.Event) {
 		if filepath.Base(e.Path.String()) == "first" {
 			close(entered)
 			<-releaseChange

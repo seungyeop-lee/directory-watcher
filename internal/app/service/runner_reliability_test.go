@@ -23,9 +23,9 @@ func TestStopDiscardsPendingEvents(t *testing.T) {
 	events, _ := controlledSource(r)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	r.runStartHook = func() {}
-	r.runFinishHook = func() {}
-	r.runChangeHook = func(domain.Event) {
+	r.dispatcher.hooks.runStartHook = func() {}
+	r.dispatcher.hooks.runFinishHook = func() {}
+	r.dispatcher.hooks.runChangeHook = func(domain.Event) {
 		if calls.Add(1) == 1 {
 			close(entered)
 			<-release
@@ -52,26 +52,14 @@ func TestStopDiscardsPendingEvents(t *testing.T) {
 	}
 }
 
-func TestRunChangesTerminatesWhenStopCloses(t *testing.T) {
-	r := &watchTargetRunner{runChangeHook: func(domain.Event) {}, stop: make(chan struct{}), logger: newMockLogger()}
-	done := make(chan struct{})
-	go func() { r.runChanges(newRunQueue(testQueueSize, func(queueWarning) {})); close(done) }()
-	close(r.stop)
-	select {
-	case <-done:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("stop leaked the run loop waiting on an empty queue")
-	}
-}
-
 func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, watchErrors := controlledSource(r)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	r.runStartHook = func() {}
-	r.runFinishHook = func() {}
-	r.runChangeHook = func(domain.Event) { close(entered); <-release }
+	r.dispatcher.hooks.runStartHook = func() {}
+	r.dispatcher.hooks.runFinishHook = func() {}
+	r.dispatcher.hooks.runChangeHook = func(domain.Event) { close(entered); <-release }
 	go func() { r.Run(); close(done) }()
 	events <- fsnotify.Event{Name: filepath.Join(r.path.String(), "first"), Op: fsnotify.Create}
 	<-entered
@@ -118,12 +106,12 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)
-	r.runStartHook = func() {}
-	r.runFinishHook = func() {}
+	r.dispatcher.hooks.runStartHook = func() {}
+	r.dispatcher.hooks.runFinishHook = func() {}
 	// 실제 runChangeHook은 hook을 시작하면 돌아오고, 자리가 없으면 자리가 날 때까지 막힌다. 그래서 첫 실행은 돌고 있는
 	// 실행처럼 돌아오고, 다음 실행은 자리를 기다리며 대기열에 남는다.
 	var calls atomic.Int32
-	r.runChangeHook = func(domain.Event) {
+	r.dispatcher.hooks.runChangeHook = func(domain.Event) {
 		if calls.Add(1) == 1 {
 			close(entered)
 			return

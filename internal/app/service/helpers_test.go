@@ -69,9 +69,9 @@ func hookBatchOption(wait, maxWait domain.Millisecond, deliver domain.Deliver) d
 	return option
 }
 
-// startRunner는 r의 hook 세 개를 바꿔 Run을 시작하고, 감시 목록 등록이 끝나 start hook이 불리면 돌려준다.
-// change hook은 onChange가 있으면 먼저 실행하고 받은 실행을 changed로 보낸다. result는 Run의 결과를 받는다.
-// 테스트가 끝나면 r을 멈춘다.
+// startRunner는 r의 dispatcher가 실행하는 hook 세 개를 바꿔 Run을 시작하고, 감시 목록 등록이 끝나 start hook이
+// 불리면 돌려준다. change hook은 onChange가 있으면 먼저 실행하고 받은 실행을 changed로 보낸다. result는 Run의 결과를
+// 받는다. 테스트가 끝나면 r을 멈춘다.
 func startRunner(t *testing.T, r *watchTargetRunner, onChange func(domain.Event)) (changed <-chan domain.Event, result <-chan error) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -80,14 +80,14 @@ func startRunner(t *testing.T, r *watchTargetRunner, onChange func(domain.Event)
 		r.Stop(&wg)
 	})
 	ready, events, done := make(chan struct{}), make(chan domain.Event, testQueueSize), make(chan error, 1)
-	r.runStartHook = func() { close(ready) }
-	r.runChangeHook = func(event domain.Event) {
+	r.dispatcher.hooks.runStartHook = func() { close(ready) }
+	r.dispatcher.hooks.runChangeHook = func(event domain.Event) {
 		if onChange != nil {
 			onChange(event)
 		}
 		events <- event
 	}
-	r.runFinishHook = func() {}
+	r.dispatcher.hooks.runFinishHook = func() {}
 	go func() { done <- r.Run() }()
 	select {
 	case <-ready:
