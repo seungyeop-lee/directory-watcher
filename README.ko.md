@@ -17,7 +17,7 @@
 
 ### 몰려드는 변경 다루기
 
-- 기본 동작에서는 이벤트가 몰려도 마지막 이벤트 뒤 `waitMillisecond`(기본 100ms)가 지나면 hook을 한 번만 실행합니다.
+- 기본 동작에서는 이벤트가 몰려도 마지막 이벤트 뒤 `hookBatch.waitMillisecond`(기본 100ms)가 지나면 hook을 한 번만 실행합니다.
 - `noWait: true`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다.
 - 대상마다 대기 이벤트를 최대 256개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
 
@@ -137,7 +137,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 3. `src` 아래의 파일을 고칩니다. 마지막 변경 뒤 100ms가 지나면 `make test`가 실행됩니다.
 
-- **hook의 결과 파일:** hook이 `path` 안에 쓴 파일도 변경이므로, hook이 다시 실행되며 끝없이 반복됩니다. 그 파일을 감시 대상의 `exclude`에 적습니다. 예를 들어 `onChange`가 `src/build.log`에 쓰면 `option` 아래에 `exclude: ['build.log']`를 적습니다. 자세한 내용은 [hook이 자기 결과로 다시 실행되지 않게 하기](USAGE.ko.md#hook이-자기-결과로-다시-실행되지-않게-하기)를 확인하세요.
+- **hook의 결과 파일:** hook이 `path` 안에 쓴 파일도 변경이므로, hook이 다시 실행되며 끝없이 반복됩니다. 그 파일을 감시 대상의 `watch.exclude`에 적습니다. 예를 들어 `onChange`가 `src/build.log`에 쓰면 `option.watch` 아래에 `exclude: ['build.log']`를 적습니다. 자세한 내용은 [hook이 자기 결과로 다시 실행되지 않게 하기](USAGE.ko.md#hook이-자기-결과로-다시-실행되지-않게-하기)를 확인하세요.
 - **멈추기:** Ctrl+C를 누르거나 SIGTERM을 보냅니다. watcher는 실행 중인 명령을 취소하고 종료 명령을 실행한 뒤 끝납니다.
 - **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 폴더 이벤트, 경로 제외, 겹치는 감시 경로, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
 
@@ -157,10 +157,10 @@ flowchart TD
         excludeCheck{"제외된 경로인가?"}
         collectChoice{"폴더 생성·삭제이거나<br>하위 폴더 안의 파일 삭제인가?"}
         collectFolder["대상의 이벤트를 모으고<br>폴더 안의 이벤트는 흡수"]
-        kindFilter{"watchFileEvent나 watchDirEvent에서<br>고른 이벤트 종류인가?"}
+        kindFilter{"watch.fileEvent나 watch.dirEvent에서<br>고른 이벤트 종류인가?"}
         queueEvent{"대상의 256개 대기열에<br>자리가 있는가?"}
         modeChoice{"noWait?"}
-        debounceWait["마지막 이벤트 뒤 waitMillisecond 대기<br>그 이벤트만 남김"]
+        debounceWait["마지막 이벤트 뒤 hookBatch.waitMillisecond 대기<br>그 이벤트만 남김"]
         orderedRun["받은 순서대로 이벤트 처리"]
         interruptChoice{"interruptible?"}
         cancelPrevious["실행 중인 명령을 취소하고<br>끝나기를 기다림"]
@@ -176,7 +176,7 @@ flowchart TD
     excludeCheck -->|"아니오"| collectChoice
     collectChoice -->|"예, 또는 이미 모으는 중"| collectFolder
     collectChoice -->|"아니오"| kindFilter
-    collectFolder -->|"dirEventWaitMillisecond 동안 이벤트 없음,<br>또는 dirEventMaxWaitMillisecond 지남"| kindFilter
+    collectFolder -->|"dirBatch.waitMillisecond 동안 이벤트 없음,<br>또는 dirBatch.maxWaitMillisecond 지남"| kindFilter
     kindFilter -->|"아니오: 무시"| receiveEvent
     kindFilter -->|"예"| queueEvent
     queueEvent -->|"아니오"| fatalStop

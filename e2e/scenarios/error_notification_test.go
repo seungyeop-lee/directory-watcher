@@ -52,9 +52,10 @@ watchTargets:
       onFinishWatch:
         - %s
     option:
+      watch:
+        exclude: ['*.probe']
+        fileEvent: C
       noWait: true
-      watchFileEvent: C
-      exclude: ['*.probe']
   - path: '%s'
     lifeCycle:
       onStartWatch:
@@ -64,8 +65,9 @@ watchTargets:
       onFinishWatch:
         - %s
     option:
+      watch:
+        fileEvent: C
       noWait: true
-      watchFileEvent: C
 `, notification, s.Hook("--line=BEFORE"), s.Hook("--line=GLOBAL:FINISH"),
 				s.Watch, s.Hook("--delay=30s", "--line=START"), s.Hook("--line=CHANGE"), s.Hook("--line=TARGET:FINISH"),
 				other, s.Hook("--line=OTHER:READY"), s.Hook("--line=OTHER:CHANGE"), s.Hook("--line=OTHER:FINISH")))
@@ -274,10 +276,12 @@ watchTargets:
       onFinishWatch:
         - %s
     option:
+      watch:
+        exclude: ['*.probe']
+        fileEvent: C
+      hookBatch:
+        waitMillisecond: 50
       noWait: %t
-      waitMillisecond: 50
-      watchFileEvent: C
-      exclude: ['*.probe']
 `, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--line=CHANGE:{{.Path}}"), s.Hook("--line=FINISH"), noWait))
 			var paths []string
 			for n := range 20 {

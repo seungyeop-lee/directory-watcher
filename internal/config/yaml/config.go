@@ -138,60 +138,81 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.Wat
 	}, nil
 }
 
+// WatchTargetsOptionConfig는 감시 대상 옵션을 처리 단계별 그룹으로 받는다. watch는 무엇을 감시할지,
+// dirBatch는 폴더 이벤트를 만들려고 이벤트를 모으는 방식, hookBatch는 hook을 실행하기 전에 기다리는 방식을 정한다.
 type WatchTargetsOptionConfig struct {
-	Exclude                    config.Exclude     `yaml:"exclude"`
-	WaitMillisecond            config.Millisecond `yaml:"waitMillisecond"`
-	WatchSubDir                *bool              `yaml:"watchSubDir"`
-	WatchFileEvent             *config.WatchEvent `yaml:"watchFileEvent"`
-	WatchDirEvent              *config.WatchEvent `yaml:"watchDirEvent"`
-	DirEventWaitMillisecond    config.Millisecond `yaml:"dirEventWaitMillisecond"`
-	DirEventMaxWaitMillisecond config.Millisecond `yaml:"dirEventMaxWaitMillisecond"`
-	NoWait                     *bool              `yaml:"noWait"`
-	Interruptible              *bool              `yaml:"interruptible"`
+	Watch         WatchOptionConfig     `yaml:"watch"`
+	DirBatch      DirBatchOptionConfig  `yaml:"dirBatch"`
+	HookBatch     HookBatchOptionConfig `yaml:"hookBatch"`
+	NoWait        *bool                 `yaml:"noWait"`
+	Interruptible *bool                 `yaml:"interruptible"`
 
-	// RemovedExcludeDir, RemovedExcludeSuffix, RemovedWatchEvent는 v3에서 없앤 키를 받는다. yaml.Unmarshal은
-	// 모르는 키를 무시하므로, 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더, 파일, 이벤트가 경고 없이 다시 감시된다.
-	RemovedExcludeDir    yaml.Node `yaml:"excludeDir" json:"-"`
-	RemovedExcludeSuffix yaml.Node `yaml:"excludeSuffix" json:"-"`
-	RemovedWatchEvent    yaml.Node `yaml:"watchEvent" json:"-"`
+	// Removed로 시작하는 필드는 v3에서 없애거나 그룹 안으로 옮긴 키를 받는다. yaml.Unmarshal은 모르는 키를 무시하므로,
+	// 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더, 파일, 이벤트가 경고 없이 다시 감시되고, 하위 폴더 감시 여부와 기다리는 시간도 경고 없이 기본값으로 돌아간다.
+	RemovedExcludeDir      yaml.Node `yaml:"excludeDir" json:"-"`
+	RemovedExcludeSuffix   yaml.Node `yaml:"excludeSuffix" json:"-"`
+	RemovedExclude         yaml.Node `yaml:"exclude" json:"-"`
+	RemovedWatchEvent      yaml.Node `yaml:"watchEvent" json:"-"`
+	RemovedWatchSubDir     yaml.Node `yaml:"watchSubDir" json:"-"`
+	RemovedWaitMillisecond yaml.Node `yaml:"waitMillisecond" json:"-"`
+}
+
+type WatchOptionConfig struct {
+	SubDir    *bool              `yaml:"subDir"`
+	Exclude   config.Exclude     `yaml:"exclude"`
+	FileEvent *config.WatchEvent `yaml:"fileEvent"`
+	DirEvent  *config.WatchEvent `yaml:"dirEvent"`
+}
+
+type DirBatchOptionConfig struct {
+	WaitMillisecond    config.Millisecond `yaml:"waitMillisecond"`
+	MaxWaitMillisecond config.Millisecond `yaml:"maxWaitMillisecond"`
+}
+
+type HookBatchOptionConfig struct {
+	WaitMillisecond config.Millisecond `yaml:"waitMillisecond"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, error) {
+	const excludeSection, watchEventSection, optionsSection = "Moving from excludeDir and excludeSuffix", "Moving from watchEvent", "Moving from version 2 options"
 	for _, removed := range []struct {
 		key, replacement, section string
 		node                      yaml.Node
 	}{
-		{"excludeDir", "option.exclude", "Moving from excludeDir and excludeSuffix", c.RemovedExcludeDir},
-		{"excludeSuffix", "option.exclude", "Moving from excludeDir and excludeSuffix", c.RemovedExcludeSuffix},
-		{"watchEvent", "option.watchFileEvent and option.watchDirEvent", "Moving from watchEvent", c.RemovedWatchEvent},
+		{"excludeDir", "option.watch.exclude", excludeSection, c.RemovedExcludeDir},
+		{"excludeSuffix", "option.watch.exclude", excludeSection, c.RemovedExcludeSuffix},
+		{"exclude", "option.watch.exclude", excludeSection, c.RemovedExclude},
+		{"watchEvent", "option.watch.fileEvent and option.watch.dirEvent", watchEventSection, c.RemovedWatchEvent},
+		{"watchSubDir", "option.watch.subDir", optionsSection, c.RemovedWatchSubDir},
+		{"waitMillisecond", "option.hookBatch.waitMillisecond", optionsSection, c.RemovedWaitMillisecond},
 	} {
 		if removed.node.Kind != 0 {
 			return domain.WatchTargetsOption{}, fmt.Errorf(`option.%s is no longer supported; use %s (see USAGE %q)`, removed.key, removed.replacement, removed.section)
 		}
 	}
-	exclude, err := converter.NewExcludeConverter(c.Exclude).Convert()
+	exclude, err := converter.NewExcludeConverter(c.Watch.Exclude).Convert()
 	if err != nil {
-		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.watch.%w", err)
 	}
-	watchFileEvent, err := converter.NewWatchFileEventConverter(c.WatchFileEvent).Convert()
+	fileEvent, err := converter.NewWatchFileEventConverter(c.Watch.FileEvent).Convert()
 	if err != nil {
-		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.watch.%w", err)
 	}
-	watchDirEvent, err := converter.NewWatchDirEventConverter(c.WatchDirEvent).Convert()
+	dirEvent, err := converter.NewWatchDirEventConverter(c.Watch.DirEvent).Convert()
 	if err != nil {
-		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.watch.%w", err)
 	}
-	if watchFileEvent.IsNone() && watchDirEvent.IsNone() {
-		return domain.WatchTargetsOption{}, errors.New("option: watchFileEvent and watchDirEvent are both none; onChange would never run")
+	if fileEvent.IsNone() && dirEvent.IsNone() {
+		return domain.WatchTargetsOption{}, errors.New("option.watch: fileEvent and dirEvent are both none; onChange would never run")
 	}
 	return domain.WatchTargetsOption{
 		Exclude:         exclude,
-		WaitMillisecond: converter.NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
-		WatchSubDir:     converter.NewWatchSubDirConverter(c.WatchSubDir).Convert(),
-		WatchFileEvent:  watchFileEvent,
-		WatchDirEvent:   watchDirEvent,
-		DirEventWait:    domain.Millisecond(c.DirEventWaitMillisecond),
-		DirEventMaxWait: domain.Millisecond(c.DirEventMaxWaitMillisecond),
+		WaitMillisecond: converter.NewWaitMillisecondConverter(c.HookBatch.WaitMillisecond).Convert(),
+		WatchSubDir:     converter.NewWatchSubDirConverter(c.Watch.SubDir).Convert(),
+		WatchFileEvent:  fileEvent,
+		WatchDirEvent:   dirEvent,
+		DirEventWait:    domain.Millisecond(c.DirBatch.WaitMillisecond),
+		DirEventMaxWait: domain.Millisecond(c.DirBatch.MaxWaitMillisecond),
 		NoWait:          converter.NewNoWaitConverter(c.NoWait).Convert(),
 		Interruptible:   converter.NewInterruptibleConverter(c.Interruptible).Convert(),
 	}, nil

@@ -14,7 +14,7 @@
 
 - The global `onError` is `hookrec --error-context --line=NOTIFY`. When it runs, it records `ERROR|<JSON>`.
 - The target `onChange` records `CHANGE:{{.Path}}`, and `onFinishWatch` records `FINISH`.
-- The target options are the per-subtest `noWait`, plus `waitMillisecond: 50`, `watchFileEvent: C`, and `exclude: ['*.probe']`.
+- The target options are the per-subtest `noWait`, plus `hookBatch.waitMillisecond: 50`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`.
 
 ## Subtests
 

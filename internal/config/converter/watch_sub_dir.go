@@ -3,19 +3,19 @@ package converter
 const defaultWatchSubDirValue bool = true
 
 type WatchSubDirConverter struct {
-	watchSubDir *bool
+	subDir *bool
 }
 
-func NewWatchSubDirConverter(watchSubDir *bool) *WatchSubDirConverter {
+func NewWatchSubDirConverter(subDir *bool) *WatchSubDirConverter {
 	return &WatchSubDirConverter{
-		watchSubDir: watchSubDir,
+		subDir: subDir,
 	}
 }
 
 func (c *WatchSubDirConverter) Convert() bool {
-	if c.watchSubDir == nil {
+	if c.subDir == nil {
 		return defaultWatchSubDirValue
 	} else {
-		return *c.watchSubDir
+		return *c.subDir
 	}
 }

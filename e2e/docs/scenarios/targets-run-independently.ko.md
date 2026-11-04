@@ -17,7 +17,7 @@
 | 느린 대상 | 감시 폴더 | `hookrec --delay=800ms --line=SLOW` |
 | 빠른 대상 | 실행 폴더의 `other` | `hookrec --line=FAST` |
 
-- 두 대상 모두 `noWait: true`, `watchFileEvent: C`, `exclude: ['*.probe']`입니다.
+- 두 대상 모두 `noWait: true`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다.
 
 ## 진행 순서
 

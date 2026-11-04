@@ -30,14 +30,16 @@ watchTargets:
       onFinishWatch:
         - echo 'dir2 onFinishWatch'
     option:
-      # Patterns are relative to path. Quote them: YAML reads a leading * or ! as syntax.
-      exclude:
-        - 'tmp/**'
-        - '**/*_test.go'
-        - '**/*~'
-      waitMillisecond: 1000 # default 100
-      watchFileEvent: CDU # default CUD
-      watchDirEvent: CD # default CD; none turns folder events off
+      watch:
+        # Patterns are relative to path. Quote them: YAML reads a leading * or ! as syntax.
+        exclude:
+          - 'tmp/**'
+          - '**/*_test.go'
+          - '**/*~'
+        fileEvent: CDU # default CUD
+        dirEvent: CD # default CD; none turns folder events off
+      hookBatch:
+        waitMillisecond: 1000 # default 100
       noWait: true # default false
       interruptible: true
   - path: 'test/dir3'
@@ -53,4 +55,5 @@ watchTargets:
           - "pwd"
           - "ls -al"
     option:
-      watchSubDir: false
+      watch:
+        subDir: false

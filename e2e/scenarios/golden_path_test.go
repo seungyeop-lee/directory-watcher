@@ -78,9 +78,11 @@ watchTargets:
       onFinishWatch:
         - %s
     option:
-      waitMillisecond: 100
-      watchFileEvent: CDU
-      exclude: ['*.probe']
+      watch:
+        exclude: ['*.probe']
+        fileEvent: CDU
+      hookBatch:
+        waitMillisecond: 100
 `, command("GLOBAL:onStartWatch", ""), command("GLOBAL:onBeforeChange", change), command("GLOBAL:onAfterChange", change), command("GLOBAL:onFinishWatch", ""), s.Watch, command("TARGET:onStartWatch", ""), command("TARGET:onChange", change), command("TARGET:onFinishWatch", ""))
 }
 

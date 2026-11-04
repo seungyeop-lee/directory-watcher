@@ -11,7 +11,7 @@ import (
 // noWatchEvent는 이벤트를 하나도 받지 않음을 나타내는 값이다.
 const noWatchEvent = "none"
 
-// WatchEventConverter는 watchFileEvent나 watchDirEvent 값을 hook에 넘길 이벤트 종류로 바꾼다.
+// WatchEventConverter는 option.watch.fileEvent나 option.watch.dirEvent 값을 hook에 넘길 이벤트 종류로 바꾼다.
 type WatchEventConverter struct {
 	key      string
 	value    *config.WatchEvent
@@ -21,12 +21,12 @@ type WatchEventConverter struct {
 }
 
 func NewWatchFileEventConverter(value *config.WatchEvent) *WatchEventConverter {
-	return &WatchEventConverter{key: "watchFileEvent", value: value, kinds: "CUD", noun: "file", fallback: "CUD"}
+	return &WatchEventConverter{key: "fileEvent", value: value, kinds: "CUD", noun: "file", fallback: "CUD"}
 }
 
 // 폴더 이벤트에는 U가 없다. 폴더 안의 변경은 그 안의 파일 이벤트로 알린다.
 func NewWatchDirEventConverter(value *config.WatchEvent) *WatchEventConverter {
-	return &WatchEventConverter{key: "watchDirEvent", value: value, kinds: "CD", noun: "folder", fallback: "CD"}
+	return &WatchEventConverter{key: "dirEvent", value: value, kinds: "CD", noun: "folder", fallback: "CD"}
 }
 
 func (c WatchEventConverter) Convert() (domain.WatchEvent, error) {

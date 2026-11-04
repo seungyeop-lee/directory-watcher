@@ -27,10 +27,12 @@ watchTargets:
       onFinishWatch:
         - %s
     option:
+      watch:
+        exclude: ['*.probe']
+        fileEvent: C
+      hookBatch:
+        waitMillisecond: 100
       interruptible: true
-      waitMillisecond: 100
-      watchFileEvent: C
-      exclude: ['*.probe']
 `, s.Hook("--line=GLOBAL:onFinishWatch"), s.Watch, tree, tree, s.Hook("--line=TARGET:onFinishWatch")))
 	first := s.AwaitReadyGenerations("1 ready process trees", 1)
 	readyCount := 0
@@ -90,11 +92,13 @@ func TestStartHookShutdownModes(t *testing.T) {
       onChange:
         - %s
     option:
+      watch:
+        exclude: ['*.probe']
+        fileEvent: C
+      hookBatch:
+        waitMillisecond: 10
       noWait: %t
       interruptible: %t
-      waitMillisecond: 10
-      watchFileEvent: C
-      exclude: ['*.probe']
 `, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), noWait, interruptible))
 				s.AssertRunning("startup process", s.AwaitReadyGenerations("startup process tree ready", 1))
 				s.Write(filepath.Join(s.Watch, "during-start.txt"), nil)

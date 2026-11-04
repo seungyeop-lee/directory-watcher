@@ -29,8 +29,9 @@ func TestFolderEvents(t *testing.T) {
       onChange:
         - %s
     option:
+      watch:
+        exclude: ['*.probe']
       noWait: true
-      exclude: ['*.probe']
 `, s.Watch, s.Hook("--line=CHANGE:{{.Event}},{{.IsDir}},{{.Path}}")))
 
 	watch := func(rel string) string { return filepath.Join(s.Watch, filepath.FromSlash(rel)) }

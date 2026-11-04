@@ -29,7 +29,7 @@
 
 - All of the global hooks `onStartWatch`, `onBeforeChange`, `onAfterChange`, and `onFinishWatch` and the target hooks `onStartWatch`, `onChange`, and `onFinishWatch` are configured.
 - Each hook records its own label, such as `GLOBAL:onBeforeChange`, with `hookrec --line=<label>`. Change hooks append `:<variables>` after the label. The variables are written outside quotes so that each value is passed as one argument even with spaces, and they are separated by commas, which sh and cmd do not interpret.
-- The target options are `waitMillisecond: 100`, `watchFileEvent: CDU`, and `exclude: ['*.probe']`.
+- The target options are `hookBatch.waitMillisecond: 100`, `watch.fileEvent: CDU`, and `watch.exclude: ['*.probe']`.
 
 ## Sequence
 

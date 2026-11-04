@@ -56,50 +56,71 @@
             "type": "object",
             "description": "Options for monitoring this directory.",
             "properties": {
-              "exclude": {
-                "type": "array",
-                "description": "Path patterns, relative to path, of files and folders to exclude from watching. Patterns are globs with ** and are checked in order; a pattern starting with ! watches a path excluded by an earlier pattern again. A matched folder and everything below it are not watched.",
-                "items": {
-                  "type": "string"
+              "watch": {
+                "type": "object",
+                "description": "What to watch: subfolders, excluded paths, and the file and folder events that run the hook.",
+                "properties": {
+                  "subDir": {
+                    "type": "boolean",
+                    "description": "Whether to monitor subdirectories.",
+                    "default": true
+                  },
+                  "exclude": {
+                    "type": "array",
+                    "description": "Path patterns, relative to path, of files and folders to exclude from watching. Patterns are globs with ** and are checked in order; a pattern starting with ! watches a path excluded by an earlier pattern again. A matched folder and everything below it are not watched.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "examples": [["dist/**", "**/*.log", "!important.log"]]
+                  },
+                  "fileEvent": {
+                    "type": "string",
+                    "description": "File events that run the hook (C: create or move in, U: update, D: delete or move away), or none. fileEvent and dirEvent cannot both be none.",
+                    "default": "CUD",
+                    "pattern": "^(none|[CUD]+)$",
+                    "examples": ["CUD", "CU", "none"]
+                  },
+                  "dirEvent": {
+                    "type": "string",
+                    "description": "Folder events that run the hook (C: create or move in, D: delete or move away), or none. A folder event stands for the folder and everything in it.",
+                    "default": "CD",
+                    "pattern": "^(none|[CD]+)$",
+                    "examples": ["CD", "D", "none"]
+                  }
                 },
-                "examples": [["dist/**", "**/*.log", "!important.log"]]
+                "additionalProperties": false
               },
-              "waitMillisecond": {
-                "type": "integer",
-                "description": "Wait time in milliseconds after an event occurs before executing the hook.",
-                "default": 100,
-                "minimum": 0
+              "dirBatch": {
+                "type": "object",
+                "description": "How events are collected into folder events.",
+                "properties": {
+                  "waitMillisecond": {
+                    "type": "integer",
+                    "description": "Quiet time in milliseconds after the last event before collected folder events are sent. 0 uses the default.",
+                    "default": 100,
+                    "minimum": 0
+                  },
+                  "maxWaitMillisecond": {
+                    "type": "integer",
+                    "description": "Longest time in milliseconds that folder events are collected. 0 uses the default.",
+                    "default": 1000,
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
               },
-              "watchSubDir": {
-                "type": "boolean",
-                "description": "Whether to monitor subdirectories.",
-                "default": true
-              },
-              "watchFileEvent": {
-                "type": "string",
-                "description": "File events that run the hook (C: create or move in, U: update, D: delete or move away), or none. watchFileEvent and watchDirEvent cannot both be none.",
-                "default": "CUD",
-                "pattern": "^(none|[CUD]+)$",
-                "examples": ["CUD", "CU", "none"]
-              },
-              "watchDirEvent": {
-                "type": "string",
-                "description": "Folder events that run the hook (C: create or move in, D: delete or move away), or none. A folder event stands for the folder and everything in it.",
-                "default": "CD",
-                "pattern": "^(none|[CD]+)$",
-                "examples": ["CD", "D", "none"]
-              },
-              "dirEventWaitMillisecond": {
-                "type": "integer",
-                "description": "Quiet time in milliseconds after the last event before collected folder events are sent. 0 uses the default.",
-                "default": 100,
-                "minimum": 0
-              },
-              "dirEventMaxWaitMillisecond": {
-                "type": "integer",
-                "description": "Longest time in milliseconds that folder events are collected. 0 uses the default.",
-                "default": 1000,
-                "minimum": 0
+              "hookBatch": {
+                "type": "object",
+                "description": "How long the hook waits for more events before it runs.",
+                "properties": {
+                  "waitMillisecond": {
+                    "type": "integer",
+                    "description": "Wait time in milliseconds after an event occurs before executing the hook. 0 uses the default.",
+                    "default": 100,
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
               },
               "noWait": {
                 "type": "boolean",

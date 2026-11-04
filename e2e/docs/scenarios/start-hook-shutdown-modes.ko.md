@@ -16,7 +16,7 @@
 ## 설정
 
 - 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
-- 대상 옵션은 하위 테스트별 `noWait`·`interruptible`과 `waitMillisecond: 10`, `watchFileEvent: C`, `exclude: ['*.probe']`입니다. 종료 hook은 설정하지 않습니다.
+- 대상 옵션은 하위 테스트별 `noWait`·`interruptible`과 `hookBatch.waitMillisecond: 10`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다. 종료 hook은 설정하지 않습니다.
 
 ## 하위 테스트
 

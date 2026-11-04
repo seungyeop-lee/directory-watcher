@@ -17,7 +17,7 @@
 
 ### Handle bursts of changes
 
-- By default, a burst of events runs the hook once, `waitMillisecond` (100 ms by default) after the last event.
+- By default, a burst of events runs the hook once, `hookBatch.waitMillisecond` (100 ms by default) after the last event.
 - With `noWait: true`, every event runs the hook, in the order the events were received.
 - Each target holds at most 256 pending events. Instead of growing without bound, the watcher stops when a target's queue is full.
 
@@ -137,7 +137,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 3. Change a file under `src`. `make test` runs 100 ms after the last change.
 
-- **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
+- **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `watch.exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option.watch`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
 - **Stop:** press Ctrl+C or send SIGTERM. The watcher cancels running commands, runs the finish commands, and exits.
 - **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, folder events, excluding paths, overlapping target paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
 
@@ -157,10 +157,10 @@ flowchart TD
         excludeCheck{"Excluded path?"}
         collectChoice{"Folder created or deleted,<br>or file deleted in a subfolder?"}
         collectFolder["Collect the target's events<br>and absorb those inside the folder"]
-        kindFilter{"Event type chosen in<br>watchFileEvent or watchDirEvent?"}
+        kindFilter{"Event type chosen in<br>watch.fileEvent or watch.dirEvent?"}
         queueEvent{"Room in the target's<br>256-event queue?"}
         modeChoice{"noWait?"}
-        debounceWait["Wait waitMillisecond after the last event<br>and keep only that event"]
+        debounceWait["Wait hookBatch.waitMillisecond after the last event<br>and keep only that event"]
         orderedRun["Take events in received order"]
         interruptChoice{"interruptible?"}
         cancelPrevious["Cancel the running commands<br>and wait for them to exit"]
@@ -176,7 +176,7 @@ flowchart TD
     excludeCheck -->|"no"| collectChoice
     collectChoice -->|"yes, or already collecting"| collectFolder
     collectChoice -->|"no"| kindFilter
-    collectFolder -->|"dirEventWaitMillisecond with no event,<br>or dirEventMaxWaitMillisecond"| kindFilter
+    collectFolder -->|"dirBatch.waitMillisecond with no event,<br>or dirBatch.maxWaitMillisecond"| kindFilter
     kindFilter -->|"no: ignore"| receiveEvent
     kindFilter -->|"yes"| queueEvent
     queueEvent -->|"no"| fatalStop

@@ -18,7 +18,7 @@
 
 - The target `onChange` is `hookrec --delay=80ms --line=DONE:{{.Path}}`. It records `BEGIN|PID|DONE:<path>` when it starts, `DONE:<path>` after 80ms, and `CANCEL|PID|DONE:<path>` if it is cancelled before that.
 - The target `onFinishWatch` records `FINISH`.
-- The target options are the per-subtest `noWait` and `interruptible`, plus `waitMillisecond: 30`, `watchFileEvent: CU`, and `exclude: ['*.probe', '*.swp']`.
+- The target options are the per-subtest `noWait` and `interruptible`, plus `hookBatch.waitMillisecond: 30`, `watch.fileEvent: CU`, and `watch.exclude: ['*.probe', '*.swp']`.
 
 ## Subtests
 

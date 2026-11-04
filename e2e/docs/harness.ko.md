@@ -52,7 +52,7 @@
 ## 새 시나리오 작성
 
 1. `scenarios/`에 새 `*_test.go`를 만들고(`package scenarios`, `harness` 패키지 import) 설정·입력 순서·성공 조건을 작성합니다. 특정 OS 전용 build tag는 해당 OS에서 실제로 실행해 원인을 확인한 경우에만 붙입니다.
-2. `s := harness.NewScenario(t)`로 실행을 만들고, 설정 YAML의 hook 명령은 `s.Hook("--line=...")`으로 조립합니다. hook 명령은 기본 셸(sh, cmd)이 해석합니다. `Hook`은 템플릿이 없는 인자를 큰따옴표로 감싸고, 템플릿이 든 인자는 값이 인자 하나로 넘어가도록 감싸지 않으므로, 템플릿이 든 인자에는 `|`나 `&`처럼 셸이 해석하는 문자를 넣지 않습니다. 설정에 `exclude: ['*.probe']`를 넣고 `s.Start(config)`를 호출합니다. `Start`는 DEBUG 로그에서 제외된 probe 파일의 실제 이벤트를 관찰해 감시 준비를 확인합니다. 기본 ERROR 로그 수준을 검증하려면 `s.Launch(harness.WatcherBin(), config)`로 실행하고 시작 hook 기록으로 준비를 확인합니다. 고정 sleep은 준비·완료 판정에 쓰지 않습니다.
+2. `s := harness.NewScenario(t)`로 실행을 만들고, 설정 YAML의 hook 명령은 `s.Hook("--line=...")`으로 조립합니다. hook 명령은 기본 셸(sh, cmd)이 해석합니다. `Hook`은 템플릿이 없는 인자를 큰따옴표로 감싸고, 템플릿이 든 인자는 값이 인자 하나로 넘어가도록 감싸지 않으므로, 템플릿이 든 인자에는 `|`나 `&`처럼 셸이 해석하는 문자를 넣지 않습니다. 설정의 `option.watch`에 `exclude: ['*.probe']`를 넣고 `s.Start(config)`를 호출합니다. `Start`는 DEBUG 로그에서 제외된 probe 파일의 실제 이벤트를 관찰해 감시 준비를 확인합니다. 기본 ERROR 로그 수준을 검증하려면 `s.Launch(harness.WatcherBin(), config)`로 실행하고 시작 hook 기록으로 준비를 확인합니다. 고정 sleep은 준비·완료 판정에 쓰지 않습니다.
 3. `s.Write`로 행동하고, 기록 개수 대신 기다리는 hook·경로·세대를 `s.AwaitLine`, `s.AwaitReadyGenerations`, `s.Await`의 조건으로 지정합니다. 정확한 개수·순서는 대기 뒤 테스트에서 직접 검사합니다.
 4. `s.Stop()`으로 정상 종료와 종료 코드 0을 검사한 뒤 프로세스 기록을 판정합니다. 시나리오 정리의 강제 종료는 테스트가 끝난 뒤 실행되며 정상 종료 증거가 아닙니다.
 
@@ -65,8 +65,9 @@ func TestCreateAnotherFile(t *testing.T) {
       onChange:
         - %s
     option:
-      watchFileEvent: C
-      exclude: ['*.probe']
+      watch:
+        exclude: ['*.probe']
+        fileEvent: C
 `, s.Watch, s.Hook("--line=CHANGE:{{.Name}}")))
 	s.Write(filepath.Join(s.Watch, "another.txt"), nil)
 	s.AwaitLine("create hook", 10*time.Second, "CHANGE:another.txt")
