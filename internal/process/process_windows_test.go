@@ -26,6 +26,7 @@ const breakSignalExit = 3
 // TestBreakSignalProcess는 hook 대신 실행되는 Go 프로그램이다. CTRL+BREAK를 받으면 breakSignalExit로 끝난다.
 // DW_BREAK_SIGNAL_RECORD가 있으면 그 파일에 시작과 신호 수신을 pid와 함께 한 줄씩 덧붙이고,
 // DW_BREAK_SIGNAL_IGNORE=1이면 신호를 받아도 끝나지 않는다.
+// DW_BREAK_SIGNAL_CHILD=1이면 minRunBeforeBreak가 지난 뒤 자기 사본을 자식으로 시작하고 나서 ready를 쓴다.
 func TestBreakSignalProcess(t *testing.T) {
 	if os.Getenv("DW_BREAK_SIGNAL_HELPER") != "1" {
 		return
@@ -43,6 +44,14 @@ func TestBreakSignalProcess(t *testing.T) {
 		}
 	}
 	record("start")
+	if os.Getenv("DW_BREAK_SIGNAL_CHILD") == "1" {
+		time.Sleep(minRunBeforeBreak)
+		child := exec.Command(os.Args[0], "-test.run=^TestBreakSignalProcess$")
+		child.Env = append(os.Environ(), "DW_BREAK_SIGNAL_CHILD=")
+		if err := child.Start(); err != nil {
+			os.Exit(2)
+		}
+	}
 	os.Stdout.WriteString("ready\n")
 	timeout := time.After(30 * time.Second)
 	for {
@@ -183,6 +192,32 @@ func TestRunCommandSendsBreakAgainToProgramStartedAfterBreak(t *testing.T) {
 	}
 	if sent := sentAt(); len(sent) != 2 {
 		t.Fatalf("CTRL+BREAK sent %d times, want once per program", len(sent))
+	}
+	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
+}
+
+// 자손을 막 시작한 hook이 취소되면, 그 자손도 시작 후 minRunBeforeBreak가 지난 뒤에 CTRL+BREAK를 한 번 받고 끝나야 한다.
+func TestRunCommandDelaysBreakRightAfterDescendantStart(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "record")
+	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
+	t.Setenv("DW_BREAK_SIGNAL_CHILD", "1")
+	ctx := NewWatcherContext("").NewRun()
+	cmd, sentAt := breakSignalHook(t, ctx)
+	done := runUntilReady(t, ctx, cmd)
+	canceled := time.Now()
+	ctx.Cancel()
+	select {
+	case <-done:
+	case <-time.After(breakGrace / 2):
+		t.Fatal("canceled hook and the program it just started did not end on CTRL+BREAK")
+	}
+
+	events := recordedEvents(t, record)
+	if !slices.Equal(events, []string{"start", "start", "signal", "signal"}) {
+		t.Fatalf("recorded %v, want both programs to start and get CTRL+BREAK", events)
+	}
+	if sent := sentAt(); len(sent) != 1 {
+		t.Fatalf("CTRL+BREAK sent %d times, want once", len(sent))
 	}
 	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
 }

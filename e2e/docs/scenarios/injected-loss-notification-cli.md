@@ -11,8 +11,7 @@
 
 Every subtest checks the following.
 
-- Before the injection, a hook process tree that has finished starting and has not received a shutdown signal is running, and the process records stay unchanged for 200ms. The test waits up to 30 seconds for this.
-  - On Windows, when a tree is canceled while it is still starting, a descendant that starts after the signal does not receive it, and the next tree starts only after the watcher forcibly ends the tree 20 seconds after canceling it.
+- Before the injection, a hook process tree that has finished starting and has not received a shutdown signal is running, and the process records stay unchanged for 200ms. The test waits up to 10 seconds for this.
 - The watcher exits with exit code 1 within 10 seconds of the marker file appearing.
 - The default ERROR-level log contains `watch target "<watch folder>": <first error>` and has no DEBUG `event:` line.
 - The log does not contain the second injected error, `later injected error must not replace the first`.
@@ -76,7 +75,7 @@ sequenceDiagram
     watchDir-->>watcherProc: create events
     watcherProc->>hookRec: onChange process trees (per deliver and interrupt)
     testCode->>watchDir: pause file creation
-    testCode->>recordFile: wait for a running tree with no signal record and 200ms without record changes (up to 30s)
+    testCode->>recordFile: wait for a running tree with no signal record and 200ms without record changes (up to 10s)
     testCode->>watchDir: write dw-e2e-error.swp, rename to dw-e2e-error.inject
     watcherProc->>watcherProc: injection point sends the first and second errors to the watcher error channel
     alt loss error

@@ -153,6 +153,7 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
 - 종료 신호는 실행 중인 시작·변경 실행을 모두 취소하고, 대기 변경을 버리고, 이벤트 처리와 취소한 실행이 모두 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
 - Windows에서 취소된 hook은 CTRL+BREAK를 받고, `cmd`에서 `a & b`의 다음 프로그램처럼 hook이 취소 뒤에 시작한 프로그램도 CTRL+BREAK를 받습니다. 첫 CTRL+BREAK 뒤 20초가 지나도 실행 중인 hook의 프로세스는 함께 끝내며, 신호를 무시하거나 자기만의 콘솔이나 프로세스 그룹을 쓰는 프로세스도 여기서 끝납니다. 교체와 종료는 hook의 프로세스가 모두 끝날 때까지 기다리므로, 일부 `powershell` hook처럼 CTRL+BREAK로 끝나지 않는 hook은 교체와 종료를 최대 20초 늦춥니다.
 - Windows에서 시작한 지 100ms가 지나기 전에 취소된 hook은 시작 후 100ms가 지났을 때 CTRL+BREAK를 받으므로, hook이 시작된 직후의 교체와 종료는 최대 100ms 늦어집니다.
+  - hook이 프로그램을 시작한 지 100ms가 지나기 전에 취소되어도, hook과 그 프로그램은 프로그램이 시작된 뒤 100ms가 지났을 때 CTRL+BREAK를 받습니다.
 - Windows에서 취소되지 않고 끝난 hook이 시작한 프로세스는 계속 실행됩니다.
 - Windows E2E가 취소된 hook의 종료에 대해 확인하는 내용은 [Windows E2E](../../e2e/docs/windows.ko.md#hook-취소-검증)에 있습니다.
 - 파일 조작과 OS 알림은 일대일이 아닙니다. Linux와 Windows는 OS 이벤트 overflow를 보고하며, 이때도 전달 대기열이 가득 찼을 때처럼 처리를 중단합니다. macOS는 overflow를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. 실제 관찰한 Linux overflow와 Windows 백엔드 계약을 구분한 [E2E 시나리오와 한계](../../e2e/docs/reliability.ko.md#경합과-과부하-검증)를 확인하세요.

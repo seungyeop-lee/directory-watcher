@@ -117,18 +117,25 @@ func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(job windows.Handle)) {
 }
 
 // stopJob은 send로 CTRL+BREAK를 보내고 job의 프로세스가 모두 끝날 때까지 기다린 뒤, 첫 send의 오류를 돌려준다.
-// CTRL+BREAK는 보낸 순간 프로세스 그룹에 있던 프로세스에만 가므로, cmd.exe가 명령 목록의 다음 프로그램을
-// 시작하는 것처럼 그 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다. 들어온 프로세스가 minRunBeforeBreak만큼
-// 실행된 뒤에 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상 종료하는 프로그램에는 두 번째
-// 신호가 가지 않는다. 첫 신호 뒤 breakGrace가 지나도 남은 프로세스는 job과 함께 끝낸다. 막 시작한 Go 프로그램처럼
-// 신호를 받지 못한 프로세스와 PowerShell처럼 신호로 끝나지 않는 프로세스가 여기서 끝난다. Windows PowerShell은
-// 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지 않고 디버거로 들어가며, 표준 입력이 콘솔이면 거기서 입력을 기다린다.
+// 만들어진 지 minRunBeforeBreak가 지나지 않은 프로세스는 CTRL+BREAK를 받지 못하거나 0xC0000005로 끝나기도 하므로,
+// 첫 신호는 job에서 가장 늦게 만들어진 프로세스가 minRunBeforeBreak만큼 실행된 뒤에 보낸다. CTRL+BREAK는 보낸 순간
+// 프로세스 그룹에 있던 프로세스에만 가므로, cmd.exe가 명령 목록의 다음 프로그램을 시작하는 것처럼 첫 신호를 기다리는
+// 동안이나 보낸 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다. 들어온 프로세스가 minRunBeforeBreak만큼 실행된 뒤에
+// 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상 종료하는 프로그램에는 두 번째 신호가 가지 않는다.
+// 첫 신호 뒤 breakGrace가 지나도 남은 프로세스는 job과 함께 끝낸다. 신호를 받지 못한 프로세스와 PowerShell처럼
+// 신호로 끝나지 않는 프로세스가 여기서 끝난다. Windows PowerShell은 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지
+// 않고 디버거로 들어가며, 표준 입력이 콘솔이면 거기서 입력을 기다린다.
 func stopJob(job windows.Handle, send func() error) error {
 	accounting, err := queryJob(job)
+	var lastCreated time.Time
+	if err == nil {
+		lastCreated, err = lastProcessCreation(job)
+	}
 	if err != nil {
 		return errors.Join(send(), err)
 	}
 	signaled := accounting.totalProcesses
+	time.Sleep(time.Until(lastCreated.Add(minRunBeforeBreak)))
 	sendErr := send()
 	deadline := time.Now().Add(breakGrace)
 	joined, lastJoin := signaled, time.Time{}
@@ -153,6 +160,46 @@ func stopJob(job windows.Handle, send func() error) error {
 		}
 		time.Sleep(jobPollInterval)
 	}
+}
+
+// jobProcessIDList는 JOBOBJECT_BASIC_PROCESS_ID_LIST다. 목록 크기는 hook 하나가 동시에 실행하는 프로세스 수보다
+// 넉넉하게 잡았다.
+type jobProcessIDList struct {
+	assigned, listed uint32
+	ids              [256]uintptr
+}
+
+// procQueryInformationJobObject는 프로세스 목록을 받을 때 windows.QueryInformationJobObject 대신 쓴다. 그 함수는
+// 결과 버퍼를 uintptr로 받으므로, 버퍼가 스택에 있으면 호출하는 사이에 스택이 옮겨져 커널이 옛 주소에 쓸 수 있다.
+// UTM의 Windows 11 ARM64 VM에서 스택에 둔 목록을 그 함수로 받았을 때는 첫 신호가 늦춰지지 않았다. LazyProc.Call은
+// uintptr로 바꾼 포인터의 대상을 힙에 두게 한다.
+var procQueryInformationJobObject = windows.NewLazySystemDLL("kernel32.dll").NewProc("QueryInformationJobObject")
+
+// lastProcessCreation은 job에서 실행 중인 프로세스 가운데 가장 늦게 만들어진 프로세스의 생성 시각을 돌려준다.
+// 생성 시각을 읽기 전에 끝난 프로세스는 건너뛴다. 프로세스가 목록 크기보다 많으면 목록에 담기지 않은 프로세스가
+// 방금 만들어졌다고 보고 지금 시각을 돌려준다.
+func lastProcessCreation(job windows.Handle) (time.Time, error) {
+	var list jobProcessIDList
+	if ok, _, err := procQueryInformationJobObject.Call(uintptr(job), windows.JobObjectBasicProcessIdList, uintptr(unsafe.Pointer(&list)), unsafe.Sizeof(list), 0); ok == 0 {
+		if errors.Is(err, windows.ERROR_MORE_DATA) {
+			return time.Now(), nil
+		}
+		return time.Time{}, fmt.Errorf("list job processes: %w", err)
+	}
+	var last time.Time
+	for _, pid := range list.ids[:list.listed] {
+		process, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+		if err != nil {
+			continue
+		}
+		var creation, exit, kernel, user windows.Filetime
+		err = windows.GetProcessTimes(process, &creation, &exit, &kernel, &user)
+		_ = windows.CloseHandle(process)
+		if created := time.Unix(0, creation.Nanoseconds()); err == nil && created.After(last) {
+			last = created
+		}
+	}
+	return last, nil
 }
 
 func resumeProcess(pid int) error {

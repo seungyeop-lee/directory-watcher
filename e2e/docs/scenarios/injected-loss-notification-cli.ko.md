@@ -11,8 +11,7 @@
 
 모든 하위 테스트에서 다음 조건을 확인합니다.
 
-- 주입하기 전에, 준비를 마쳤고 종료 신호를 받지 않은 hook 프로세스 트리가 돌고 있고, 프로세스 기록이 200ms 동안 바뀌지 않습니다. 테스트는 이 상태를 30초까지 기다립니다.
-  - Windows에서 시작하는 도중인 트리를 취소하면 신호 뒤에 시작한 자손은 신호를 받지 못하고, watcher가 취소 20초 뒤 그 트리를 강제로 끝낸 다음에야 다음 트리가 시작합니다.
+- 주입하기 전에, 준비를 마쳤고 종료 신호를 받지 않은 hook 프로세스 트리가 돌고 있고, 프로세스 기록이 200ms 동안 바뀌지 않습니다. 테스트는 이 상태를 10초까지 기다립니다.
 - 표지 파일이 생긴 뒤 10초 안에 watcher가 종료 코드 1로 끝납니다.
 - 기본 ERROR 수준 로그에 `watch target "<감시 폴더>": <첫 오류>`가 있고, DEBUG 로그의 `event:` 줄은 없습니다.
 - 로그에 두 번째로 주입한 오류 `later injected error must not replace the first`가 없습니다.
@@ -76,7 +75,7 @@ sequenceDiagram
     watchDir-->>watcherProc: 생성 이벤트
     watcherProc->>hookRec: onChange 프로세스 트리 (deliver와 interrupt에 따라)
     testCode->>watchDir: 파일 생성 일시 중지
-    testCode->>recordFile: signal 기록이 없는 실행 중 트리와 200ms 동안 기록 변화 없음 대기 (최대 30초)
+    testCode->>recordFile: signal 기록이 없는 실행 중 트리와 200ms 동안 기록 변화 없음 대기 (최대 10초)
     testCode->>watchDir: dw-e2e-error.swp 작성 후 dw-e2e-error.inject로 이름 변경
     watcherProc->>watcherProc: 주입 지점이 watcher 오류 채널로 첫 오류와 두 번째 오류 전달
     alt 유실 오류

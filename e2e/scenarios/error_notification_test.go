@@ -402,12 +402,10 @@ watchTargets:
 	s.Await("thirty files created during the slow hooks", 5*time.Second, func() bool { return produced.Load() >= 30 })
 	// interrupt=oldest에서는 생성을 멈춘 뒤에도 받아 둔 이벤트가 돌고 있는 트리를 취소하므로, 프로세스 기록이 200ms 동안
 	// 바뀌지 않고 취소되지 않은 트리가 돌 때 오류를 주입한다. 그러면 치명적 오류로 멈출 때 다 만들어진 트리만 취소된다.
-	// Windows에서 만드는 도중인 트리를 취소하면 신호 뒤에 시작한 자손은 신호를 받지 못해, watcher가 취소 20초 뒤 강제로
-	// 끝낼 때까지 다음 트리가 시작하지 않는다. 그래서 30초까지 기다린다.
 	paused.Store(true)
 	var running []harness.ProcessRecord
 	recordCount, changed := -1, time.Now()
-	s.Await("a hook process tree running uncanceled with records unchanged for 200ms", 30*time.Second, func() bool {
+	s.Await("a hook process tree running uncanceled with records unchanged for 200ms", 10*time.Second, func() bool {
 		records := s.ProcessRecords()
 		if len(records) != recordCount {
 			recordCount, changed = len(records), time.Now()
