@@ -20,7 +20,7 @@ func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: recursive, WatchFileEvent: domain.WatchEvent{Create: true}},
+				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: recursive, WatchFileEvent: domain.WatchEvent{Create: true}},
 			}, newMockLogger())
 			assertWatchDirectoriesRemovable(t, r)
 			stop := func() {
@@ -73,7 +73,7 @@ func TestWatchSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: watchSubDir, WatchFileEvent: domain.WatchEvent{Create: true}},
+				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: watchSubDir, WatchFileEvent: domain.WatchEvent{Create: true}},
 			}, newMockLogger())
 			assertWatchDirectoriesRemovable(t, r)
 			stop := func() {

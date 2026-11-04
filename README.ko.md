@@ -19,7 +19,7 @@
 
 - 기본 동작에서는 이벤트가 몰려도, 마지막 이벤트 뒤 `hookBatch.waitMillisecond`(기본 100ms)가 지나거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000ms)가 지나면 가장 나중에 바뀐 경로의 최종 변화로 hook을 한 번만 실행합니다.
 - `hookBatch.deliver: lastPerPath`로 설정하면 바뀐 경로마다 hook을 한 번씩 실행합니다. `hookBatch.deliver: each`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다. `hookBatch.waitMillisecond: 0`이면 기다리지 않고 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](USAGE.ko.md#hookbatch로-기다리고-합치기)에 있습니다.
-- 대상마다 대기 이벤트를 최대 256개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
+- 대상마다 대기 실행을 최대 `queue.size`(기본 2048)개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
 
 ### 오래 실행되는 프로세스 재시작하기
 
@@ -33,6 +33,7 @@
 ### 이벤트 유실 가능성 알림 받기
 
 - 대상의 대기열이 가득 차거나 OS가 이벤트 overflow를 보고하면, 선택 항목인 전역 `onError` 명령이 한 번 실행됩니다. 오류 정보는 `DW_ERROR_*` 환경 변수로 전달됩니다. 자세한 내용은 [이벤트 유실 알림](USAGE.ko.md#이벤트-유실-알림)을 확인하세요.
+- 대기열이 가득 차기 전에도, 대상의 대기 실행이 `queue.size`의 70%와 90%에 닿거나 다시 내려가면 선택 항목인 전역 `onQueueWarning` 명령이 실행됩니다. 경고 정보는 `DW_QUEUE_*` 환경 변수로 전달됩니다. 자세한 내용은 [대기열 용량과 경고](USAGE.ko.md#대기열-용량과-경고)를 확인하세요.
 
 ## 요구 사항
 
@@ -160,7 +161,8 @@ flowchart TD
         waitChoice{"hookBatch.waitMillisecond가<br>0인가?"}
         collectHook["hookBatch.waitMillisecond 동안 이벤트가 없거나<br>hookBatch.maxWaitMillisecond가 지날 때까지 모음"]
         mergeRuns["hookBatch.deliver에 따라 실행으로 합치고<br>watch.fileEvent나 watch.dirEvent에서 고른 종류만 남김"]
-        queueEvent{"대상의 256개 대기열에<br>자리가 있는가?"}
+        queueEvent{"대상의 queue.size 크기<br>대기열에 자리가 있는가?"}
+        queueWarning["전역 onQueueWarning,<br>이벤트 처리와 따로 실행"]
         interruptChoice{"interruptible?"}
         cancelPrevious["실행 중인 명령을 취소하고<br>끝나기를 기다림"]
         runChange["전역 onBeforeChange → onChange<br>→ 전역 onAfterChange"]
@@ -182,6 +184,7 @@ flowchart TD
     mergeRuns -->|"실행 없음: 무시"| receiveEvent
     mergeRuns -->|"실행마다"| queueEvent
     queueEvent -->|"아니오"| fatalStop
+    queueEvent -.->|"대기 실행이 70%나 90%에 닿거나<br>80%나 60% 아래로 내려감"| queueWarning
     queueEvent -->|"예"| interruptChoice
     interruptChoice -->|"true"| cancelPrevious
     interruptChoice -->|"false: 실행 중인 명령이 끝날 때까지 대기"| runChange
@@ -190,7 +193,7 @@ flowchart TD
 ```
 
 - 명령이 실행되는 동안에도 이벤트를 계속 받아 모으므로, `hookBatch`가 기다리는 시간이 끝날 때마다 그때 만든 실행이 대기열에 들어갑니다.
-- `hookBatch.waitMillisecond: 0`이면 폴더 이벤트를 위해 모은 이벤트는 watcher를 멈추지 않고 대기열에 자리가 날 때까지 기다립니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
+- 대기열에 자리가 없는 실행은 곧바로 watcher를 멈추며, 폴더 이벤트를 위해 모은 이벤트에서 만든 실행도 같습니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
 - `interruptible: false`에서는 대상 `onStartWatch`나 변경 명령이 실행되는 동안 들어온 이벤트가 그 명령이 끝날 때까지 대기열에서 기다립니다. `interruptible: true`에서는 실행 중인 대상 `onStartWatch`도 다음 변경이 취소합니다.
 - 한 번의 실행에 속한 명령은 차례대로 실행되며, 실패한 명령이 나오면 그 실행을 멈춥니다. 이 실패는 `[ERROR]` 로그로 남습니다. 자세한 내용은 사용 안내의 [`config.yml`](USAGE.ko.md#configyml)을 확인하세요.
 

@@ -15,8 +15,8 @@ go test -race ./...
 ### Scope of the internal tests
 
 - Controlled internal tests check, independently of the number of OS notifications, the exact order under `hookBatch.deliver: each`, the last valid path under `deliver: last`, separate runs for waits that end while a hook runs, excluded events, no replacement before cancellation completes, no runs after shutdown, and preservation of the first fatal error.
-- The per-target pending limit is 256 runs, with one running generation and one `hookBatch` wait at a time.
-- When the queue is full, the watcher exits with a loss error instead of growing the buffer or waiting without bound.
+- The per-target pending limit is `queue.size` runs (2048 by default), with one running generation and one `hookBatch` wait at a time. The tests that fill the queue set a small `queue.size` instead of relying on the default.
+- When the queue is full, the watcher exits with a loss error instead of growing the buffer or waiting for room, including for runs made from events collected for folder events.
 - Shutdown cancels and cleans up the queue rather than draining it.
 
 - The controlled-input runner tests keep the real fsnotify watcher and its watch registration and replace only the receive channel.

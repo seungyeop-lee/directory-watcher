@@ -60,7 +60,7 @@ func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 			path := tt.watchPath(t)
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: true, WatchFileEvent: domain.WatchEvent{Create: true}},
+				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchEvent{Create: true}},
 			}, newMockLogger())
 			t.Cleanup(func() {
 				var wg sync.WaitGroup
@@ -138,7 +138,7 @@ func TestDefaultExcludeChecksModifiedAndRemovedName(t *testing.T) {
 			}
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(path),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()},
+				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()},
 			}, newMockLogger())
 			t.Cleanup(func() {
 				var wg sync.WaitGroup
@@ -220,7 +220,7 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	}
 	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 		Path:   domain.Path(target),
-		Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: true, WatchFileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}},
+		Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}},
 	}, newMockLogger())
 	t.Cleanup(func() {
 		var wg sync.WaitGroup
@@ -274,7 +274,7 @@ func startExcludeRunner(t *testing.T, path string, option domain.WatchTargetsOpt
 		wg.Add(1)
 		r.Stop(&wg)
 	})
-	ready, events, done := make(chan struct{}), make(chan domain.Event, dispatchCapacity), make(chan error, 1)
+	ready, events, done := make(chan struct{}), make(chan domain.Event, testQueueSize), make(chan error, 1)
 	r.runStartHook = func() { close(ready) }
 	r.runChangeHook = func(event domain.Event) {
 		if onChange != nil {
@@ -339,6 +339,7 @@ func TestExcludedFolderStaysOutOfWatchList(t *testing.T) {
 				Deliver:         domain.DeliverEach,
 				DirEventWait:    100,
 				DirEventMaxWait: 1000,
+				QueueSize:       testQueueSize,
 				WatchSubDir:     true,
 				WatchFileEvent:  domain.WatchEvent{Create: true},
 				Exclude:         exclude,
@@ -394,7 +395,7 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 			target := t.TempDir()
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path:   domain.Path(target),
-				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent(), Exclude: tc.exclude},
+				Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent(), Exclude: tc.exclude},
 			}, newMockLogger())
 			t.Cleanup(func() {
 				var wg sync.WaitGroup
@@ -402,7 +403,7 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 				r.Stop(&wg)
 			})
 			events, _ := controlledSource(r)
-			changed := make(chan domain.Event, dispatchCapacity)
+			changed := make(chan domain.Event, testQueueSize)
 			r.runStartHook = func() {}
 			r.runChangeHook = func(event domain.Event) { changed <- event }
 			r.runFinishHook = func() {}
@@ -465,6 +466,7 @@ func TestHookOutputInExcludedPathDoesNotRerunHook(t *testing.T) {
 		Deliver:         domain.DeliverEach,
 		DirEventWait:    100,
 		DirEventMaxWait: 1000,
+		QueueSize:       testQueueSize,
 		WatchSubDir:     true,
 		WatchFileEvent:  domain.WatchAllEvent(),
 		Exclude:         domain.ExcludePatterns{"out.txt"},

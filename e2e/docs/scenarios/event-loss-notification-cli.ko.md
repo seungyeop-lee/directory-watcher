@@ -13,7 +13,7 @@
 모든 모드에서 다음 조건을 확인합니다.
 
 - watcher가 알림 정리를 포함해 28초 안에 종료 코드 1로 끝납니다.
-- 기본 ERROR 수준 로그에 `watch target "<감시 폴더>": dispatch queue full (capacity 256): fsnotify: queue or buffer overflow`와 `possible event loss`가 있고, DEBUG 로그의 `event:` 줄은 없습니다.
+- 기본 ERROR 수준 로그에 `watch target "<감시 폴더>": dispatch queue full (capacity 64): fsnotify: queue or buffer overflow`와 `possible event loss`가 있고, DEBUG 로그의 `event:` 줄은 없습니다.
 - 일반 hook 기록 `CHANGE`, `OTHER:CHANGE`, `BEFORE`, `START`가 하나도 없습니다. `START`는 30초 지연 시작 hook이므로 완료 전에 취소되어야 하고, 다른 대상의 변경 hook도 치명적 오류 뒤에는 승인되지 않아야 합니다.
 - 종료 hook 기록 `TARGET:FINISH`, `OTHER:FINISH`, `GLOBAL:FINISH`가 각각 정확히 한 번 있습니다.
 - 지연 시작 hook 프로세스와 기록된 알림 프로세스가 각각 5초 안에 사라집니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
@@ -24,7 +24,7 @@
 |---|---|
 | `DW_ERROR_TARGET` | 감시 폴더 경로 |
 | `DW_ERROR_KIND` | `event_loss` |
-| `DW_ERROR_CAUSE` | `dispatch queue full (capacity 256): fsnotify: queue or buffer overflow` |
+| `DW_ERROR_CAUSE` | `dispatch queue full (capacity 64): fsnotify: queue or buffer overflow` |
 | `DW_ERROR_MESSAGE` | `watch target "<감시 폴더>": <DW_ERROR_CAUSE 값>` |
 | `DW_ERROR_POSSIBLE_LOSS` | `true` |
 | `workdir` | 모드별 작업 디렉터리(아래 표) |
@@ -64,7 +64,7 @@
 | 위치 | hook과 옵션 |
 |---|---|
 | 전역 | `onError`(모드별), `onBeforeChange`: `BEFORE`, `onFinishWatch`: `GLOBAL:FINISH` |
-| 대상 1: 감시 폴더 | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
+| 대상 1: 감시 폴더 | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `queue.size: 64`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
 | 대상 2: 실행 폴더의 `other` | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C` |
 
 - watcher는 `Launch`로 기본 ERROR 로그 수준에서 실행합니다.
@@ -92,7 +92,7 @@ sequenceDiagram
         testCode->>watchDir: load-NNNN.txt를 1ms 간격으로 최대 1000개 생성
     and watcher
         watchDir-->>watcherProc: 생성 이벤트
-        Note over watcherProc: 대기 이벤트 256개 초과로 치명적 오류
+        Note over watcherProc: 대기 이벤트 64개 초과로 치명적 오류
         watcherProc->>notifyTree: onError 한 번 실행 (absent는 설정 없음)
         notifyTree->>recordFile: 환경 변수의 오류 정보를 ERROR 알림으로 기록
     end

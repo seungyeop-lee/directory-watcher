@@ -65,6 +65,8 @@ global:
       [ Same specification as global onStartWatch hook ]
     onError: # optional global event-loss notification
       [ Same specification as global onStartWatch hook ]
+    onQueueWarning: # optional global warning that a target's queue is filling up
+      [ Same specification as global onStartWatch hook ]
 watchTargets:
   - path: [ path of the directory to monitor ]
     lifeCycle:
@@ -88,6 +90,8 @@ watchTargets:
         waitMillisecond: [ quiet time after the last event before the collected events become runs, 0 does not wait, default is 100 ]
         maxWaitMillisecond: [ longest time events are collected, not less than waitMillisecond, default is 1000 ]
         deliver: [ runs made from the collected events (last, lastPerPath, each), default is last ]
+      queue: # runs waiting for the hook
+        size: [ most runs that can wait, at least 1, default is 2048 ]
       interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
 
@@ -118,7 +122,7 @@ command <command>: <error>
 
 ### Shell that runs hook commands
 
-- Every hook command runs in the shell selected by `shell`: global hooks, target hooks, `onError`, structured `cmd`, and each entry of a command list.
+- Every hook command runs in the shell selected by `shell`: global hooks, target hooks, `onError`, `onQueueWarning`, structured `cmd`, and each entry of a command list.
 - Quotes, variable expansion, command substitution, `&&`, and redirection follow that shell's rules, and a command that ends with a nonzero exit code is a failure.
 
 | `shell` | How it runs | Available on | Reference that replaces `{{.Path}}` |
@@ -156,7 +160,7 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 
 ### Command execution location
 
-| dir | global onStartWatch, global onFinishWatch, global onError | Other hooks |
+| dir | global onStartWatch, global onFinishWatch, global onError, global onQueueWarning | Other hooks |
 |-----|-------------------------------------------|-------------------------|
 | O   | Specified dir location                    | Specified dir location  |
 | X   | Program execution location                | Specified path location |
@@ -164,7 +168,7 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 - Just before a command runs, its working directory is checked.
 - If the working directory does not exist or is not a directory, the command does not run and the remaining commands of that hook are skipped, as for any other failed command.
 - The failure log then carries the working directory in place of `<error>`, in the form below.
-  - In the failure log of global `onError`, `onError notification failed: ` is followed by `command <command>: ` and this text.
+  - In the failure log of global `onError` and global `onQueueWarning`, `onError notification failed: ` or `onQueueWarning notification failed: ` is followed by `command <command>: ` and this text.
 
 ```text
 working directory <working directory>: <cause>
@@ -268,6 +272,7 @@ Move each version 2 option as follows:
   - A file created and deleted within one wait ran the hook with `D` in version 2 and runs no hook in version 3.
   - A file whose create event the watcher missed reaches the hook as `C` instead of `U`.
 - Version 2 kept waiting while events kept arriving. Version 3 runs the hook at most `hookBatch.maxWaitMillisecond` (default 1000) after the first event.
+- Version 2 left events that arrived while a hook ran waiting in the OS. Version 3 keeps reading them and holds at most `queue.size` (default 2048) runs per target waiting for the hook. A run that does not fit stops the watcher, as described in [Queue size and warnings](#queue-size-and-warnings).
 
 ## Renamed and moved files
 
@@ -363,10 +368,53 @@ Error context is passed as environment variables, never interpolated into comman
   - On Windows, if the watcher cannot prepare a notification command so that these processes can be ended, that command does not run and the failure is logged.
 - Processes started by normal hooks are ended only when the hook is canceled ([Overload and shutdown](#overload-and-shutdown)).
 
+## Queue size and warnings
+
+- The runs of a target wait in the target's queue until its hooks run them. `option.queue.size` (default 2048) is the most runs that can wait; the run in progress does not count.
+- A run that does not fit stops processing with `dispatch queue full (capacity <size>)` and runs global `onError` once, as described in [Event-loss notification](#event-loss-notification).
+  - The watcher does not wait for room in the queue. This also holds for the runs made from events collected for [folder events](#folder-events), which can arrive many at once.
+
+If `queue.size` is less than 1, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
+
+```text
+Error: watchTargets[0].option.queue: size 0 is less than 1
+```
+
+`global.lifeCycle.onQueueWarning` is optional and uses the same command list and structured `dir`/`cmd` format as other hooks. It runs when the number of runs waiting in a target's queue moves between three states:
+
+| Change | Runs when the waiting runs | `DW_QUEUE_LEVEL` | `DW_QUEUE_DIRECTION` |
+|---|---|---|---|
+| Normal to warning | reach 70% of `queue.size` | `70` | `up` |
+| Warning to danger | reach 90% of `queue.size` | `90` | `up` |
+| Danger to warning | fall below 80% of `queue.size` | `90` | `down` |
+| Warning to normal | fall below 60% of `queue.size` | `70` | `down` |
+
+- A state is left only 10 percentage points below the point where it was entered, so a count that moves up and down around 70% or 90% does not repeat the same warning.
+- If one run passes two points, as with a very small `queue.size`, both warnings happen in order.
+- The warning hook runs apart from event handling: events are still received and hooks still run while it runs.
+- If warnings happen while the warning hook is still running for the same target, only the latest one is kept, and it runs after the current run ends. Each target keeps its own latest warning, so warning hooks of different targets can run at the same time.
+- Each run of the warning hook has the same limits as `onError`: 5 seconds, followed by up to 20 seconds of cancellation cleanup.
+- A failure or timeout is logged as `onQueueWarning notification failed: <cause>` and does not stop watching.
+- A shutdown discards a kept warning and waits for a running warning hook to end.
+
+The warning is passed as environment variables:
+
+| Environment variable | Value |
+|----------------------|-------|
+| `DW_QUEUE_TARGET` | Watched target whose queue changed state |
+| `DW_QUEUE_LEVEL` | `70` or `90` |
+| `DW_QUEUE_DIRECTION` | `up` or `down` |
+| `DW_QUEUE_LENGTH` | Number of runs waiting when the state changed |
+| `DW_QUEUE_CAPACITY` | The target's `queue.size` |
+| `DW_QUEUE_TOP_PATHS` | Up to 5 paths with the most waiting runs, most first, one per line in the form `<count> <path>`. Paths with the same count keep the order they were queued in. Each path has the same form as `{{.Path}}`. |
+
+- `DW_QUEUE_TOP_PATHS` helps find a hook whose own output keeps running it again, as described in [Stopping a hook from rerunning itself](#stopping-a-hook-from-rerunning-itself).
+- Read the variables with the shell's syntax, as for `onError`. File-event template variables are not available for this hook.
+- A structured `dir` selects its working directory; without it, the command uses the program execution directory.
+
 ## Overload and shutdown
 
-- Each target keeps at most 256 pending runs and runs one run of its hooks at a time. `hookBatch.deliver: each` preserves received-event order; it does not become latest-only under load. Excluded paths neither make runs nor extend a wait. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the path that `deliver: last` runs.
-- With `hookBatch.waitMillisecond: 0`, events collected for [folder events](#folder-events) wait for room in the queue when they are sent, so sending them never stops processing with `dispatch queue full`. Other events, and the runs made at the end of a `hookBatch` wait, stop processing if the queue is full.
+- Each target keeps at most `queue.size` pending runs, as described in [Queue size and warnings](#queue-size-and-warnings), and runs one run of its hooks at a time. `hookBatch.deliver: each` preserves received-event order; it does not become latest-only under load. Excluded paths neither make runs nor extend a wait. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the path that `deliver: last` runs.
 - A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
 - A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
 - With `interruptible: true`, a new run starts only after the canceled previous run has ended. A shutdown signal cancels running start and change commands, discards pending changes, waits for event handling to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.

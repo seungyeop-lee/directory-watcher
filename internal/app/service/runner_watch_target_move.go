@@ -66,14 +66,14 @@ const renameHoldLimit = time.Second
 // 알리기도 하고, 둘 사이에 다른 이벤트가 끼거나 수십 ms가 걸리기도 한다. 다른 운영체제처럼 옛 경로의 삭제를
 // 먼저 넘기려고 Create를 미룬다. 옛 경로의 감시는 Rename을 처리하며 fsnotify가 풀므로, Rename을 받기 전에
 // 새 경로를 Add하면 fsnotify가 닫는 중인 감시와 겹칠 수 있다. 미루면 이 경합도 생기지 않는다.
-func (r *watchTargetRunner) receive(ev fsnotify.Event, events chan<- domain.Event) error {
+func (r *watchTargetRunner) receive(ev fsnotify.Event, events *runQueue) error {
 	r.held = append(r.held, ev)
 	return r.drainHeld(events, false)
 }
 
 // drainHeld는 미뤄 둔 이벤트를 앞에서부터 handleEvent로 넘긴다. timedOut이 true이면 맨 앞의 Create를 옛 경로의
 // Rename을 기다리지 않고 넘긴다.
-func (r *watchTargetRunner) drainHeld(events chan<- domain.Event, timedOut bool) error {
+func (r *watchTargetRunner) drainHeld(events *runQueue, timedOut bool) error {
 	for len(r.held) > 0 {
 		head := r.held[0]
 		if r.renameSource == "" && !timedOut && head.Op.Has(fsnotify.Create) {
@@ -105,7 +105,7 @@ func (r *watchTargetRunner) drainHeld(events chan<- domain.Event, timedOut bool)
 }
 
 // releaseHeld는 renameHoldLimit 안에 옛 경로의 Rename이 오지 않으면 미뤄 둔 이벤트를 받은 순서대로 넘긴다.
-func (r *watchTargetRunner) releaseHeld(events chan<- domain.Event) error {
+func (r *watchTargetRunner) releaseHeld(events *runQueue) error {
 	r.logger.Debug(fmt.Sprintf("rename of %s did not arrive in %v", r.renameSource, renameHoldLimit))
 	return r.drainHeld(events, true)
 }
@@ -196,7 +196,7 @@ func (r *watchTargetRunner) isUnreleased(name string) bool {
 }
 
 // releaseLeakedWatches는 감시를 풀지 못한 폴더가 watcher에 남았으면 watcher를 새로 만들어 버린다.
-func (r *watchTargetRunner) releaseLeakedWatches(events chan<- domain.Event) error {
+func (r *watchTargetRunner) releaseLeakedWatches(events *runQueue) error {
 	if err := r.rebuildIfLeaked(); err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func (r *watchTargetRunner) rebuildWatcher() error {
 //
 // 새 watcher는 폴더를 모두 넣은 뒤에 생긴 변경만 받으므로, 그 전의 변경은 예전 watcher의 이벤트로 넘긴다.
 // 새 watcher에 폴더를 넣은 뒤 예전 watcher를 닫기까지 생긴 변경은 hook에 두 번 갈 수 있다.
-func (r *watchTargetRunner) retireWatcher(events chan<- domain.Event) error {
+func (r *watchTargetRunner) retireWatcher(events *runQueue) error {
 	old := r.retiring
 	if old == nil {
 		return nil

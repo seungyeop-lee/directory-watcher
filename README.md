@@ -19,7 +19,7 @@
 
 - By default, a burst of events runs the hook once, for the final change of the path that changed last, `hookBatch.waitMillisecond` (100 ms by default) after the last event and at most `hookBatch.maxWaitMillisecond` (1000 ms by default) after the first.
 - With `hookBatch.deliver: lastPerPath`, the hook runs once for each changed path. With `hookBatch.deliver: each`, it runs for every event, in the order the events were received. `hookBatch.waitMillisecond: 0` runs the hook without waiting. See [Waiting and merging with hookBatch](USAGE.md#waiting-and-merging-with-hookbatch).
-- Each target holds at most 256 pending events. Instead of growing without bound, the watcher stops when a target's queue is full.
+- Each target holds at most `queue.size` (2048 by default) pending runs. Instead of growing without bound, the watcher stops when a target's queue is full.
 
 ### Restart long-running processes
 
@@ -33,6 +33,7 @@
 ### Get notified when events may be lost
 
 - When a target's queue fills up or the OS reports an event overflow, the optional global `onError` command runs once, with the details in `DW_ERROR_*` environment variables. See [Event-loss notification](USAGE.md#event-loss-notification).
+- Before a queue fills up, the optional global `onQueueWarning` command runs when the pending runs of a target reach 70% and 90% of `queue.size` and when they fall back, with the details in `DW_QUEUE_*` environment variables. See [Queue size and warnings](USAGE.md#queue-size-and-warnings).
 
 ## Requirements
 
@@ -160,7 +161,8 @@ flowchart TD
         waitChoice{"hookBatch.waitMillisecond<br>is 0?"}
         collectHook["Collect events until hookBatch.waitMillisecond<br>passes with no event or hookBatch.maxWaitMillisecond ends"]
         mergeRuns["Merge them into runs by hookBatch.deliver,<br>keeping types chosen in watch.fileEvent or watch.dirEvent"]
-        queueEvent{"Room in the target's<br>256-event queue?"}
+        queueEvent{"Room in the target's queue<br>of queue.size runs?"}
+        queueWarning["global onQueueWarning,<br>apart from event handling"]
         interruptChoice{"interruptible?"}
         cancelPrevious["Cancel the running commands<br>and wait for them to exit"]
         runChange["global onBeforeChange → onChange<br>→ global onAfterChange"]
@@ -182,6 +184,7 @@ flowchart TD
     mergeRuns -->|"no run: ignore"| receiveEvent
     mergeRuns -->|"each run"| queueEvent
     queueEvent -->|"no"| fatalStop
+    queueEvent -.->|"pending runs reach 70% or 90%,<br>or fall below 80% or 60%"| queueWarning
     queueEvent -->|"yes"| interruptChoice
     interruptChoice -->|"true"| cancelPrevious
     interruptChoice -->|"false: wait until the running commands finish"| runChange
@@ -190,7 +193,7 @@ flowchart TD
 ```
 
 - Events keep being received and collected while commands run, so each `hookBatch` wait that ends adds its runs to the queue.
-- With `hookBatch.waitMillisecond: 0`, events collected for folder events wait for room in the queue instead of stopping the watcher. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
+- A run that finds no room stops the watcher at once, including runs made from events collected for folder events. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
 - With `interruptible: false`, events that arrive while target `onStartWatch` or a change is running wait in the queue until it finishes. With `interruptible: true`, the next change cancels a running target `onStartWatch` too.
 - The commands of one run execute one after another, and the run stops at the first command that fails. The failure is logged as an `[ERROR]` line; see [`config.yml`](USAGE.md#configyml) in the usage guide.
 

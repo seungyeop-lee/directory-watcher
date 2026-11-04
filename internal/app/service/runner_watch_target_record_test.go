@@ -190,6 +190,7 @@ func TestRecordWithoutWatchSubDirHoldsOnlyDirectChildren(t *testing.T) {
 		Deliver:         domain.DeliverEach,
 		DirEventWait:    100,
 		DirEventMaxWait: 1000,
+		QueueSize:       testQueueSize,
 		WatchFileEvent:  domain.WatchAllEvent(),
 		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
 	})

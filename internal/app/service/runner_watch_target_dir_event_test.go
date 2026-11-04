@@ -1,15 +1,16 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
@@ -158,6 +159,7 @@ func TestFolderEventIsSentWithinMaxWaitDuringContinuousWrites(t *testing.T) {
 		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
 		DirEventWait:    100,
 		DirEventMaxWait: domain.Millisecond(maxWait / time.Millisecond),
+		QueueSize:       testQueueSize,
 	})
 	stop, writing := make(chan struct{}), make(chan struct{})
 	defer func() { close(stop); <-writing }()
@@ -204,7 +206,7 @@ func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
 	f := newRenameFixture(t)
 	f.fill("src/pkg", 5)
 	f.fill("../outside/x", 3)
-	f.startWith(domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()})
+	f.startWith(domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()})
 	f.mkdirAll("src/a/b")
 	f.write("src/a/b/c.txt")
 	f.move("../outside/x", "src/x")
@@ -227,6 +229,7 @@ func TestFolderEventWithoutWatchSubDir(t *testing.T) {
 		Deliver:         domain.DeliverEach,
 		DirEventWait:    100,
 		DirEventMaxWait: 1000,
+		QueueSize:       testQueueSize,
 		WatchFileEvent:  domain.WatchAllEvent(),
 		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
 	})
@@ -284,55 +287,35 @@ func (f *renameFixture) next() string {
 	return ""
 }
 
-// 폴더 이벤트를 모으는 동안 쌓인 이벤트가 대기열 용량보다 많아도, 내보낼 때 대기열이 넘쳐 감시가 멈추지 않는지
-// 확인한다. 폴더 안의 파일만 지우면 폴더 이벤트가 없어 파일 이벤트가 모두 hook에 간다.
-func TestBatchLargerThanQueueDoesNotOverflow(t *testing.T) {
-	const files = dispatchCapacity + 100
+// 폴더 이벤트를 모으는 동안 쌓인 이벤트로 만든 실행이 대기열 용량보다 많으면, 감시 루프는 대기열에 자리가 나기를
+// 기다리지 않고 dispatch queue full로 멈춘다. 폴더 안의 파일만 지우면 폴더 이벤트가 없어 파일 이벤트가 모두 실행이 된다.
+func TestBatchLargerThanQueueOverflows(t *testing.T) {
+	const queueSize, files = 50, 150
 	f := newRenameFixture(t)
 	f.fill("src", files)
-	var mu sync.Mutex
-	deleted := 0
+	release := make(chan struct{})
 	f.runner, f.changed, f.result = startExcludeRunner(t, f.target, domain.WatchTargetsOption{
 		Deliver:         domain.DeliverEach,
 		DirEventWait:    100,
 		DirEventMaxWait: 1000,
+		QueueSize:       queueSize,
 		WatchSubDir:     true,
 		WatchFileEvent:  domain.WatchAllEvent(),
 		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
-	}, newMockLogger(), func(ev domain.Event) {
-		if ev.Operation.String() == "D" {
-			mu.Lock()
-			deleted++
-			mu.Unlock()
-		}
-		// hook이 대기열을 비우는 속도를 늦춘다.
-		time.Sleep(time.Millisecond)
-	})
-	// startExcludeRunner의 hook 쪽 채널은 dispatchCapacity만큼만 받아 두므로 계속 비운다.
-	go func() {
-		for range f.changed {
-		}
-	}()
+	}, newMockLogger(), func(domain.Event) { <-release })
+	t.Cleanup(func() { close(release) })
 	for i := 0; i < files; i++ {
 		if err := os.Remove(f.path(fmt.Sprintf("src/f%d.txt", i))); err != nil {
 			t.Fatal(err)
 		}
 	}
-	deadline := time.After(10 * time.Second)
-	for {
-		mu.Lock()
-		n := deleted
-		mu.Unlock()
-		if n == files {
-			return
+	select {
+	case err := <-f.result:
+		if !errors.Is(err, fsnotify.ErrEventOverflow) || !strings.Contains(err.Error(), "dispatch queue full (capacity 50)") {
+			t.Fatalf("run stopped with %v, want dispatch queue full (capacity 50)", err)
 		}
-		select {
-		case err := <-f.result:
-			t.Fatalf("run stopped after %d deletions reached the hook: %v", n, err)
-		case <-deadline:
-			t.Fatalf("%d of %d deletions reached the hook", n, files)
-		case <-time.After(10 * time.Millisecond):
-		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("watch loop waited for room in the queue instead of stopping")
 	}
 }
 

@@ -64,6 +64,7 @@ type GlobalLifeCycleConfig struct {
 	OnAfterChange  config.CmdInfo `yaml:"onAfterChange"`
 	OnFinishWatch  config.CmdInfo `yaml:"onFinishWatch"`
 	OnError        config.CmdInfo `yaml:"onError"`
+	OnQueueWarning config.CmdInfo `yaml:"onQueueWarning"`
 }
 
 func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.GlobalLifeCycle, error) {
@@ -81,6 +82,7 @@ func (c GlobalLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.GlobalLif
 		OnAfterChange:  onAfterChange,
 		OnFinishWatch:  converter.NewCmdInfoConverter(c.OnFinishWatch, shell).Convert(),
 		OnError:        converter.NewCmdInfoConverter(c.OnError, shell).Convert(),
+		OnQueueWarning: converter.NewCmdInfoConverter(c.OnQueueWarning, shell).Convert(),
 	}, nil
 }
 
@@ -140,11 +142,12 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.Wat
 
 // WatchTargetsOptionConfig는 감시 대상 옵션을 처리 단계별 그룹으로 받는다. watch는 무엇을 감시할지,
 // dirBatch는 폴더 이벤트를 만들려고 이벤트를 모으는 방식, hookBatch는 hook을 실행하기 전에 이벤트를 모으고 합치는
-// 방식을 정한다.
+// 방식, queue는 hook 실행을 기다리는 대기열을 정한다.
 type WatchTargetsOptionConfig struct {
 	Watch         WatchOptionConfig     `yaml:"watch"`
 	DirBatch      DirBatchOptionConfig  `yaml:"dirBatch"`
 	HookBatch     HookBatchOptionConfig `yaml:"hookBatch"`
+	Queue         QueueOptionConfig     `yaml:"queue"`
 	Interruptible *bool                 `yaml:"interruptible"`
 
 	// Removed로 시작하는 필드는 v3에서 없애거나 그룹 안으로 옮긴 키를 받는다. yaml.Unmarshal은 모르는 키를 무시하므로,
@@ -177,8 +180,16 @@ type HookBatchOptionConfig struct {
 	Deliver            *string             `yaml:"deliver"`
 }
 
+// size는 적지 않은 것과 구별하려고 포인터로, 0 이하를 적은 것을 오류로 알리려고 부호 있는 정수로 받는다.
+type QueueOptionConfig struct {
+	Size *int `yaml:"size"`
+}
+
 // 기다리는 시간을 적지 않았을 때 쓰는 값이다.
 const defaultWaitMillisecond, defaultMaxWaitMillisecond config.Millisecond = 100, 1000
+
+// defaultQueueSize는 queue.size를 적지 않았을 때 쓰는 대기열 용량이다.
+const defaultQueueSize = 2048
 
 func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, error) {
 	const excludeSection, watchEventSection, optionsSection = "Moving from excludeDir and excludeSuffix", "Moving from watchEvent", "Moving from version 2 options"
@@ -222,6 +233,13 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 	if err != nil {
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.hookBatch.%w", err)
 	}
+	queueSize := defaultQueueSize
+	if c.Queue.Size != nil {
+		queueSize = *c.Queue.Size
+	}
+	if queueSize < 1 {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.queue: size %d is less than 1", queueSize)
+	}
 	return domain.WatchTargetsOption{
 		Exclude:            exclude,
 		WaitMillisecond:    wait,
@@ -232,6 +250,7 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 		WatchDirEvent:      dirEvent,
 		DirEventWait:       converter.NewMillisecondConverter(c.DirBatch.WaitMillisecond, defaultWaitMillisecond).Convert(),
 		DirEventMaxWait:    converter.NewMillisecondConverter(c.DirBatch.MaxWaitMillisecond, defaultMaxWaitMillisecond).Convert(),
+		QueueSize:          queueSize,
 		Interruptible:      converter.NewInterruptibleConverter(c.Interruptible).Convert(),
 	}, nil
 }

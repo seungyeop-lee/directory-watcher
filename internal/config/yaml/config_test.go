@@ -129,13 +129,14 @@ global:
     onAfterChange: [{dir: %q, cmd: [%s, %s]}]
     onFinishWatch: [%s]
     onError: [{dir: %q, cmd: %s}]
+    onQueueWarning: [{dir: %q, cmd: %s}]
 watchTargets:
   - path: %q
     lifeCycle:
       onStartWatch: [%s]
       onChange: [{dir: %q, cmd: [%s]}]
       onFinishWatch: [%s]
-`, shell, cmd("globalStart"), dir, cmd("before"), dir, cmd("after1"), cmd("after2"), cmd("globalFinish"), dir, cmd("error"),
+`, shell, cmd("globalStart"), dir, cmd("before"), dir, cmd("after1"), cmd("after2"), cmd("globalFinish"), dir, cmd("error"), dir, cmd("queueWarning"),
 		dir, cmd("targetStart"), dir, cmd("change"), cmd("targetFinish")))
 	global, target := commands.Global.LifeCycle, commands.WatchTargets[0].LifeCycle
 	event := &domain.Event{Path: domain.Path(filepath.Join(dir, "b.txt"))}
@@ -143,7 +144,7 @@ watchTargets:
 		hook  domain.Cmd
 		event *domain.Event
 	}{
-		{global.OnStartWatch, nil}, {global.OnBeforeChange, event}, {global.OnAfterChange, event}, {global.OnFinishWatch, nil}, {global.OnError, nil},
+		{global.OnStartWatch, nil}, {global.OnBeforeChange, event}, {global.OnAfterChange, event}, {global.OnFinishWatch, nil}, {global.OnError, nil}, {global.OnQueueWarning, nil},
 		{target.OnStartWatch, nil}, {target.OnChange, event}, {target.OnFinishWatch, nil},
 	}
 	ctx := helper.NewWatcherContext("config-test")
@@ -153,7 +154,7 @@ watchTargets:
 			t.Fatal(err)
 		}
 	}
-	for _, name := range []string{"globalStart", "before", "after1", "after2", "globalFinish", "error", "targetStart", "change", "targetFinish"} {
+	for _, name := range []string{"globalStart", "before", "after1", "after2", "globalFinish", "error", "queueWarning", "targetStart", "change", "targetFinish"} {
 		if got := readTrimmed(t, filepath.Join(dir, name+".txt")); got != want {
 			t.Errorf("%s ran in %q, want %q", name, got, want)
 		}
@@ -187,6 +188,7 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 		WatchDirEvent:      domain.WatchEvent{Create: true, Delete: true},
 		DirEventWait:       100,
 		DirEventMaxWait:    1000,
+		QueueSize:          2048,
 	}
 	with := func(change func(o *domain.WatchTargetsOption)) domain.WatchTargetsOption {
 		o := defaults
@@ -205,6 +207,7 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
       watch: {subDir: false, exclude: ['dist/**'], fileEvent: CU, dirEvent: D}
       dirBatch: {waitMillisecond: 300, maxWaitMillisecond: 5000}
       hookBatch: {waitMillisecond: 700, maxWaitMillisecond: 3000, deliver: lastPerPath}
+      queue: {size: 4096}
       interruptible: true`,
 			want: domain.WatchTargetsOption{
 				Exclude:            domain.ExcludePatterns{"dist/**"},
@@ -216,6 +219,7 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 				WatchDirEvent:      domain.WatchEvent{Delete: true},
 				DirEventWait:       300,
 				DirEventMaxWait:    5000,
+				QueueSize:          4096,
 				Interruptible:      true,
 			},
 		},
@@ -230,6 +234,11 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 			name:   "max wait equal to wait",
 			option: "{hookBatch: {waitMillisecond: 1000}}",
 			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond = 1000 }),
+		},
+		{
+			name:   "queue of one",
+			option: "{queue: {size: 1}}",
+			want:   with(func(o *domain.WatchTargetsOption) { o.QueueSize = 1 }),
 		},
 		{
 			name:   "deliver last",
@@ -277,6 +286,18 @@ func TestInvalidHookBatchOptionStopsBuild(t *testing.T) {
 			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      hookBatch:\n        " + tt.option + "\n"
 			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
 			if want := "watchTargets[1]." + tt.want; err == nil || err.Error() != want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestInvalidQueueSizeStopsBuild(t *testing.T) {
+	for _, size := range []string{"0", "-1"} {
+		t.Run(size, func(t *testing.T) {
+			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      queue:\n        size: " + size + "\n"
+			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+			if want := "watchTargets[1].option.queue: size " + size + " is less than 1"; err == nil || err.Error() != want {
 				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
 			}
 		})
@@ -410,12 +431,13 @@ func TestHookWithoutEventRunsTemplateTextAsIs(t *testing.T) {
     onStartWatch: [{dir: %q, cmd: 'echo {{.Path}}> start.txt'}]
     onFinishWatch: [{dir: %q, cmd: 'echo {{.Unknown}}> finish.txt'}]
     onError: [{dir: %q, cmd: 'echo {{.Name}}> error.txt'}]
+    onQueueWarning: [{dir: %q, cmd: 'echo {{.Path}}> queueWarning.txt'}]
 watchTargets:
   - path: %q
     lifeCycle:
       onStartWatch: [{dir: %q, cmd: 'echo {{.ParentPath}}> targetStart.txt'}]
       onFinishWatch: [{dir: %q, cmd: 'echo {{.FilePath}}> targetFinish.txt'}]
-`, dir, dir, dir, dir, dir, dir))
+`, dir, dir, dir, dir, dir, dir, dir))
 	global, target := commands.Global.LifeCycle, commands.WatchTargets[0].LifeCycle
 	ctx := helper.NewWatcherContext("config-test")
 	defer ctx.Cancel()
@@ -426,6 +448,7 @@ watchTargets:
 		"start":        {global.OnStartWatch, "{{.Path}}"},
 		"finish":       {global.OnFinishWatch, "{{.Unknown}}"},
 		"error":        {global.OnError, "{{.Name}}"},
+		"queueWarning": {global.OnQueueWarning, "{{.Path}}"},
 		"targetStart":  {target.OnStartWatch, "{{.ParentPath}}"},
 		"targetFinish": {target.OnFinishWatch, "{{.FilePath}}"},
 	} {

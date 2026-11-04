@@ -19,8 +19,6 @@ import (
 
 type watchTargetRunners []*watchTargetRunner
 
-const dispatchCapacity = 256
-
 // kqueueOS는 fsnotify가 kqueue로 감시하는 운영체제인지 나타낸다.
 var kqueueOS = slices.Contains([]string{"darwin", "dragonfly", "freebsd", "netbsd", "openbsd"}, runtime.GOOS)
 
@@ -74,6 +72,8 @@ type watchTargetRunner struct {
 	runChangeHook func(event domain.Event)
 	runFinishHook func()
 	cancelHook    func()
+	// queueWarner는 대기열의 단계 변화로 onQueueWarning hook을 실행한다. OnQueueWarning이 없으면 nil이다.
+	queueWarner *queueWarner
 
 	exclude         domain.ExcludePatterns
 	hookWait        time.Duration
@@ -84,6 +84,7 @@ type watchTargetRunner struct {
 	watchDirEvent   domain.WatchEvent
 	dirEventWait    time.Duration
 	dirEventMaxWait time.Duration
+	queueSize       int
 
 	logger      helper.Logger
 	watcher     *fsnotify.Watcher
@@ -123,6 +124,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		watchDirEvent:   commandSet.Option.WatchDirEvent,
 		dirEventWait:    commandSet.Option.DirEventWait.Duration(),
 		dirEventMaxWait: commandSet.Option.DirEventMaxWait.Duration(),
+		queueSize:       commandSet.Option.QueueSize,
 		logger:          logger,
 		watcher:         watcher,
 		watchedDirs:     map[string]map[string]entryInfo{},
@@ -133,6 +135,9 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		stop:            make(chan struct{}),
 		done:            make(chan struct{}),
 		handlerDone:     make(chan struct{}),
+	}
+	if hook := globalCommandSet.LifeCycle.OnQueueWarning; hook != nil {
+		result.queueWarner = &queueWarner{hook: hook, target: commandSet.Path, logger: logger}
 	}
 	if watcher != nil {
 		result.watchEvents, result.watchErrors = pumpEvents(watcher, result.stop)
@@ -155,11 +160,7 @@ func (r *watchTargetRunner) Run() error {
 	}
 	r.watching = true
 	r.logger.Info("watch start: " + r.path.String())
-	events := make(chan domain.Event, dispatchCapacity)
-	defer func() {
-		r.stopOnce.Do(func() { close(r.stop) })
-		close(events)
-	}()
+	events := newRunQueue(r.queueSize, r.warnQueue)
 	go func() {
 		defer close(r.handlerDone)
 		r.runStartHook()
@@ -231,7 +232,7 @@ func (r *watchTargetRunner) exitError(err error) error {
 
 // handleEvent는 fsnotify 이벤트 ev를 감시 목록과 기록에 반영하고, 제외되지 않은 파일과 폴더의 생성, 수정,
 // 삭제이면 collect로 넘긴다. 넘기는 이벤트에는 반영하기 전에 경로가 기록에 있었는지를 함께 적는다.
-func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.Event) error {
+func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events *runQueue) error {
 	r.printEventLog(ev)
 	// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
 	// 대상 밖 경로나 빈 경로로 이벤트를 알린다. 폴더 링크는 따라가지 않으므로 hook 실행과 감시 목록
@@ -301,27 +302,26 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 	return r.collect(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed}, events)
 }
 
-// enqueue는 실행 runs를 차례로 대기열 events에 넣는다. 대기열이 가득 찼으면, block이 true이면 자리가 날 때까지
-// 기다리고 false이면 오류를 돌려준다.
-func (r *watchTargetRunner) enqueue(runs []domain.Event, events chan<- domain.Event, block bool) error {
+// enqueue는 실행 runs를 차례로 대기열 events에 넣는다. 대기열이 가득 차면 기다리지 않고 오류를 돌려준다.
+func (r *watchTargetRunner) enqueue(runs []domain.Event, events *runQueue) error {
 	for _, run := range runs {
 		select {
 		case <-r.stop:
 			return errStopped
-		case events <- run:
-			continue
 		default:
 		}
-		if !block {
-			return fmt.Errorf("dispatch queue full (capacity %d): %w", dispatchCapacity, fsnotify.ErrEventOverflow)
-		}
-		select {
-		case <-r.stop:
-			return errStopped
-		case events <- run:
+		if err := events.push(run); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// warnQueue는 대기열의 단계 변화 w로 onQueueWarning hook을 실행한다.
+func (r *watchTargetRunner) warnQueue(w queueWarning) {
+	if r.queueWarner != nil {
+		r.queueWarner.notify(w)
+	}
 }
 
 // listens는 e가 watchFileEvent나 watchDirEvent에서 고른 이벤트 종류인지 판단한다.
@@ -465,24 +465,20 @@ func (r *watchTargetRunner) isExcluded(name string) bool {
 	return ok && r.exclude.Excludes(filepath.ToSlash(rel))
 }
 
-// runChanges는 대기열 input의 실행을 넣은 순서대로 hook에 넘긴다.
-func (r *watchTargetRunner) runChanges(input <-chan domain.Event) {
+// runChanges는 대기열 events의 실행을 넣은 순서대로 hook에 넘긴다.
+func (r *watchTargetRunner) runChanges(events *runQueue) {
 	for {
+		event, ok := events.pop(r.stop)
+		if !ok {
+			return
+		}
+		// 감시를 멈춘 뒤에 꺼낸 실행은 hook에 넘기지 않는다.
 		select {
 		case <-r.stop:
 			return
-		case event, ok := <-input:
-			if !ok {
-				return
-			}
-			// 감시를 멈춘 뒤에 꺼낸 실행은 hook에 넘기지 않는다.
-			select {
-			case <-r.stop:
-				return
-			default:
-			}
-			r.runChangeHook(event)
+		default:
 		}
+		r.runChangeHook(event)
 	}
 }
 
@@ -512,6 +508,9 @@ func (r *watchTargetRunner) Stop(wg *sync.WaitGroup) {
 	r.finishOnce.Do(func() {
 		<-r.done
 		<-r.handlerDone
+		if r.queueWarner != nil {
+			r.queueWarner.stop()
+		}
 		// 감시를 시작하지 못한 대상은 onStartWatch를 실행하지 않았으므로 그 짝인 onFinishWatch도 실행하지 않는다.
 		if r.watching {
 			r.runFinishHook()

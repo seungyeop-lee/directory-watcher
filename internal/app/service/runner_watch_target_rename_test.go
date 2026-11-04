@@ -67,6 +67,7 @@ func (f *renameFixture) start(exclude domain.ExcludePatterns) {
 		Deliver:         domain.DeliverEach,
 		DirEventWait:    100,
 		DirEventMaxWait: 1000,
+		QueueSize:       testQueueSize,
 		WatchSubDir:     true,
 		WatchFileEvent:  domain.WatchAllEvent(),
 		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},

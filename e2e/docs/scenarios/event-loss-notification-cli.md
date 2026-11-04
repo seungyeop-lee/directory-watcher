@@ -13,7 +13,7 @@
 Every mode checks the following.
 
 - The watcher exits with exit code 1 within 28 seconds, including notification cleanup.
-- The default ERROR-level log contains `watch target "<watch folder>": dispatch queue full (capacity 256): fsnotify: queue or buffer overflow` and `possible event loss`, and contains no `event:` lines from the DEBUG log.
+- The default ERROR-level log contains `watch target "<watch folder>": dispatch queue full (capacity 64): fsnotify: queue or buffer overflow` and `possible event loss`, and contains no `event:` lines from the DEBUG log.
 - There are none of the normal hook records `CHANGE`, `OTHER:CHANGE`, `BEFORE`, and `START`. `START` is a 30-second delayed start hook, so it must be cancelled before it completes, and the change hook of the other target must not be admitted after the fatal error either.
 - Each of the finish hook records `TARGET:FINISH`, `OTHER:FINISH`, and `GLOBAL:FINISH` appears exactly once.
 - The delayed start hook process and the recorded notification processes are each gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
@@ -24,7 +24,7 @@ In the modes that run the notification (`success`, `failure`, `timeout`, `succes
 |---|---|
 | `DW_ERROR_TARGET` | Watch folder path |
 | `DW_ERROR_KIND` | `event_loss` |
-| `DW_ERROR_CAUSE` | `dispatch queue full (capacity 256): fsnotify: queue or buffer overflow` |
+| `DW_ERROR_CAUSE` | `dispatch queue full (capacity 64): fsnotify: queue or buffer overflow` |
 | `DW_ERROR_MESSAGE` | `watch target "<watch folder>": <value of DW_ERROR_CAUSE>` |
 | `DW_ERROR_POSSIBLE_LOSS` | `true` |
 | `workdir` | Working directory for the mode (table below) |
@@ -64,7 +64,7 @@ In `failure`, `timeout`, and `success-tree`, the notification creates a real par
 | Location | Hooks and options |
 |---|---|
 | Global | `onError` (per mode), `onBeforeChange`: `BEFORE`, `onFinishWatch`: `GLOBAL:FINISH` |
-| Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
+| Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `queue.size: 64`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
 | Target 2: `other` in the run folder | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C` |
 
 - The watcher is launched with `Launch` at the default ERROR log level.
@@ -92,7 +92,7 @@ sequenceDiagram
         testCode->>watchDir: create up to 1000 load-NNNN.txt files, 1ms apart
     and watcher
         watchDir-->>watcherProc: create events
-        Note over watcherProc: fatal error as pending events exceed 256
+        Note over watcherProc: fatal error as pending events exceed 64
         watcherProc->>notifyTree: run onError once (absent has none configured)
         notifyTree->>recordFile: record error info from env vars as an ERROR notification
     end

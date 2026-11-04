@@ -25,6 +25,9 @@ func newMockLogger() helper.Logger {
 	return &mockLogger{}
 }
 
+// testQueueSize는 대기열을 채우지 않는 테스트의 대기열 용량이다. hook이 받은 실행을 모으는 채널도 이만큼 받아 둔다.
+const testQueueSize = 2048
+
 // hookBatchOption은 설정 파일에 option을 적지 않았을 때의 감시 대상 옵션에서 hookBatch 값만 바꾼다.
 func hookBatchOption(wait, maxWait domain.Millisecond, deliver domain.Deliver) domain.WatchTargetsOption {
 	return domain.WatchTargetsOption{
@@ -36,6 +39,7 @@ func hookBatchOption(wait, maxWait domain.Millisecond, deliver domain.Deliver) d
 		WatchDirEvent:      domain.WatchEvent{Create: true, Delete: true},
 		DirEventWait:       100,
 		DirEventMaxWait:    1000,
+		QueueSize:          testQueueSize,
 	}
 }
 

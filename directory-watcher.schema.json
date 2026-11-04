@@ -134,6 +134,19 @@
                 },
                 "additionalProperties": false
               },
+              "queue": {
+                "type": "object",
+                "description": "The queue of runs waiting for the hook.",
+                "properties": {
+                  "size": {
+                    "type": "integer",
+                    "description": "Most runs that can wait in the queue. A run that does not fit stops the watcher with dispatch queue full. global.lifeCycle.onQueueWarning runs when the waiting runs reach 70% and 90% of size.",
+                    "default": 2048,
+                    "minimum": 1
+                  }
+                },
+                "additionalProperties": false
+              },
               "interruptible": {
                 "type": "boolean",
                 "description": "Whether to stop the currently running command and execute a new command.",
@@ -173,6 +186,10 @@
         "onError": {
           "$ref": "#/definitions/hookCommands",
           "description": "Commands to notify once when the first fatal error wraps fsnotify.ErrEventOverflow. Error context is passed in DW_ERROR_* environment variables."
+        },
+        "onQueueWarning": {
+          "$ref": "#/definitions/hookCommands",
+          "description": "Commands to run when the runs waiting in a target's queue reach 70% or 90% of option.queue.size, or fall below 60% or 80% again. The warning is passed in DW_QUEUE_* environment variables."
         },
         "onFinishWatch": {
           "$ref": "#/definitions/hookCommands",

@@ -40,6 +40,7 @@
 | [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md) | `scenarios/reliability_test.go` | 전달 대기열 포화의 비정상 종료와 트리 정리 | `AwaitReadyGenerations`, `Exited`, `AwaitProcessesGone` |
 | [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md) | `scenarios/error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `Launch`, `StartProcess`, `DelayedHookBegun`, `AwaitReadyGenerations`, `SnapshotProcesses`, `ProcessesGone`, `Alive`, `AwaitDelayedHooksGone` |
 | [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.ko.md) | `scenarios/error_notification_test.go` | 일반 변경·`deliver: last` 합치기에서 알림 미실행 | `AwaitChangesComplete`, `AwaitLine` |
+| [`TestQueueWarningCLI`](scenarios/queue-warning-cli.ko.md) | `scenarios/queue_warning_test.go` | `queue.size`의 70%·90%에 닿을 때와 내려갈 때의 `onQueueWarning`과 `DW_QUEUE_*` 변수 | `AwaitReadyGenerations`, `Await`, `AwaitLine` |
 | [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md) | `scenarios/windows_cancel_test.go` | Windows에서 취소된 `cmd` 명령 목록(`&`, `&&`, `\|\|`)의 다음 프로그램 정지 | `Launch`, `Hook`, `DelayedHookBegun`, `DelayedHookCanceled`, `Stop`, `AwaitDelayedHooksGone` |
 | [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md) | `scenarios/windows_cancel_test.go` | Windows에서 시작 후 0–1000ms에 취소한 `powershell` hook의 정지 | `Launch`, `Hook`, `Log`, `StopWithin`, `AwaitDelayedHooksGone` |
 | `TestCleanupReportsLockedResources` | `harness/cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |

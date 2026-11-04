@@ -20,6 +20,7 @@ func main() {
 	run := flag.String("run", "", "process generation identifier")
 	delay := flag.Duration("delay", 0, "delay before completing a line record")
 	errorContext := flag.Bool("error-context", false, "record error notification environment and working directory")
+	queueContext := flag.Bool("queue-context", false, "record queue warning environment")
 	exitCode := flag.Int("exit-code", 0, "exit status after recording")
 	cancelExitCode := flag.Int("cancel-exit-code", 0, "exit status after recording a canceled delay")
 	releaseFile := flag.String("release-file", "", "exit parent when this file appears, leaving descendants running")
@@ -56,6 +57,18 @@ func main() {
 			os.Exit(1)
 		}
 		appendLine("ERROR|" + string(data))
+	}
+	if *queueContext {
+		context := make(map[string]string)
+		for _, key := range []string{"DW_QUEUE_TARGET", "DW_QUEUE_LEVEL", "DW_QUEUE_DIRECTION", "DW_QUEUE_LENGTH", "DW_QUEUE_CAPACITY", "DW_QUEUE_TOP_PATHS"} {
+			context[key] = os.Getenv(key)
+		}
+		data, err := json.Marshal(context)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		appendLine("QUEUE|" + string(data))
 	}
 	if *depth < 0 {
 		if *delay > 0 {

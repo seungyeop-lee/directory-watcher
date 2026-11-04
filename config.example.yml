@@ -13,6 +13,9 @@ global:
     # Optional event-loss notification; error context is environment data, not a template.
     # onError:
     #   - cmd: 'printenv DW_ERROR_MESSAGE'
+    # Optional warning when a target's queue reaches 70% or 90% of queue.size, and when it falls back.
+    # onQueueWarning:
+    #   - cmd: 'printenv DW_QUEUE_TARGET DW_QUEUE_LEVEL DW_QUEUE_DIRECTION DW_QUEUE_TOP_PATHS'
 watchTargets:
   - path: 'test/dir1'
     lifeCycle:
@@ -42,6 +45,8 @@ watchTargets:
         waitMillisecond: 1000 # default 100; 0 does not wait
         maxWaitMillisecond: 3000 # default 1000; not less than waitMillisecond
         deliver: lastPerPath # default last; last, lastPerPath, or each
+      queue:
+        size: 4096 # default 2048; more pending runs stop the watcher
       interruptible: true
   - path: 'test/dir3'
     lifeCycle:

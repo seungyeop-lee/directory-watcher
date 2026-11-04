@@ -86,6 +86,7 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 						Deliver:         domain.DeliverEach,
 						DirEventWait:    100,
 						DirEventMaxWait: 1000,
+						QueueSize:       testQueueSize,
 						WatchSubDir:     true,
 						Exclude:         tc.exclude,
 						WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
@@ -96,7 +97,7 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 					wg.Add(1)
 					r.Stop(&wg)
 				})
-				ready, changed := make(chan struct{}), make(chan domain.Path, dispatchCapacity)
+				ready, changed := make(chan struct{}), make(chan domain.Path, testQueueSize)
 				r.runStartHook = func() { close(ready) }
 				r.runChangeHook = func(event domain.Event) { changed <- event.Path }
 				r.runFinishHook = func() {}
@@ -229,6 +230,7 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 					Deliver:         domain.DeliverEach,
 					DirEventWait:    100,
 					DirEventMaxWait: 1000,
+					QueueSize:       testQueueSize,
 					WatchSubDir:     tc.watchSubDir,
 					Exclude:         tc.exclude,
 					WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
@@ -239,7 +241,7 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 				wg.Add(1)
 				r.Stop(&wg)
 			})
-			ready, changed := make(chan struct{}), make(chan domain.Path, dispatchCapacity)
+			ready, changed := make(chan struct{}), make(chan domain.Path, testQueueSize)
 			r.runStartHook = func() { close(ready) }
 			r.runChangeHook = func(event domain.Event) { changed <- event.Path }
 			r.runFinishHook = func() {}

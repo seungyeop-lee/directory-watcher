@@ -24,14 +24,14 @@ type changeBatch struct {
 }
 
 // batchForHook은 e를 hook에 넘길 실행으로 만든다. hookWait가 0이면 e 하나로 곧바로 실행을 만들어 대기열 events에
-// 넣는다. block은 enqueue를 본다.
+// 넣는다.
 //
 // hookWait가 0이 아니면 e를 모으고, 마지막 이벤트 뒤 hookWait 동안 이벤트가 없거나 첫 이벤트부터 hookMaxWait가
 // 지나면 flushHookBatch가 모은 이벤트로 실행을 만든다. 대기열에 넣기 전에 모으므로 hook이 도는 동안에도 기다리는
 // 시간이 끝날 때마다 실행이 대기열에 쌓이고, 다른 때 만든 실행끼리는 합치지 않는다.
-func (r *watchTargetRunner) batchForHook(e change, events chan<- domain.Event, block bool) error {
+func (r *watchTargetRunner) batchForHook(e change, events *runQueue) error {
 	if r.hookWait == 0 {
-		return r.enqueue(r.runsOf([]change{e}), events, block)
+		return r.enqueue(r.runsOf([]change{e}), events)
 	}
 	now := time.Now()
 	if r.hookBatch == nil {
@@ -42,12 +42,11 @@ func (r *watchTargetRunner) batchForHook(e change, events chan<- domain.Event, b
 	return nil
 }
 
-// flushHookBatch는 모은 이벤트로 만든 실행을 대기열 events에 넣는다. 대기열이 가득 차면 하나씩 받은 이벤트처럼
-// 오류를 돌려준다.
-func (r *watchTargetRunner) flushHookBatch(events chan<- domain.Event) error {
+// flushHookBatch는 모은 이벤트로 만든 실행을 대기열 events에 넣는다.
+func (r *watchTargetRunner) flushHookBatch(events *runQueue) error {
 	batch := r.hookBatch
 	r.hookBatch, r.hookBatchDue = nil, nil
-	return r.enqueue(r.runsOf(batch.changes), events, false)
+	return r.enqueue(r.runsOf(batch.changes), events)
 }
 
 // runsOf는 한 번 기다리는 동안 모은 changes를 deliver에 따라 실행으로 합친다. watchFileEvent와 watchDirEvent에서

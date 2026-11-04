@@ -15,6 +15,7 @@ type GlobalLifeCycle struct {
 	OnAfterChange  Cmd
 	OnFinishWatch  Cmd
 	OnError        Cmd
+	OnQueueWarning Cmd
 }
 
 type WatchTargetsCommandSets []WatchTargetsCommandSet
@@ -44,5 +45,7 @@ type WatchTargetsOption struct {
 	// DirEventWait와 DirEventMaxWait는 폴더 이벤트를 모으는 시간이다. DirEventWait가 0이면 모으지 않는다.
 	DirEventWait    Millisecond
 	DirEventMaxWait Millisecond
-	Interruptible   Interruptible
+	// QueueSize는 감시 대상의 대기열에 둘 수 있는 실행의 수다. 1 이상이다.
+	QueueSize     int
+	Interruptible Interruptible
 }

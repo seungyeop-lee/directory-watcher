@@ -160,6 +160,8 @@ func TestBoundedOverloadCLI(t *testing.T) {
       hookBatch:
         waitMillisecond: 0
         deliver: each
+      queue:
+        size: 64
 `, s.Watch, s.Hook("--depth=2")))
 	s.AwaitReadyGenerations("startup tree occupies sequential worker", 1)
 	started := time.Now()
@@ -171,10 +173,10 @@ func TestBoundedOverloadCLI(t *testing.T) {
 		t.Fatal("queue saturation exited successfully")
 	}
 	log := s.Log()
-	if !strings.Contains(log, "dispatch queue full (capacity 256)") || !strings.Contains(log, strconv.Quote(s.Watch)) {
+	if !strings.Contains(log, "dispatch queue full (capacity 64)") || !strings.Contains(log, strconv.Quote(s.Watch)) {
 		t.Fatalf("queue loss target/cause missing: %s", log)
 	}
 	records := s.ProcessRecords()
 	s.AwaitProcessesGone("overloaded process tree disappears", records)
-	t.Logf("actual application overload: 300 creates duration=%s pending-bound=256 active-generation=1 descendants-alive=0 exit=%v", time.Since(started), s.ExitErr())
+	t.Logf("actual application overload: 300 creates duration=%s pending-bound=64 active-generation=1 descendants-alive=0 exit=%v", time.Since(started), s.ExitErr())
 }

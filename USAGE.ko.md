@@ -65,6 +65,8 @@ global:
       [ global onStartWatch hook의 사양과 동일 ]
     onError: # 선택적인 전역 이벤트 유실 알림
       [ global onStartWatch hook의 사양과 동일 ]
+    onQueueWarning: # 선택적인 전역 대기열 경고
+      [ global onStartWatch hook의 사양과 동일 ]
 watchTargets:
   - path: [ 감시대상 폴더 path ]
     lifeCycle:
@@ -88,6 +90,8 @@ watchTargets:
         waitMillisecond: [ 모은 이벤트로 실행을 만들기 전에 마지막 이벤트 뒤로 기다리는 시간, 0이면 기다리지 않음, default는 100 ]
         maxWaitMillisecond: [ 이벤트를 모으는 가장 긴 시간, waitMillisecond보다 작을 수 없음, default는 1000 ]
         deliver: [ 모은 이벤트로 만드는 실행 (last, lastPerPath, each), default는 last ]
+      queue: # hook 실행을 기다리는 대기열
+        size: [ 기다릴 수 있는 실행의 최대 수, 1 이상, default는 2048 ]
       interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
 ```
 
@@ -119,7 +123,7 @@ command <명령>: <오류>
 ### hook 명령을 실행하는 셸
 
 - 모든 hook 명령은 `shell`로 고른 셸이 실행합니다.
-  - 전역 hook, 대상 hook, `onError`, 구조화된 `cmd`, 명령 목록의 각 항목이 모두 해당합니다.
+  - 전역 hook, 대상 hook, `onError`, `onQueueWarning`, 구조화된 `cmd`, 명령 목록의 각 항목이 모두 해당합니다.
 - 따옴표, 변수 확장, 명령 치환, `&&`, 리다이렉션은 그 셸의 규칙대로 해석되고, 명령이 0이 아닌 종료 코드로 끝나면 실패로 처리합니다.
 
 | `shell` | 실행 방식 | 쓸 수 있는 OS | `{{.Path}}`가 바뀌는 참조 |
@@ -157,7 +161,7 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 
 ### 명령 실행 위치
 
-| dir | global onStartWatch, global onFinishWatch, global onError | 그외 hook |
+| dir | global onStartWatch, global onFinishWatch, global onError, global onQueueWarning | 그외 hook |
 |-----|-------------------------------------------|------------|
 | O   | dir 설정 위치                                 | dir 설정 위치  |
 | X   | 프로그램 실행 위치                                | path 설정 위치 |
@@ -165,7 +169,7 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 - 명령을 실행하기 직전에 작업 폴더를 확인합니다.
 - 작업 폴더가 없거나 폴더가 아니면 그 명령을 실행하지 않고, 다른 명령이 실패했을 때처럼 그 hook의 나머지 명령을 건너뜁니다.
 - 이때 실패 로그의 `<오류>` 자리에는 작업 폴더 경로가 다음 형태로 들어갑니다.
-  - 전역 `onError`의 실패 로그에서는 `onError notification failed: ` 뒤에 `command <명령>: `과 이 문구가 이어집니다.
+  - 전역 `onError`와 전역 `onQueueWarning`의 실패 로그에서는 `onError notification failed: `나 `onQueueWarning notification failed: ` 뒤에 `command <명령>: `과 이 문구가 이어집니다.
 
 ```text
 working directory <작업 폴더>: <원인>
@@ -271,6 +275,7 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
   - 한 번 기다리는 동안 만들었다가 지운 파일은 버전 2에서 `D`로 hook을 실행했고, 버전 3에서는 hook을 실행하지 않습니다.
   - watcher가 생성 이벤트를 놓친 파일은 `U`가 아니라 `C`로 hook에 갑니다.
 - 버전 2는 이벤트가 계속 오는 동안 계속 기다렸습니다. 버전 3은 첫 이벤트부터 늦어도 `hookBatch.maxWaitMillisecond`(기본 1000)가 지나면 hook을 실행합니다.
+- 버전 2는 hook이 실행되는 동안 들어온 이벤트를 OS에 남겨 두었습니다. 버전 3은 그동안에도 이벤트를 읽고, 대상마다 hook을 기다리는 실행을 최대 `queue.size`(기본 2048)개까지 둡니다. 들어갈 자리가 없는 실행이 생기면 watcher를 멈춥니다. 자세한 내용은 [대기열 용량과 경고](#대기열-용량과-경고)에 있습니다.
 
 ## 이름 바꾸기와 옮기기
 
@@ -369,10 +374,53 @@ Error: watchTargets[0].option.hookBatch: maxWaitMillisecond 1000 is less than wa
   - Windows에서 이 프로세스들을 끝낼 수 있게 알림 명령을 준비하지 못하면, watcher는 그 명령을 실행하지 않고 실패를 로그에 남깁니다.
 - 일반 hook이 시작한 프로세스는 hook이 취소될 때만 끝냅니다([과부하와 종료](#과부하와-종료)).
 
+## 대기열 용량과 경고
+
+- 대상의 실행은 hook이 실행할 때까지 대상의 대기열에서 기다립니다. `option.queue.size`(기본 2048)는 기다릴 수 있는 실행의 최대 수이며, 실행 중인 실행은 세지 않습니다.
+- 들어갈 자리가 없는 실행이 생기면 `dispatch queue full (capacity <size>)`로 처리를 중단하고, [이벤트 유실 알림](#이벤트-유실-알림)처럼 전역 `onError`를 한 번 실행합니다.
+  - watcher는 대기열에 자리가 나기를 기다리지 않습니다. 한꺼번에 많이 들어올 수 있는 [폴더 이벤트](#폴더-이벤트)용으로 모은 이벤트에서 만든 실행도 같습니다.
+
+`queue.size`가 1보다 작으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].option.queue: size 0 is less than 1
+```
+
+`global.lifeCycle.onQueueWarning`은 선택 항목이며 다른 hook과 같은 명령 목록 및 구조화된 `dir`/`cmd` 형식을 사용합니다. 대상의 대기열에서 기다리는 실행의 수가 세 상태 사이를 오갈 때 실행합니다.
+
+| 상태 변화 | 실행하는 때 | `DW_QUEUE_LEVEL` | `DW_QUEUE_DIRECTION` |
+|---|---|---|---|
+| 정상에서 경고로 | 기다리는 실행이 `queue.size`의 70%에 닿을 때 | `70` | `up` |
+| 경고에서 위험으로 | 기다리는 실행이 `queue.size`의 90%에 닿을 때 | `90` | `up` |
+| 위험에서 경고로 | 기다리는 실행이 `queue.size`의 80% 아래로 내려갈 때 | `90` | `down` |
+| 경고에서 정상으로 | 기다리는 실행이 `queue.size`의 60% 아래로 내려갈 때 | `70` | `down` |
+
+- 상태는 들어선 지점보다 10%p 낮아져야 벗어나므로, 기다리는 수가 70%나 90% 근처에서 오르내려도 같은 경고를 되풀이하지 않습니다.
+- `queue.size`가 아주 작아서 실행 하나로 두 지점을 넘으면 두 경고를 차례로 실행합니다.
+- 경고 hook은 이벤트 처리와 따로 실행하므로, 경고 hook이 실행되는 동안에도 이벤트를 받고 hook을 실행합니다.
+- 같은 대상의 경고 hook이 아직 실행 중일 때 생긴 경고는 가장 최근 것 하나만 남겼다가, 지금 실행이 끝나면 실행합니다. 대상마다 가장 최근 경고를 따로 남기므로, 서로 다른 대상의 경고 hook은 동시에 실행될 수 있습니다.
+- 경고 hook은 한 번 실행할 때마다 `onError`와 같은 제한을 받습니다. 5초 실행 제한이 있고, 취소 정리에 최대 20초를 더 씁니다.
+- 실패나 시간 초과는 `onQueueWarning notification failed: <원인>`으로 로그에 남기며 감시를 멈추지 않습니다.
+- 종료할 때는 남겨 둔 경고를 버리고, 실행 중인 경고 hook이 끝날 때까지 기다립니다.
+
+경고 정보는 환경 변수로 전달합니다.
+
+| 환경 변수 | 값 |
+|-----------|----|
+| `DW_QUEUE_TARGET` | 대기열의 상태가 바뀐 감시 대상 |
+| `DW_QUEUE_LEVEL` | `70` 또는 `90` |
+| `DW_QUEUE_DIRECTION` | `up` 또는 `down` |
+| `DW_QUEUE_LENGTH` | 상태가 바뀐 때 기다리는 실행의 수 |
+| `DW_QUEUE_CAPACITY` | 대상의 `queue.size` |
+| `DW_QUEUE_TOP_PATHS` | 기다리는 실행이 많은 경로부터 최대 5개를 한 줄에 하나씩 `<개수> <경로>` 형태로 담습니다. 개수가 같으면 대기열에 먼저 들어간 경로가 앞섭니다. 경로는 `{{.Path}}`와 같은 형태입니다. |
+
+- `DW_QUEUE_TOP_PATHS`는 hook이 만든 파일 때문에 hook이 계속 다시 실행되는 경우를 찾는 데 씁니다. 해결 방법은 [hook이 자기 결과로 다시 실행되지 않게 하기](#hook이-자기-결과로-다시-실행되지-않게-하기)에 있습니다.
+- 환경 변수는 `onError`처럼 셸 문법으로 읽습니다. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다.
+- 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
+
 ## 과부하와 종료
 
-- 대상마다 대기 실행은 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `hookBatch.deliver: each`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. 제외된 경로는 실행을 만들지 않고 기다리는 시간도 늘리지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로, 마지막으로 만든 파일이 `deliver: last`가 실행하는 경로라고 가정하면 안 됩니다.
-- `hookBatch.waitMillisecond: 0`이면 [폴더 이벤트](#폴더-이벤트)를 위해 모은 이벤트는 보낼 때 대기열에 자리가 날 때까지 기다리므로, 모은 이벤트를 보내다가 `dispatch queue full`로 처리를 중단하지는 않습니다. 그 밖의 이벤트와 `hookBatch`가 기다리는 시간이 끝나 만든 실행은 대기열이 가득 찼으면 처리를 중단합니다.
+- 대상마다 대기 실행은 [대기열 용량과 경고](#대기열-용량과-경고)에 적은 대로 최대 `queue.size`개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `hookBatch.deliver: each`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. 제외된 경로는 실행을 만들지 않고 기다리는 시간도 늘리지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로, 마지막으로 만든 파일이 `deliver: last`가 실행하는 경로라고 가정하면 안 됩니다.
 - 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
 - `interruptible: true`에서는 취소한 이전 실행이 끝난 뒤에 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리가 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.

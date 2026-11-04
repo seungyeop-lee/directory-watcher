@@ -117,6 +117,16 @@ func TestUsageListsSameErrorVariablesAsCode(t *testing.T) {
 	}
 }
 
+func TestUsageListsSameQueueWarningVariablesAsCode(t *testing.T) {
+	want := service.QueueWarningVariableNames()
+	for _, file := range usageFiles {
+		got, _ := matchingRows(readUsage(t, file), regexp.MustCompile("^`(DW_QUEUE_\\w+)`$"))
+		if !sameSet(got, want) {
+			t.Errorf("%s DW_QUEUE_* table = %q, want %q", file, got, want)
+		}
+	}
+}
+
 func TestUsageListsSameShellsAsCode(t *testing.T) {
 	want := command.ShellNames()
 	_, err := command.LookupShell("bash")

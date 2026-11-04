@@ -58,6 +58,8 @@ watchTargets:
       hookBatch:
         waitMillisecond: 0
         deliver: each
+      queue:
+        size: 64
   - path: '%s'
     lifeCycle:
       onStartWatch:
@@ -116,7 +118,7 @@ watchTargets:
 			if err := <-producerDone; err != nil {
 				t.Fatal(err)
 			}
-			assertLossExit(t, s, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error())
+			assertLossExit(t, s, "dispatch queue full (capacity 64): "+fsnotify.ErrEventOverflow.Error())
 			if !strings.Contains(s.Log(), "possible event loss") {
 				t.Fatalf("default ERROR diagnostics omitted possible loss: %s", s.Log())
 			}
@@ -142,7 +144,7 @@ watchTargets:
 				if mode == "success" || mode == "failure" {
 					expectedDir = s.Work
 				}
-				assertErrorContext(t, contexts[0], s.Watch, "dispatch queue full (capacity 256): "+fsnotify.ErrEventOverflow.Error(), expectedDir)
+				assertErrorContext(t, contexts[0], s.Watch, "dispatch queue full (capacity 64): "+fsnotify.ErrEventOverflow.Error(), expectedDir)
 			}
 			lines := s.Lines()
 			for _, forbidden := range []string{"CHANGE", "OTHER:CHANGE", "BEFORE", "START"} {
@@ -180,7 +182,7 @@ watchTargets:
 				guard.SnapshotProcesses("protected-after")
 			}
 			t.Logf("ACTUAL application dispatch saturation, not OS overflow: mode=%s duration=%s exit=1 notifications=%d normal-hook-PIDs-alive=0", mode, time.Since(started), len(contexts))
-			t.Logf("original fatal cause preserved: dispatch queue full (capacity 256): %s", fsnotify.ErrEventOverflow)
+			t.Logf("original fatal cause preserved: dispatch queue full (capacity 64): %s", fsnotify.ErrEventOverflow)
 			s.AwaitProcessesGone("notification descendants disappear even when parent fails", tree)
 		})
 	}

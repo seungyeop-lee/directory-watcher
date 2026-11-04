@@ -47,6 +47,9 @@ func (g *globalRunner) CallOnFinishWatch() {
 	}
 }
 
+// notificationTimeout은 onError와 onQueueWarning hook을 한 번 실행할 때의 시간 제한이다.
+const notificationTimeout = 5 * time.Second
+
 // errorVariables는 onError hook에 치명적 오류의 정보를 넘기는 환경 변수다.
 var errorVariables = []struct {
 	name  string
@@ -82,7 +85,7 @@ func (g *globalRunner) CallOnError(err error) {
 	for _, v := range errorVariables {
 		env = append(env, v.name+"="+v.value(fatal))
 	}
-	ctx := base.NewTimeoutRun(5*time.Second, env)
+	ctx := base.NewTimeoutRun(notificationTimeout, env)
 	defer ctx.Cancel()
 	if notifyErr := g.onError.Run(ctx, "", nil); notifyErr != nil {
 		if ctx.Context().Err() != nil {

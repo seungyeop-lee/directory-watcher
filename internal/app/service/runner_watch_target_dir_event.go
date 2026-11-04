@@ -76,11 +76,11 @@ func (r *watchTargetRunner) opensBatch(e domain.Event) bool {
 //
 // 묶음은 마지막 이벤트 뒤 dirEventWait 동안 이벤트가 없거나, 첫 이벤트부터 dirEventMaxWait가 지나면 flushBatch가
 // 내보낸다. 폴더 이벤트를 대기열에 넣기 전에 모으므로, 큰 폴더를 지워도 대기열에는 폴더 이벤트 하나만 들어간다.
-func (r *watchTargetRunner) collect(e change, events chan<- domain.Event) error {
+func (r *watchTargetRunner) collect(e change, events *runQueue) error {
 	now := time.Now()
 	if r.batch == nil {
 		if r.dirEventWait == 0 || !r.opensBatch(e.Event) {
-			return r.passOn(e, events, false)
+			return r.passOn(e, events)
 		}
 		r.batch = &eventBatch{start: now}
 	}
@@ -91,33 +91,29 @@ func (r *watchTargetRunner) collect(e change, events chan<- domain.Event) error 
 }
 
 // flushBatch는 모은 이벤트를 받은 순서대로 passOn으로 넘긴다.
-//
-// hookWait가 0이어서 이벤트를 곧바로 대기열에 넣을 때 자리가 없으면 자리가 날 때까지 기다린다. 묶음은 이벤트를
-// 한꺼번에 내보내므로, 하나씩 받을 때는 넘치지 않던 대기열도 넘칠 수 있기 때문이다. 기다리는 동안 생긴 변경은
-// 운영체제와 fsnotify가 받아 둔다.
-func (r *watchTargetRunner) flushBatch(events chan<- domain.Event) error {
+func (r *watchTargetRunner) flushBatch(events *runQueue) error {
 	batch := r.batch
 	r.batch, r.batchDue = nil, nil
 	for _, e := range batch.events {
-		if err := r.passOn(e, events, true); err != nil {
+		if err := r.passOn(e, events); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// passOn은 폴더 이벤트 모으기를 마친 e를 batchForHook으로 넘긴다. block은 enqueue를 본다.
+// passOn은 폴더 이벤트 모으기를 마친 e를 batchForHook으로 넘긴다.
 //
 // fsnotify의 kqueue 구현은 새 폴더의 감시 등록을 내부 재등록으로 덮어쓸 수 있다(reAddDirs 참고). 그래서 생긴
 // 폴더의 이벤트를 넘기기 전에 그 아래의 감시 폴더를 다시 감시 목록에 넣어, hook이 폴더 생성을 받은 뒤 그 안에서
 // 생기는 변경을 놓치지 않게 한다. 그 전에 폴더 안에 생긴 항목은 폴더 생성 이벤트를 받은 hook이 직접 읽는다.
-func (r *watchTargetRunner) passOn(e change, events chan<- domain.Event, block bool) error {
+func (r *watchTargetRunner) passOn(e change, events *runQueue) error {
 	if kqueueOS && e.IsDir && fsnotify.Op(e.Operation) == fsnotify.Create {
 		if err := r.reAdd(r.watchedDirsUnder(e.Path)); err != nil {
 			return err
 		}
 	}
-	return r.batchForHook(e, events, block)
+	return r.batchForHook(e, events)
 }
 
 // watchedDirsUnder는 감시 목록에 넣은 폴더 가운데 dir과 그 아래에 있는 폴더를 돌려준다.
