@@ -12,13 +12,13 @@
 | `scenarios/*_test.go` | 시나리오 테스트. 대응은 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응)에 있음 |
 | `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
 | `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN`·`CANCEL` 기록(`delayedHooks`·`DelayedHookBegun`·`DelayedHookCanceled`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
-| `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
+| `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 레이블별 세대(`GenerationsLabeled`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
 | `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 시나리오가 소유하는 `processObserver` |
 | `harness/hook_records_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
 | `harness/cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증. 같은 `Run`을 거치는 하네스 패키지의 `TestMain` 포함 |
 | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 이미 쓰고 있는 기록된 PID를 사라진 것으로 보는지, 기록된 hook이 실행 중이면 지연 hook 부재 대기가 여전히 실패하는지 검증 |
 | `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램. 옵션은 [`hookrec` 프로세스 트리와 지연 hook](#hookrec-프로세스-트리와-지연-hook)에 있음 |
-| `hookrec/main_test.go` | `--error-context`와 `--queue-context`가 이름이 `DW_ERROR_`나 `DW_QUEUE_`로 시작하는 환경 변수를, 코드에 나열하지 않은 이름까지 모두 담고 다른 변수는 담지 않은 JSON으로 `--line` 기록보다 먼저 기록하는지, `--error-context`가 작업 디렉터리도 기록하는지, `--exit-code`가 종료 코드를 정하는지 검증 |
+| `hookrec/main_test.go` | `--error-context`와 `--queue-context`가 이름이 `DW_ERROR_`나 `DW_QUEUE_`로 시작하는 환경 변수를, 코드에 나열하지 않은 이름까지 모두 담고 다른 변수는 담지 않은 JSON으로 `--line` 기록보다 먼저 기록하는지, `--error-context`가 작업 디렉터리도 기록하는지, `--exit-code`가 종료 코드를 정하는지, `--label`이 프로세스 트리의 레이블을 그 세대의 `start` 기록보다 먼저 기록하는지 검증 |
 | `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
 | `worktree/` | Linux·Windows 실행기에 넘기도록 현재 작업 트리를 항목이 `src/` 아래에 놓이는 tar 스트림으로 묶음(`Root`, `Files`, `Archive`). 추적 중인 파일과, 추적하지 않지만 무시되지도 않는 파일을 담으며, 커밋하지 않은 수정·추가·삭제가 반영됨 |
 | `worktree/worktree_test.go` | `Archive`가 수정한 파일과 추적하지 않는 파일의 작업 트리 내용을 담고, 목록에 있지만 작업 트리에서 사라진 파일은 건너뛰는지 검증 |
@@ -47,6 +47,7 @@
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md) | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) | `scenarios/process_test.go` | `hookBatch.deliver`·`run.interrupt` 네 조합의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md) | `scenarios/process_test.go` | `run.concurrency: 2`에서 동시에 도는 프로세스 트리 hook 두 개의 종료, 둘 다 완료한 뒤의 종료 hook | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
+| [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) | `scenarios/process_test.go` | `run.concurrency: 2`에서 `run.interrupt: samePath`와 `oldest`가 실행 중인 변경 hook과 시작 hook 가운데 취소하는 실행, 취소된 트리가 완료한 뒤의 교체 | `GenerationsLabeled`, `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md) | `scenarios/reliability_test.go` | 느린 hook 중 빠른 유입의 네 조합, 제외·`deliver: last` 합치기, 종료 후 실행 금지 | `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `AwaitDelayedHooksGone` |
 | [`TestTargetsRunIndependently`](scenarios/targets-run-independently.ko.md) | `scenarios/reliability_test.go` | 한 대상의 느린 hook이 다른 대상을 막지 않음 | `DelayedHookBegun`, `AwaitLine`, `AwaitDelayedHooksGone` |
 | [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md) | `scenarios/reliability_test.go` | 전달 대기열 포화의 비정상 종료와 트리 정리 | `AwaitReadyGenerations`, `Exited`, `AwaitProcessesGone` |
@@ -118,6 +119,8 @@ func TestCreateAnotherFile(t *testing.T) {
 - `--release-file=<경로>`를 더하면 부모는 `ready` 뒤에 그 파일이 생기는 대로 `parent-exit`를 기록하고 끝나며, 자손은 계속 실행됩니다.
   - 파일이 생기기 전에 종료 신호를 받으면 부모는 평소처럼 종료하고 `complete`를 남깁니다.
   - `--depth=0`이면 부모만 실행되므로, 테스트가 파일을 만들 때까지 hook이 계속 실행됩니다. `TestQueueWarningCLI`는 `s.Hook("--depth=0", "--release-file="+release)`를 `onStartWatch`로 써서, 그동안 대상의 변경 hook이 실행되지 못하고 대기열에 남게 합니다.
+- `--label=<텍스트>`를 더하면 부모가 `start` 기록 앞에 `LABEL|<세대>|<텍스트>`를 기록하고, `GenerationsLabeled`는 그 레이블의 세대를 시작한 순서대로 돌려줍니다.
+  - `TestRunInterrupt`는 `s.Hook("--depth=2", "--label={{.Name}}")`를 `onChange`로 써서 각 세대가 어느 경로의 실행인지 구분합니다.
 
 ### 지연 hook
 

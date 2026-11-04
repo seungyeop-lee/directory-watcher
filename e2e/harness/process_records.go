@@ -12,8 +12,8 @@ import (
 
 // hookrec --depth=N은 실제 부모, 자식, 손자 프로세스 사슬을 시작한다. 각 프로세스는
 // generation|PID|depth|state를 기록하는데, generation은 루트 부모의 PID이고 state는
-// start, ready, signal, complete, parent-exit 중 하나다. 프로세스가 살아 있는지는
-// 시나리오의 processObserver가 답한다.
+// start, ready, signal, complete, parent-exit 중 하나다. --label을 주면 루트 부모가 start 앞에
+// LABEL|generation|label을 기록한다. 프로세스가 살아 있는지는 시나리오의 processObserver가 답한다.
 
 type ProcessRecord struct {
 	Generation string
@@ -38,6 +38,18 @@ func processRecords(file string) []ProcessRecord {
 }
 
 func (s *Scenario) ProcessRecords() []ProcessRecord { return processRecords(s.Records) }
+
+// GenerationsLabeled는 hookrec --label=label로 시작한 프로세스 트리의 generation을 시작한 순서대로 돌려준다.
+func (s *Scenario) GenerationsLabeled(label string) []string {
+	var generations []string
+	for _, line := range s.Lines() {
+		fields := strings.SplitN(line, "|", 3)
+		if len(fields) == 3 && fields[0] == "LABEL" && fields[2] == label {
+			generations = append(generations, fields[1])
+		}
+	}
+	return generations
+}
 
 // generationReady는 r이 루트 부모의 ready 기록인지 알려 준다. hookrec은 자식이 ready를
 // 기록한 뒤에야 부모의 ready를 기록하므로, 이 기록이 있으면 트리 전체가 준비된 것이다.

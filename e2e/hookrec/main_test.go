@@ -94,6 +94,31 @@ func TestQueueContext(t *testing.T) {
 	}
 }
 
+func TestLabelBeforeProcessTreeStart(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "records.log")
+	release := filepath.Join(dir, "release")
+	if err := os.WriteFile(release, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "run", ".", "--file="+file, "--depth=0", "--label=a.txt", "--release-file="+release)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("hookrec failed: %v %s", err, out)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("records: %q", lines)
+	}
+	generation, _, _ := strings.Cut(lines[1], "|")
+	if lines[0] != "LABEL|"+generation+"|a.txt" || !strings.HasSuffix(lines[1], "|0|start") {
+		t.Fatalf("label must precede the start record of its generation: %q", lines)
+	}
+}
+
 // hookEnv는 prefix로 시작하는 환경 변수가 values뿐인 환경을 만들고, prefix 끝의 밑줄 자리만 다른 변수를 하나
 // 더해 기록되지 않아야 할 이름도 넣는다. 테스트를 실행한 셸에서 물려받은 prefix 변수는 기록 필드 수를 바꾸므로 뺀다.
 func hookEnv(prefix string, values map[string]string) []string {

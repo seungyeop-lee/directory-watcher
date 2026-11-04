@@ -5,12 +5,12 @@
 ## 경합과 과부하 검증
 
 ```sh
-go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle'
+go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt'
 go test -race ./...
 ```
 
-- 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.ko.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md) 문서에 있습니다.
+- 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.ko.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) 문서에 있습니다.
 
 ### 내부 테스트의 검증 범위
 

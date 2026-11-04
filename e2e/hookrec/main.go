@@ -24,6 +24,7 @@ func main() {
 	exitCode := flag.Int("exit-code", 0, "exit status after recording")
 	cancelExitCode := flag.Int("cancel-exit-code", 0, "exit status after recording a canceled delay")
 	releaseFile := flag.String("release-file", "", "exit parent when this file appears, leaving descendants running")
+	label := flag.String("label", "", "text recorded with the process tree generation")
 	flag.Parse()
 	if *file == "" {
 		fmt.Fprintln(os.Stderr, "hookrec: --file is required")
@@ -95,6 +96,9 @@ func main() {
 		*run = strconv.Itoa(os.Getpid())
 	}
 	record := func(state string) { appendLine(fmt.Sprintf("%s|%d|%d|%s", *run, os.Getpid(), *depth, state)) }
+	if *label != "" {
+		appendLine(fmt.Sprintf("LABEL|%s|%s", *run, *label))
+	}
 	record("start")
 	var child *exec.Cmd
 	if *depth > 0 {

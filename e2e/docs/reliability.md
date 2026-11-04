@@ -5,12 +5,12 @@
 ## Race and overload verification
 
 ```sh
-go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle'
+go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt'
 go test -race ./...
 ```
 
-- What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), and [`TestProcessLifecycle`](scenarios/process-lifecycle.md) documents.
+- What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), and [`TestRunInterrupt`](scenarios/run-interrupt.md) documents.
 
 ### Scope of the internal tests
 
