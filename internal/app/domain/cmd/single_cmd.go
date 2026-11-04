@@ -37,6 +37,15 @@ var eventVariables = []struct {
 	{"Event", "DW_EVENT", func(e *domain.Event) string { return e.Operation.String() }},
 }
 
+// EventVariableNames는 hook 명령에서 쓸 수 있는 템플릿 변수의 이름과, 같은 값을 담는 환경 변수의 이름을 같은 순서로 돌려준다.
+func EventVariableNames() (templates, envs []string) {
+	for _, v := range eventVariables {
+		templates = append(templates, v.template)
+		envs = append(envs, v.env)
+	}
+	return templates, envs
+}
+
 func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]Command, error) {
 	if c.Cmd == "" {
 		return nil, helper.NewEmptyCmdError()
@@ -105,10 +114,7 @@ func (c SingleCmd) CheckTemplates() error {
 	if err != nil {
 		return err
 	}
-	var names []string
-	for _, v := range eventVariables {
-		names = append(names, v.template)
-	}
+	names, _ := EventVariableNames()
 	for _, defined := range t.Templates() {
 		for _, name := range referencedVariables(defined.Root) {
 			if !slices.Contains(names, name) {

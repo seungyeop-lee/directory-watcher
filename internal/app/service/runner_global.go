@@ -47,6 +47,27 @@ func (g *globalRunner) CallOnFinishWatch() {
 	}
 }
 
+// errorVariables는 onError hook에 치명적 오류의 정보를 넘기는 환경 변수다.
+var errorVariables = []struct {
+	name  string
+	value func(fatal *FatalError) string
+}{
+	{"DW_ERROR_TARGET", func(fatal *FatalError) string { return fatal.Path.String() }},
+	{"DW_ERROR_KIND", func(*FatalError) string { return "event_loss" }},
+	{"DW_ERROR_CAUSE", func(fatal *FatalError) string { return fatal.Cause.Error() }},
+	{"DW_ERROR_MESSAGE", func(fatal *FatalError) string { return fatal.Error() }},
+	{"DW_ERROR_POSSIBLE_LOSS", func(*FatalError) string { return "true" }},
+}
+
+// ErrorVariableNames는 onError hook이 받는 환경 변수의 이름을 돌려준다.
+func ErrorVariableNames() []string {
+	names := make([]string, len(errorVariables))
+	for i, v := range errorVariables {
+		names[i] = v.name
+	}
+	return names
+}
+
 func (g *globalRunner) CallOnError(err error) {
 	if g.onError == nil {
 		return
@@ -57,13 +78,11 @@ func (g *globalRunner) CallOnError(err error) {
 	}
 	base := helper.NewWatcherContext("[ERROR HOOK]")
 	defer base.Cancel()
-	ctx := base.NewTimeoutRun(5*time.Second, []string{
-		"DW_ERROR_TARGET=" + fatal.Path.String(),
-		"DW_ERROR_KIND=event_loss",
-		"DW_ERROR_CAUSE=" + fatal.Cause.Error(),
-		"DW_ERROR_MESSAGE=" + fatal.Error(),
-		"DW_ERROR_POSSIBLE_LOSS=true",
-	})
+	var env []string
+	for _, v := range errorVariables {
+		env = append(env, v.name+"="+v.value(fatal))
+	}
+	ctx := base.NewTimeoutRun(5*time.Second, env)
 	defer ctx.Cancel()
 	if notifyErr := g.onError.Run(ctx, "", nil); notifyErr != nil {
 		if ctx.Context().Err() != nil {
