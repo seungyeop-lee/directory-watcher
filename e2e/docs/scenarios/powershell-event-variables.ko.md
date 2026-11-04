@@ -52,4 +52,5 @@ make e2e-windows ARGS="-- -run '^TestPowershellEventVariables$'"
 ## 관련 코드
 
 - `e2e/scenarios/shell_windows_test.go`에 `TestPowershellEventVariables`를 정의합니다.
+- `e2e/scenarios/helpers_test.go`: `goldenConfig`와 `goldenFileName`은 `TestGoldenPath`와 공유하는 설정과 파일 이름이고, `changeValues`와 `expectedSequence`는 기대 기록을 만듭니다.
 - 테스트는 `e2e/harness`의 `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`를 사용합니다.

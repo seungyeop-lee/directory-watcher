@@ -86,4 +86,5 @@ make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestBatchingOptions$'"
 ## Related code
 
 - `e2e/scenarios/batching_test.go` contains `TestBatchingOptions`, its configuration, and DEBUG receipt parsing.
+- `e2e/scenarios/helpers_test.go`: `mkdirAll` and `createEmpty` create folders and empty files.
 - `e2e/harness` supplies `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `AwaitLine`, `AwaitChangesComplete`, `Lines`, `Log`, `CountRecord`, and `Stop`; their responsibilities are in [Harness structure](../harness.md#code-locations-by-responsibility).

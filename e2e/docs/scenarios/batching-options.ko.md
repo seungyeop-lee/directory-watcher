@@ -86,4 +86,5 @@ make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestBatchingOptions$'"
 ## 관련 코드
 
 - `e2e/scenarios/batching_test.go`에 `TestBatchingOptions`·설정·DEBUG 수신 해석이 있습니다.
+- `e2e/scenarios/helpers_test.go`: `mkdirAll`과 `createEmpty`는 폴더와 빈 파일을 만듭니다.
 - `e2e/harness`의 `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `AwaitLine`, `AwaitChangesComplete`, `Lines`, `Log`, `CountRecord`, `Stop`을 사용하며, 책임은 [하네스 구조](../harness.ko.md#책임별-코드-위치)에 있습니다.
