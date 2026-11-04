@@ -24,6 +24,9 @@ const dispatchCapacity = 256
 // kqueueOS는 fsnotify가 kqueue로 감시하는 운영체제인지 나타낸다.
 var kqueueOS = slices.Contains([]string{"darwin", "dragonfly", "freebsd", "netbsd", "openbsd"}, runtime.GOOS)
 
+// inotifyOS는 fsnotify가 inotify로 감시하는 운영체제인지 나타낸다.
+var inotifyOS = runtime.GOOS == "linux"
+
 // FatalError는 종료가 필요한 실패가 일어난 감시 대상과 그 원인을 보존한다.
 type FatalError struct {
 	Path  domain.Path
@@ -41,6 +44,24 @@ type watchTargetRunner struct {
 	watching bool
 	// dirsToReAdd는 감시 루프가 다음 이벤트를 받을 때 감시 목록에 다시 넣을 폴더다. reAddDirs를 본다.
 	dirsToReAdd []string
+	// watchedDirs는 감시 목록에 넣은 폴더다. kqueue에서는 값에 그 폴더 안 항목의 이름과 fileID를 모은다.
+	// fsnotify의 kqueue 구현은 감시 중인 폴더 안의 항목마다 감시를 따로 열기 때문이다. unwatchTree를 본다.
+	watchedDirs map[string]map[string]fileID
+	// entryPaths는 kqueue에서 watchedDirs에 모은 항목의 경로를 fileID로 찾는다. renamedFrom을 본다.
+	entryPaths map[fileID]string
+	// held는 receive가 아직 handleEvent로 넘기지 않은 이벤트다. 맨 앞이 kqueue에서 이름을 바꾼 항목의
+	// Create이면 renameSource에 옛 경로를 두고, holdTimeout에 그 Rename을 기다리는 시간이 끝남을 알린다.
+	held         []fsnotify.Event
+	renameSource string
+	holdTimeout  <-chan time.Time
+	// selfRenames는 inotify에서 자신의 Rename이 한 번 더 올 수 있는, 옮긴 폴더의 옛 경로와 옮긴 때다.
+	selfRenames map[string]time.Time
+	// unreleasedDirs는 감시를 풀지 못한 폴더의 옛 경로다. releaseLeakedWatches를 본다.
+	unreleasedDirs map[string]struct{}
+	// leakCheck는 releaseLeakedWatches를 실행할 때를 알린다. 실행할 일이 없으면 nil이다.
+	leakCheck <-chan time.Time
+	// retiring은 rebuildWatcher가 갈아 끼운 뒤 아직 닫지 않은 예전 watcher다. retireWatcher를 본다.
+	retiring *retiredWatcher
 
 	runStartHook  func()
 	runChangeHook func(event domain.Event)
@@ -89,14 +110,17 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		noWait:          commandSet.Option.NoWait,
 		logger:          logger,
 		watcher:         watcher,
+		watchedDirs:     map[string]map[string]fileID{},
+		entryPaths:      map[fileID]string{},
+		selfRenames:     map[string]time.Time{},
+		unreleasedDirs:  map[string]struct{}{},
 		initErr:         err,
 		stop:            make(chan struct{}),
 		done:            make(chan struct{}),
 		handlerDone:     make(chan struct{}),
 	}
 	if watcher != nil {
-		result.watchEvents = watcher.Events
-		result.watchErrors = watcher.Errors
+		result.watchEvents, result.watchErrors = pumpEvents(watcher, result.stop)
 	}
 	return result
 }
@@ -108,7 +132,8 @@ func (r *watchTargetRunner) Run() error {
 		close(r.handlerDone)
 		return &FatalError{Path: r.path, Cause: r.initErr}
 	}
-	defer r.watcher.Close()
+	// rebuildWatcher가 watcher를 갈아 끼우므로, 끝날 때의 watcher를 닫는다.
+	defer func() { _ = r.watcher.Close() }()
 	if err := r.addDir(); err != nil {
 		close(r.handlerDone)
 		return &FatalError{Path: r.path, Cause: err}
@@ -134,6 +159,15 @@ func (r *watchTargetRunner) Run() error {
 		select {
 		case <-r.stop:
 			return nil
+		case <-r.holdTimeout:
+			if err := r.releaseHeld(events); err != nil {
+				return r.exitError(err)
+			}
+		case <-r.leakCheck:
+			r.leakCheck = nil
+			if err := r.releaseLeakedWatches(events); err != nil {
+				return r.exitError(err)
+			}
 		case ev, ok := <-r.watchEvents:
 			if !ok {
 				return &FatalError{Path: r.path, Cause: errors.New("watcher event channel closed unexpectedly")}
@@ -141,32 +175,11 @@ func (r *watchTargetRunner) Run() error {
 			if err := r.reAddDirs(); err != nil {
 				return &FatalError{Path: r.path, Cause: err}
 			}
-			r.printEventLog(ev)
-			// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
-			// 대상 밖 경로나 빈 경로로 이벤트를 알린다. 폴더 링크는 따라가지 않으므로 hook 실행과 감시 목록
-			// 반영 전에 버린다.
-			if ev.Name == "" || !domain.Path(r.watchRoot).Contains(domain.Path(ev.Name)) {
-				continue
+			if err := r.receive(ev, events); err != nil {
+				return r.exitError(err)
 			}
-			excluded := r.isExcluded(ev.Name)
-			if ev.Op.Has(fsnotify.Create) {
-				if !excluded && r.watchSubDir {
-					if err := r.addDirTree(ev.Name); err != nil {
-						return &FatalError{Path: r.path, Cause: err}
-					}
-				}
-			} else if ev.Op.Has(fsnotify.Remove) {
-				_ = r.watcher.Remove(ev.Name)
-			}
-			if excluded || !r.watchEvent.IsListening(ev) {
-				continue
-			}
-			select {
-			case <-r.stop:
-				return nil
-			case events <- domain.NewEventByFsnotify(ev):
-			default:
-				return &FatalError{Path: r.path, Cause: fmt.Errorf("dispatch queue full (capacity %d): %w", dispatchCapacity, fsnotify.ErrEventOverflow)}
+			if err := r.retireWatcher(events); err != nil {
+				return r.exitError(err)
 			}
 		case err, ok := <-r.watchErrors:
 			if !ok {
@@ -182,6 +195,72 @@ func (r *watchTargetRunner) Run() error {
 	}
 }
 
+// errStopped는 감시 루프가 r.stop이 닫혀 멈췄음을 알린다.
+var errStopped = errors.New("watch stopped")
+
+// exitError는 감시 루프를 멈추게 한 err를 Run의 반환값으로 바꾼다.
+func (r *watchTargetRunner) exitError(err error) error {
+	if errors.Is(err, errStopped) {
+		return nil
+	}
+	return &FatalError{Path: r.path, Cause: err}
+}
+
+// handleEvent는 fsnotify 이벤트 ev를 감시 목록에 반영하고, hook이 받을 이벤트이면 events에 넣는다.
+func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.Event) error {
+	r.printEventLog(ev)
+	// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
+	// 대상 밖 경로나 빈 경로로 이벤트를 알린다. 폴더 링크는 따라가지 않으므로 hook 실행과 감시 목록
+	// 반영 전에 버린다.
+	if ev.Name == "" || !domain.Path(r.watchRoot).Contains(domain.Path(ev.Name)) {
+		return nil
+	}
+	if r.isUnreleased(ev.Name) {
+		return nil
+	}
+	if ev.Op.Has(fsnotify.Create) {
+		delete(r.selfRenames, ev.Name)
+		if _, ok := r.unreleasedDirs[ev.Name]; ok {
+			// 같은 경로에 새로 생긴 폴더와 풀지 못한 옛 폴더의 감시는 같은 경로로 이벤트를 알리므로, 새 폴더를
+			// 감시하기 전에 옛 감시를 없앤다.
+			if err := r.rebuildIfLeaked(); err != nil {
+				return err
+			}
+		}
+		r.addEntry(ev.Name)
+		if !r.isExcluded(ev.Name) && r.watchSubDir {
+			if err := r.addDirTree(ev.Name); err != nil {
+				return err
+			}
+		}
+	} else if ev.Op.Has(fsnotify.Remove) || ev.Op.Has(fsnotify.Rename) {
+		if r.isSelfRename(ev) {
+			return nil
+		}
+		if r.unwatchTree(ev.Name) && inotifyOS && ev.Op.Has(fsnotify.Rename) {
+			r.addSelfRename(ev.Name)
+		}
+		// 이름을 바꾸거나 옮긴 파일의 옛 경로는 지운 파일처럼 사라졌으므로 삭제로 알린다.
+		ev.Op = fsnotify.Remove
+	}
+	return r.dispatch(ev, events)
+}
+
+// dispatch는 ev가 제외되지 않았고 감시하는 이벤트 종류이면 hook이 받도록 events에 넣는다.
+func (r *watchTargetRunner) dispatch(ev fsnotify.Event, events chan<- domain.Event) error {
+	if r.isExcluded(ev.Name) || !r.watchEvent.IsListening(ev) {
+		return nil
+	}
+	select {
+	case <-r.stop:
+		return errStopped
+	case events <- domain.NewEventByFsnotify(ev):
+		return nil
+	default:
+		return fmt.Errorf("dispatch queue full (capacity %d): %w", dispatchCapacity, fsnotify.ErrEventOverflow)
+	}
+}
+
 func (r *watchTargetRunner) addDir() error {
 	if !helper.IsExist(r.path.String()) {
 		return fmt.Errorf("not exist path: %s", r.path)
@@ -193,7 +272,11 @@ func (r *watchTargetRunner) addDir() error {
 	// watchSubDir이 false이면 하위 폴더를 감시하지 않는다.
 	if !r.watchSubDir {
 		r.logger.Debug(fmt.Sprint("add path:", r.watchRoot))
-		return r.watcher.Add(r.watchRoot)
+		if err := r.watcher.Add(r.watchRoot); err != nil {
+			return err
+		}
+		r.markWatched(r.watchRoot)
+		return nil
 	}
 
 	return r.addDirTree(r.watchRoot)
@@ -231,6 +314,7 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 			}
 			return err
 		}
+		r.addEntry(p)
 		// 폴더를 가리키는 링크는 폴더로 보지 않아 따라가지 않는다. 링크 순환과 감시 대상 밖 폴더의 감시를 막는다.
 		if !d.IsDir() {
 			return nil
@@ -240,9 +324,15 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 		}
 
 		r.logger.Debug(fmt.Sprint("add path:", p))
+		// fsnotify의 Windows 구현은 감시 대상 안의 다른 곳으로 옮긴 폴더의 감시를 옛 경로로 남겨 두고,
+		// 옮긴 폴더를 Add해도 그 감시를 옛 경로 그대로 다시 쓴다. 새 경로로 알리도록 남은 감시를 먼저 푼다.
+		if runtime.GOOS == "windows" {
+			_ = r.watcher.Remove(p)
+		}
 		if err := r.watcher.Add(p); err != nil {
 			return err
 		}
+		r.markWatched(p)
 		// reAddDirs가 막는 경합은 fsnotify의 kqueue 구현에만 있다.
 		if kqueueOS {
 			r.dirsToReAdd = append(r.dirsToReAdd, p)
@@ -263,7 +353,12 @@ func (r *watchTargetRunner) reAddDirs() error {
 	dirs := r.dirsToReAdd
 	r.dirsToReAdd = nil
 	for _, dir := range dirs {
-		// 다시 넣기 전에 폴더가 지워졌거나 옮겨졌으면 넣지 않는다.
+		// 다시 넣기 전에 폴더가 지워졌거나 옮겨졌으면 넣지 않는다. fsnotify는 그 폴더의 Remove나 Rename을
+		// 처리하며 감시를 닫는데, 닫는 사이에 Add하면 이미 닫은 감시 번호를 다시 닫아 그 번호를 새로 받은 다른
+		// 파일까지 닫는다. Add는 감시 중인 경로의 존재를 확인하지 않으므로 먼저 확인한다.
+		if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err := r.watcher.Add(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}

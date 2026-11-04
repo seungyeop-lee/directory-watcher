@@ -79,7 +79,7 @@ watchTargets:
         - [ path pattern of files and folders to exclude from watching, relative to path ]
       waitMillisecond: [ wait time after an event occurs before executing the hook, default is 100 ]
       watchSubDir: [ whether to monitor subdirectories, default is true ]
-      watchEvent: [ monitoring events (C: create, U: update, D: delete), default is "CUD" ]
+      watchEvent: [ monitoring events (C: create, U: update, D: delete or move away), default is "CUD" ]
       noWait: [ whether to execute the hook immediately without waiting after an event occurs, default is false ]
       interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
@@ -173,7 +173,7 @@ working directory <working directory>: <cause>
 | {{.ExtName}}       | `DW_EXT_NAME`        | Extension of the file where the event occurred                           | .txt                                                         |
 | {{.ParentPath}}    | `DW_PARENT_PATH`     | Relative path of the folder that holds the file where the event occurred | test/dir2                                                    |
 | {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | Absolute path of the folder that holds the file where the event occurred | /Users/example/directory-watcher/test/dir2                   |
-| {{.Event}}         | `DW_EVENT`           | Event type (C: create, U: update, D: delete)                             | C                                                            |
+| {{.Event}}         | `DW_EVENT`           | Event type (C: create, U: update, D: delete or move away)               | C                                                            |
 
 - Only the hooks that run for a change use these variables: the target's `onChange` and global `onBeforeChange` and `onAfterChange`.
 - The other hooks run their commands as written, so `{{.Path}}` in them stays as that literal text.
@@ -230,6 +230,30 @@ Rename each variable as follows:
 | `{{.FileName}}`, `DW_FILE_NAME` | `{{.Name}}`, `DW_NAME` |
 | `{{.DirPath}}`, `DW_DIR_PATH` | `{{.ParentPath}}`, `DW_PARENT_PATH` |
 | `{{.DirAbsPath}}`, `DW_DIR_ABS_PATH` | `{{.ParentAbsPath}}`, `DW_PARENT_ABS_PATH` |
+
+## Renamed and moved files
+
+- The watcher reports a renamed or moved file as a deletion (`D`) of its old path and a creation (`C`) of its new path inside the target.
+
+The hook receives these events for each action:
+
+| Action | Events the hook receives |
+|---|---|
+| Rename in the same folder | `D` for the old name, then `C` for the new name |
+| Move to another folder in the target | `D` for the old path, then `C` for the new path |
+| Move out of the target | `D` for the old path |
+| Move into the target | `C` for the new path |
+
+- With `noWait: false`, only the last event within `waitMillisecond` runs the hook, so a rename or a move inside the target runs the hook once with `C` for the new path.
+- If the old path matches `exclude` or the [default exclusion](#default-exclusion), the hook does not receive the `D`.
+- macOS can report the new path before the old one. The watcher then holds the `C` and the events after it until the `D` for the old path arrives, for at most 1 second.
+- Renamed and moved folders are covered in [Limitations on folder event detection](#limitations-on-folder-event-detection).
+
+### Moving from version 2 rename events
+
+- Before version 3, on macOS and Linux, the hook received only `C` for the new path of a file renamed or moved inside the target, and no event for a file moved out of the target.
+  - On Windows, a move to another folder or out of the target already arrived as `D` for the old path, but a rename in the same folder did not.
+- A hook that runs on `D` now also runs when a file is renamed or moved away, and it cannot tell that case from a deletion.
 
 ## waitMillisecond and noWait
 
@@ -389,5 +413,10 @@ watchTargets:
 ## Limitations on folder event detection
 
 - By default, hooks are executed based on **file** events within the monitored folder.
-- Therefore, hooks are not executed for folder creation or renaming.
+- Therefore, hooks are not executed for folder creation or for the new path of a renamed or moved folder.
 - However, hooks are executed for folder deletion (including empty folders) as it cannot be recognized that the target is a folder.
+- Renaming a folder, or moving it to another folder or out of the target, runs the hook with `D` for the folder's old path, the same as deleting it.
+- The files inside a folder that is renamed or moved do not run hooks for the rename or move.
+- After a folder is moved out of the target, changes in it no longer run hooks.
+  - On Windows, the watcher re-creates its watches of the target about 100 ms after such a move, and changes made in the target at that moment can reach the hook twice.
+- On Windows, renaming or moving a folder that holds a watched subfolder fails with `Access is denied` while the folder is watched.

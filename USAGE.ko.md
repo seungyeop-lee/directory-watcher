@@ -79,7 +79,7 @@ watchTargets:
         - [ 감시하지 않을 파일과 폴더의 경로 패턴, path 기준 ]
       waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
       watchSubDir: [ 하위 디렉토리 감시 여부, default는 true ]
-      watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제), default는 "CUD" ]
+      watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제 또는 옮겨 나감), default는 "CUD" ]
       noWait: [ 이벤트 발생 후 대기시간 없이 바로 hook을 실행할지 여부, default는 false ]
       interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
 ```
@@ -174,7 +174,7 @@ working directory <작업 폴더>: <원인>
 | {{.ExtName}}       | `DW_EXT_NAME`        | 이벤트가 일어난 파일의 확장자                | .txt                                             |
 | {{.ParentPath}}    | `DW_PARENT_PATH`     | 이벤트가 일어난 파일이 들어 있는 폴더의 상대 경로    | test/dir2                                        |
 | {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | 이벤트가 일어난 파일이 들어 있는 폴더의 절대 경로    | /Users/example/directory-watcher/test/dir2       |
-| {{.Event}}         | `DW_EVENT`           | 이벤트 종류 (C: 생성, U: 수정, D: 삭제)    | C                                                |
+| {{.Event}}         | `DW_EVENT`           | 이벤트 종류 (C: 생성, U: 수정, D: 삭제 또는 옮겨 나감) | C                                                |
 
 - 이 변수는 변경이 생겼을 때 실행하는 hook, 곧 감시 대상의 `onChange`와 전역 `onBeforeChange`, `onAfterChange`에서만 씁니다.
 - 다른 hook은 명령을 적힌 그대로 실행하므로, 그 명령에 쓴 `{{.Path}}`는 글자 그대로 남습니다.
@@ -231,6 +231,30 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 | `{{.FileName}}`, `DW_FILE_NAME` | `{{.Name}}`, `DW_NAME` |
 | `{{.DirPath}}`, `DW_DIR_PATH` | `{{.ParentPath}}`, `DW_PARENT_PATH` |
 | `{{.DirAbsPath}}`, `DW_DIR_ABS_PATH` | `{{.ParentAbsPath}}`, `DW_PARENT_ABS_PATH` |
+
+## 이름 바꾸기와 옮기기
+
+- watcher는 파일의 이름을 바꾸거나 파일을 옮기면 옛 경로의 삭제(`D`)와 감시 대상 안의 새 경로의 생성(`C`)으로 알립니다.
+
+동작마다 hook이 받는 이벤트는 다음과 같습니다.
+
+| 동작 | hook이 받는 이벤트 |
+|---|---|
+| 같은 폴더 안에서 이름 바꾸기 | 옛 이름의 `D`, 그다음 새 이름의 `C` |
+| 감시 대상 안의 다른 폴더로 옮기기 | 옛 경로의 `D`, 그다음 새 경로의 `C` |
+| 감시 대상 밖으로 옮기기 | 옛 경로의 `D` |
+| 감시 대상 안으로 옮겨 오기 | 새 경로의 `C` |
+
+- `noWait: false`이면 `waitMillisecond` 안의 마지막 이벤트만 hook을 실행하므로, 이름 바꾸기와 감시 대상 안의 옮기기는 새 경로의 `C`로 hook을 한 번 실행합니다.
+- 옛 경로가 `exclude`나 [기본 제외 규칙](#기본-제외-규칙)에 맞으면 hook은 그 `D`를 받지 않습니다.
+- macOS는 새 경로를 옛 경로보다 먼저 알리기도 합니다. 그러면 watcher는 옛 경로의 `D`가 올 때까지 `C`와 그 뒤의 이벤트를 최대 1초 동안 미뤄 둡니다.
+- 폴더의 이름 바꾸기와 옮기기는 [폴더 이벤트 감지에 대한 제약사항](#폴더-이벤트-감지에-대한-제약사항)에 있습니다.
+
+### 버전 2의 이름 바꾸기 이벤트에서 옮기기
+
+- 버전 3 전에는 macOS와 Linux에서 감시 대상 안에서 이름을 바꾸거나 옮긴 파일은 hook이 새 경로의 `C`만 받았고, 감시 대상 밖으로 옮긴 파일은 아무 이벤트도 받지 않았습니다.
+  - Windows에서는 다른 폴더나 감시 대상 밖으로 옮기면 이미 옛 경로의 `D`가 왔지만, 같은 폴더 안에서 이름을 바꾸면 오지 않았습니다.
+- `D`로 실행되는 hook은 이제 파일의 이름을 바꾸거나 파일을 옮겨 나갈 때도 실행되며, 그 경우와 삭제를 구별하지 못합니다.
 
 ## waitMillisecond와 noWait
 
@@ -395,5 +419,10 @@ watchTargets:
 ## 폴더 이벤트 감지에 대한 제약사항
 
 - 기본동작은 감시 대상 폴더 내의 **파일**의 이벤트에 따라 hook을 실행합니다.
-- 즉, 폴더의 생성 및 이름 수정으로는 hook이 실행되지 않습니다.
+- 즉, 폴더를 만들거나 폴더의 이름을 바꾸거나 폴더를 옮겨도 새 경로로는 hook이 실행되지 않습니다.
 - 그러나, 폴더의 삭제 (빈 폴더 포함)에 대해서는 삭제 대상이 폴더임을 인식 할 수 없어 hook이 실행됩니다.
+- 폴더의 이름을 바꾸거나 폴더를 다른 폴더나 감시 대상 밖으로 옮기면, 폴더를 지울 때와 같이 폴더의 옛 경로의 `D`로 hook이 실행됩니다.
+- 이름을 바꾸거나 옮긴 폴더 안의 파일은 그 이름 바꾸기나 옮기기로 hook을 실행하지 않습니다.
+- 감시 대상 밖으로 옮긴 폴더 안의 변경은 더 이상 hook을 실행하지 않습니다.
+  - Windows에서는 그렇게 옮기고 약 100ms 뒤에 watcher가 감시 대상의 감시를 다시 만들며, 그때 감시 대상 안에서 생긴 변경은 hook에 두 번 갈 수 있습니다.
+- Windows에서는 감시 중인 하위 폴더가 있는 폴더의 이름을 바꾸거나 그 폴더를 옮기면, 감시하는 동안 `Access is denied`로 실패합니다.
