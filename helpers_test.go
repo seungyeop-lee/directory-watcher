@@ -88,6 +88,19 @@ func tableCells(line string) []string {
 	return cells
 }
 
+// matchingRows는 모든 표에서 첫 칸이 pattern에 맞는 행마다, 첫 칸에서 pattern의 첫 묶음을 뽑고 나머지 칸과 함께 돌려준다.
+func matchingRows(doc string, pattern *regexp.Regexp) (keys []string, rest [][]string) {
+	for _, table := range markdownTables(doc) {
+		for _, cells := range table.rows {
+			if m := pattern.FindStringSubmatch(cells[0]); m != nil {
+				keys = append(keys, m[1])
+				rest = append(rest, cells[1:])
+			}
+		}
+	}
+	return keys, rest
+}
+
 func readSchema(t *testing.T) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(schemaFile)

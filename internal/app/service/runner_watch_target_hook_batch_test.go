@@ -1,7 +1,6 @@
 package service
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -258,19 +257,5 @@ func TestLastPerPathKeepsCreatesUnderCreatedFolder(t *testing.T) {
 	f.add(fsnotify.Create, "d/f.txt", false)
 	if got, want := f.flushWhenDue(), []string{"C d/", "C d/f.txt"}; !slices.Equal(got, want) {
 		t.Fatalf("runs = %v, want %v", got, want)
-	}
-}
-
-func mkdir(t *testing.T, path string) {
-	t.Helper()
-	if err := os.Mkdir(path, 0700); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func removeAll(t *testing.T, path string) {
-	t.Helper()
-	if err := os.RemoveAll(path); err != nil {
-		t.Fatal(err)
 	}
 }

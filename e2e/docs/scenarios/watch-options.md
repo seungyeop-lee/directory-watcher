@@ -84,5 +84,5 @@ make e2e-windows ARGS="-- -run '^Test(WatchOptions|FolderEvents)$'"
 
 - `e2e/scenarios/watch_options_test.go`: `TestWatchOptions`, filesystem actions, dot-named target, and linked target.
 - `e2e/scenarios/helpers_test.go`: `changeSteps`, `relativeChange`, `mkdirAll`, and `createEmpty` shared with `TestFolderEvents`.
-- `e2e/scenarios/golden_path_test.go`: `changeValues` builds the expected eight-variable record for the linked target.
+- `e2e/scenarios/helpers_test.go`: `changeValues` builds the expected eight-variable record for the linked target.
 - `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitLine`, `Lines`, and `Stop`. Their locations and responsibilities are in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

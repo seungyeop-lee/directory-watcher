@@ -42,9 +42,9 @@
 
 | 시나리오 | 파일 | 검증 내용 | 사용하는 지원 코드 |
 |---|---|---|---|
-| [`TestGoldenPath`](scenarios/golden-path.ko.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 8개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestGoldenPath`](scenarios/golden-path.ko.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 8개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop`, `scenarios/helpers_test.go` |
 | [`TestHookWorkingDirectory`](scenarios/hook-working-directory.ko.md) | `scenarios/shell_test.go` | `dir` 유무에 따른 전역·대상 hook 실행 위치 | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
-| [`TestPowershellEventVariables`](scenarios/powershell-event-variables.ko.md) | `scenarios/shell_windows_test.go` | Windows PowerShell의 이벤트 변수 여덟 개 원문 전달과 명령 주입 방지 | `Start`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestPowershellEventVariables`](scenarios/powershell-event-variables.ko.md) | `scenarios/shell_windows_test.go` | Windows PowerShell의 이벤트 변수 여덟 개 원문 전달과 명령 주입 방지 | `Start`, `AwaitLine`, `Stop`, `Lines`, `scenarios/helpers_test.go` |
 | [`TestWindowsShellEmptyArgument`](scenarios/windows-shell-empty-argument.ko.md) | `scenarios/shell_windows_test.go` | `cmd`의 빈 인자 하나 전달과 Windows PowerShell의 빈 인자 생략 | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
 | [`TestWindowsShellRejectedOnUnix`](scenarios/windows-shell-rejected-on-unix.ko.md) | `scenarios/shell_unix_test.go` | Unix의 `shell: cmd` 선택 시 hook 미실행·정확한 오류·종료 코드 1 | `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines` |
 | [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나, 감시 중에 생기거나 옮겨 온 폴더 안에 나중에 만든 파일, 밖으로 옮긴 폴더의 hook 미실행 | `Start`, `Hook`, `Await`, `Lines`, `Stop` |

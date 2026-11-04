@@ -12,19 +12,6 @@ import (
 // 이 파일의 테스트는 docs/guide 문서 두 판에 손으로 옮겨 적은 목록이 코드가 정의하는 목록과 같은지 확인한다.
 // 실패하면 그 문서의 영어판과 한국어판에서 해당 표와 예시를 코드 목록에 맞춰 함께 고친다.
 
-// matchingRows는 모든 표에서 첫 칸이 pattern에 맞는 행마다, 첫 칸에서 pattern의 첫 묶음을 뽑고 나머지 칸과 함께 돌려준다.
-func matchingRows(doc string, pattern *regexp.Regexp) (keys []string, rest [][]string) {
-	for _, table := range markdownTables(doc) {
-		for _, cells := range table.rows {
-			if m := pattern.FindStringSubmatch(cells[0]); m != nil {
-				keys = append(keys, m[1])
-				rest = append(rest, cells[1:])
-			}
-		}
-	}
-	return keys, rest
-}
-
 func TestGuideListsSameHookVariablesAsCode(t *testing.T) {
 	templates, envs := command.EventVariableNames()
 	var want []string

@@ -84,5 +84,5 @@ make e2e-windows ARGS="-- -run '^Test(WatchOptions|FolderEvents)$'"
 
 - `e2e/scenarios/watch_options_test.go`: `TestWatchOptions`, 파일시스템 동작, 점으로 시작하는 감시 대상과 링크인 감시 대상입니다.
 - `e2e/scenarios/helpers_test.go`: `TestFolderEvents`와 공유하는 `changeSteps`, `relativeChange`, `mkdirAll`, `createEmpty`입니다.
-- `e2e/scenarios/golden_path_test.go`: `changeValues`로 링크 대상의 여덟 변수 기대 기록을 만듭니다.
+- `e2e/scenarios/helpers_test.go`: `changeValues`로 링크 대상의 여덟 변수 기대 기록을 만듭니다.
 - `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitLine`, `Lines`, `Stop`입니다. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

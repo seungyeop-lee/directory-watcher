@@ -42,9 +42,9 @@
 
 | Scenario | File | What it verifies | Supporting code used |
 |---|---|---|---|
-| [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | Create, update, delete, hook order, 8 event variables | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | Create, update, delete, hook order, 8 event variables | `Start`, `Hook`, `AwaitLine`, `Stop`, `scenarios/helpers_test.go` |
 | [`TestHookWorkingDirectory`](scenarios/hook-working-directory.md) | `scenarios/shell_test.go` | Global and target hook execution locations with and without `dir` | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
-| [`TestPowershellEventVariables`](scenarios/powershell-event-variables.md) | `scenarios/shell_windows_test.go` | Eight literal event variables and injection prevention in Windows PowerShell | `Start`, `AwaitLine`, `Stop`, `Lines` |
+| [`TestPowershellEventVariables`](scenarios/powershell-event-variables.md) | `scenarios/shell_windows_test.go` | Eight literal event variables and injection prevention in Windows PowerShell | `Start`, `AwaitLine`, `Stop`, `Lines`, `scenarios/helpers_test.go` |
 | [`TestWindowsShellEmptyArgument`](scenarios/windows-shell-empty-argument.md) | `scenarios/shell_windows_test.go` | One empty argument in `cmd`, omitted empty argument in Windows PowerShell | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
 | [`TestWindowsShellRejectedOnUnix`](scenarios/windows-shell-rejected-on-unix.md) | `scenarios/shell_unix_test.go` | No hook, exact error, and exit 1 when Unix selects `shell: cmd` | `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines` |
 | [`TestFolderEvents`](scenarios/folder-events.md) | `scenarios/folder_events_test.go` | Events the hook receives for each folder and file action, one event for the top folder, a file created later in a folder created or moved in during watching, and no hook for a folder moved out | `Start`, `Hook`, `Await`, `Lines`, `Stop` |

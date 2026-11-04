@@ -173,6 +173,20 @@ func writeFile(t *testing.T, path string) {
 	}
 }
 
+func mkdir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func removeAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.RemoveAll(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // describeRun은 hook이 받는 실행 run을 root 기준 상대 경로로 "C a.txt"처럼 쓴다. 폴더는 "C d/"처럼 경로 끝에
 // /를 붙인다.
 func describeRun(t *testing.T, root string, run domain.Event) string {

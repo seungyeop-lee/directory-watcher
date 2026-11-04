@@ -80,5 +80,6 @@ make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 
 ## 관련 코드
 
-- `e2e/scenarios/golden_path_test.go`: `TestGoldenPath`, 설정을 만드는 `goldenConfig`, 기대 기록을 만드는 `changeValues`·`expectedSequence`
+- `e2e/scenarios/golden_path_test.go`에 `TestGoldenPath`를 정의합니다.
+- `e2e/scenarios/helpers_test.go`: `goldenConfig`는 설정을 만들고, `changeValues`와 `expectedSequence`는 기대 기록을 만듭니다.
 - `e2e/harness`: `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
