@@ -30,47 +30,6 @@ type retiredWatcher struct {
 	unreleased []string
 }
 
-// markWatched는 감시 목록에 넣은 폴더 dir을 watchedDirs에 적는다.
-func (r *watchTargetRunner) markWatched(dir string) {
-	if _, ok := r.watchedDirs[dir]; ok {
-		return
-	}
-	var entries map[string]fileID
-	if kqueueOS {
-		entries = map[string]fileID{}
-	}
-	r.watchedDirs[dir] = entries
-}
-
-// addEntry는 kqueue에서 감시 중인 폴더 안에 있는 항목 path를 그 폴더의 항목으로 적는다.
-func (r *watchTargetRunner) addEntry(path string) {
-	entries := r.watchedDirs[filepath.Dir(path)]
-	if entries == nil {
-		return
-	}
-	var id fileID
-	if info, err := os.Lstat(path); err == nil {
-		id, _ = fileIDOf(info)
-	}
-	entries[filepath.Base(path)] = id
-	if id != (fileID{}) {
-		r.entryPaths[id] = path
-	}
-}
-
-// forgetEntry는 사라진 항목 path를 addEntry의 기록에서 지운다.
-func (r *watchTargetRunner) forgetEntry(path string) {
-	entries := r.watchedDirs[filepath.Dir(path)]
-	id, ok := entries[filepath.Base(path)]
-	if !ok {
-		return
-	}
-	delete(entries, filepath.Base(path))
-	if r.entryPaths[id] == path {
-		delete(r.entryPaths, id)
-	}
-}
-
 // renamedFrom은 kqueue에서 path에 새로 생긴 항목이 감시 중인 폴더 안의 다른 항목의 이름을 바꾼 것이면 그
 // 옛 경로를 돌려준다. 같은 장치와 inode의 항목이 옛 경로에 더는 없으면 이름을 바꾼 것으로 본다.
 func (r *watchTargetRunner) renamedFrom(path string) (string, bool) {
@@ -199,10 +158,12 @@ func (r *watchTargetRunner) unwatchTree(path string) bool {
 		}
 		_ = r.watcher.Remove(dir)
 		removed[filepath.Clean(dir)] = true
-		for name, id := range entries {
-			_ = r.watcher.Remove(filepath.Join(dir, name))
-			if r.entryPaths[id] == filepath.Join(dir, name) {
-				delete(r.entryPaths, id)
+		if kqueueOS {
+			for name, e := range entries {
+				_ = r.watcher.Remove(filepath.Join(dir, name))
+				if r.entryPaths[e.id] == filepath.Join(dir, name) {
+					delete(r.entryPaths, e.id)
+				}
 			}
 		}
 		delete(r.watchedDirs, dir)

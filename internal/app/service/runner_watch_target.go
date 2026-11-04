@@ -44,9 +44,8 @@ type watchTargetRunner struct {
 	watching bool
 	// dirsToReAdd는 감시 루프가 다음 이벤트를 받을 때 감시 목록에 다시 넣을 폴더다. reAddDirs를 본다.
 	dirsToReAdd []string
-	// watchedDirs는 감시 목록에 넣은 폴더다. kqueue에서는 값에 그 폴더 안 항목의 이름과 fileID를 모은다.
-	// fsnotify의 kqueue 구현은 감시 중인 폴더 안의 항목마다 감시를 따로 열기 때문이다. unwatchTree를 본다.
-	watchedDirs map[string]map[string]fileID
+	// watchedDirs는 감시 목록에 넣은 폴더이고, 값은 그 폴더 안 항목의 이름별 기록이다. recorded를 본다.
+	watchedDirs map[string]map[string]entryInfo
 	// entryPaths는 kqueue에서 watchedDirs에 모은 항목의 경로를 fileID로 찾는다. renamedFrom을 본다.
 	entryPaths map[fileID]string
 	// held는 receive가 아직 handleEvent로 넘기지 않은 이벤트다. 맨 앞이 kqueue에서 이름을 바꾼 항목의
@@ -60,9 +59,6 @@ type watchTargetRunner struct {
 	unreleasedDirs map[string]struct{}
 	// leakCheck는 releaseLeakedWatches를 실행할 때를 알린다. 실행할 일이 없으면 nil이다.
 	leakCheck <-chan time.Time
-	// childDirs는 watchSubDir가 false일 때 감시 대상 바로 아래에 있는 폴더다. 감시 목록에 넣지 않는 이 폴더도
-	// 지우거나 옮기면 폴더 이벤트로 알리려고 적어 둔다.
-	childDirs map[string]struct{}
 	// batch는 폴더 이벤트를 모으는 동안 받은 이벤트이고, 모으지 않을 때는 nil이다. batchDue는 batch를 내보낼
 	// 때를 알린다. collect를 본다.
 	batch    *eventBatch
@@ -123,11 +119,10 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		noWait:          commandSet.Option.NoWait,
 		logger:          logger,
 		watcher:         watcher,
-		watchedDirs:     map[string]map[string]fileID{},
+		watchedDirs:     map[string]map[string]entryInfo{},
 		entryPaths:      map[fileID]string{},
 		selfRenames:     map[string]time.Time{},
 		unreleasedDirs:  map[string]struct{}{},
-		childDirs:       map[string]struct{}{},
 		initErr:         err,
 		stop:            make(chan struct{}),
 		done:            make(chan struct{}),
@@ -248,14 +243,14 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 				return err
 			}
 		}
-		r.addEntry(ev.Name)
 		// 폴더를 가리키는 링크는 따라가지 않으므로 폴더로 보지 않는다.
 		info, err := os.Lstat(ev.Name)
 		isDir = err == nil && info.IsDir()
-		if isDir && !r.watchSubDir {
-			r.childDirs[ev.Name] = struct{}{}
+		// 이미 사라진 항목은 기록하지 않는다. kqueue에서는 그 항목의 삭제 이벤트가 오지 않을 수 있다.
+		if err == nil {
+			r.addEntry(ev.Name, isDir)
 		}
-		if !r.isExcluded(ev.Name) && r.watchSubDir {
+		if isDir && r.watchSubDir && !r.isExcluded(ev.Name) {
 			if err := r.addDirTree(ev.Name); err != nil {
 				return err
 			}
@@ -265,10 +260,9 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 		if r.isSelfRename(ev) {
 			return nil
 		}
-		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 감시 목록에 적어 둔 폴더인지로 판단한다.
-		_, isChildDir := r.childDirs[ev.Name]
-		delete(r.childDirs, ev.Name)
-		isDir = r.unwatchTree(ev.Name) || isChildDir
+		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 기록에 적어 둔 폴더인지로 판단한다.
+		wasDir, _ := r.recorded(ev.Name)
+		isDir = r.unwatchTree(ev.Name) || wasDir
 		if isDir && inotifyOS && ev.Op.Has(fsnotify.Rename) {
 			r.addSelfRename(ev.Name)
 		}
@@ -333,9 +327,7 @@ func (r *watchTargetRunner) addDir() error {
 			return err
 		}
 		for _, entry := range entries {
-			if entry.IsDir() {
-				r.childDirs[filepath.Join(r.watchRoot, entry.Name())] = struct{}{}
-			}
+			r.addEntry(filepath.Join(r.watchRoot, entry.Name()), entry.IsDir())
 		}
 		return nil
 	}
@@ -375,7 +367,7 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 			}
 			return err
 		}
-		r.addEntry(p)
+		r.addEntry(p, d.IsDir())
 		// 폴더를 가리키는 링크는 폴더로 보지 않아 따라가지 않는다. 링크 순환과 감시 대상 밖 폴더의 감시를 막는다.
 		if !d.IsDir() {
 			return nil

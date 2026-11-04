@@ -24,12 +24,12 @@ func durationOr(m domain.Millisecond, fallback time.Duration) time.Duration {
 	return m.Duration()
 }
 
-// isDir은 감시 대상 안의 경로 name이 폴더인지 판단한다. 감시 목록에 적어 둔 폴더가 아니면 디스크를 본다.
+// isDir은 감시 대상 안의 경로 name이 폴더인지 판단한다. 기록이나 감시 목록에 폴더로 적혀 있지 않으면 디스크를 본다.
 func (r *watchTargetRunner) isDir(name string) bool {
-	if _, ok := r.watchedDirs[name]; ok {
+	if isDir, _ := r.recorded(name); isDir {
 		return true
 	}
-	if _, ok := r.childDirs[name]; ok {
+	if _, ok := r.watchedDirs[name]; ok {
 		return true
 	}
 	info, err := os.Lstat(name)
