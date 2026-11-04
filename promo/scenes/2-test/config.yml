@@ -1,0 +1,5 @@
+watchTargets:
+  - path: greet
+    lifeCycle:
+      onChange:
+        - go test

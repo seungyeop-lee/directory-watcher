@@ -4,7 +4,7 @@
 
 - Directory Watcher runs the commands you describe in one `config.yml` when files change: run tests, rebuild, restart your dev server, and clean up when you stop.
 
-<!-- Hero GIF placeholder: the demo GIF and the files that make it go in promo/. -->
+![Demo: saving a Go file restarts the dev server, saving a file runs go test, and a git switch that changes 50 files runs the build once](promo/hero.gif)
 
 ## 30-second example
 

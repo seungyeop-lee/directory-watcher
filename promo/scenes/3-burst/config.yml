@@ -1,0 +1,6 @@
+watchTargets:
+  - path: src
+    lifeCycle:
+      onChange:
+        - dir: .
+          cmd: sh build.sh

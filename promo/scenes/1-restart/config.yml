@@ -1,0 +1,10 @@
+watchTargets:
+  - path: server
+    lifeCycle:
+      onStartWatch:
+        - go run .
+      onChange:
+        - go run .
+    option:
+      run:
+        interrupt: oldest
