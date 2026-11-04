@@ -32,7 +32,8 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 The Windows E2E runs the watcher without Git Bash and checks that the watcher stops canceled hooks.
 
-- For `interruptible: true` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-03).
+- For `run.interrupt: oldest` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-03).
+- On shutdown, the parent, child, and grandchild processes of two hooks that run at the same time with `run.concurrency: 2` all end on the signal before the finish hook runs: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md) (2026-11-04).
 - The next program of a canceled `cmd` command list ends: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) (2026-11-04).
 - A `powershell` hook canceled 0–1000 ms after it starts does not run its program to completion: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) (2026-11-04).
 

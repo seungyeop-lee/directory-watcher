@@ -147,10 +147,24 @@
                 },
                 "additionalProperties": false
               },
-              "interruptible": {
-                "type": "boolean",
-                "description": "Whether to stop the currently running command and execute a new command.",
-                "default": false
+              "run": {
+                "type": "object",
+                "description": "How runs of the hook are run.",
+                "properties": {
+                  "concurrency": {
+                    "type": "integer",
+                    "description": "Most runs of the target that run at the same time. Runs start in the order their events happened and can end in any order.",
+                    "default": 1,
+                    "minimum": 1
+                  },
+                  "interrupt": {
+                    "type": "string",
+                    "description": "Running runs that a new run cancels before it starts. none: nothing; the new run waits for a free slot. samePath: the run of the same path, even when a slot is free. oldest: the run that started first, when every slot is taken; with concurrency 1, the running run.",
+                    "enum": ["none", "samePath", "oldest"],
+                    "default": "none"
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false

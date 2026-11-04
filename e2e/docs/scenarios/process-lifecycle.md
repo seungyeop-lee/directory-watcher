@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](process-lifecycle.ko.md)
 
-- In interruptible mode (`interruptible: true`), when a hook made of real parent, child, and grandchild processes is replaced by a file creation, checks that the new generation starts only after the previous generation completes gracefully.
+- With `run.interrupt: oldest`, when a hook made of real parent, child, and grandchild processes is replaced by a file creation, checks that the new generation starts only after the previous generation completes gracefully.
 - It also checks that, when the watcher shuts down, the finish hooks run after the current generation completes gracefully.
 
 ## What it checks and success criteria
@@ -18,7 +18,7 @@
 
 - The target `onStartWatch` and `onChange` are set to the same `hookrec --depth=2` command. The record format (`generation|PID|depth|state`) and signal handling are described in [`hookrec` process trees and delayed hooks](../harness.md#hookrec-process-trees-and-delayed-hooks).
 - The target `onFinishWatch` records `TARGET:onFinishWatch`, and the global `onFinishWatch` records `GLOBAL:onFinishWatch`.
-- The target options are `interruptible: true`, `hookBatch.waitMillisecond: 100`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`.
+- The target options are `run.interrupt: oldest`, `hookBatch.waitMillisecond: 100`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`.
 
 ## Sequence
 

@@ -92,7 +92,9 @@ watchTargets:
         deliver: [ runs made from the collected events (last, lastPerPath, each), default is last ]
       queue: # runs waiting for the hook
         size: [ most runs that can wait, at least 1, default is 2048 ]
-      interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
+      run: # running the hook
+        concurrency: [ most runs of the hook at the same time, at least 1, default is 1 ]
+        interrupt: [ running runs that a new run cancels (none, samePath, oldest), default is none ]
 ```
 
 - For each change, global `onBeforeChange`, the target's `onChange`, and global `onAfterChange` run in that order.
@@ -107,7 +109,7 @@ The failure is logged as an `[ERROR]` line, which the default log level shows:
 
 - `<target>` is the last element of the target's `path`.
 - The form of `<command>` is in [Shell that runs hook commands](#shell-that-runs-hook-commands).
-- A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
+- A command stopped because a new run cancelled its run (`run.interrupt`) or because watching stopped is not a failure and is not logged.
 
 - If a command of global `onStartWatch` or global `onFinishWatch` fails, the remaining commands of that hook are skipped.
 
@@ -245,10 +247,9 @@ Rename each variable as follows:
 
 ### Moving from version 2 options
 
-- Version 3 groups the target options under `watch`, `dirBatch`, and `hookBatch` in `option`.
-- `interruptible` stays directly under `option`.
+- Version 3 groups the target options under `watch`, `dirBatch`, `hookBatch`, `queue`, and `run` in `option`.
 
-If a target's `option` still has `watchSubDir`, `waitMillisecond`, or `noWait` directly under it, the watcher runs no hook, prints an error like the one below, and exits with code 1:
+If a target's `option` still has `watchSubDir`, `waitMillisecond`, `noWait`, or `interruptible` directly under it, the watcher runs no hook, prints an error like the one below, and exits with code 1:
 
 ```text
 Error: watchTargets[0].option.watchSubDir is no longer supported; use option.watch.subDir (see USAGE "Moving from version 2 options")
@@ -266,7 +267,8 @@ Move each version 2 option as follows:
 | `noWait: false` | No `noWait` |
 | `excludeDir`, `excludeSuffix` | `watch.exclude`, as described in [Moving from excludeDir and excludeSuffix](#moving-from-excludedir-and-excludesuffix) |
 | `watchEvent` | `watch.fileEvent` and `watch.dirEvent`, as described in [Moving from watchEvent](#moving-from-watchevent) |
-| `interruptible` | No change |
+| `interruptible: true` | `run: {interrupt: oldest}` |
+| `interruptible: false` | No `interruptible`: `run.interrupt` defaults to `none` |
 
 - With `noWait: false`, version 2 ran the hook once with the last event received in the wait. Version 3 defaults to `deliver: last`, which runs the hook with the final change of the path that changed last, as described in [Waiting and merging with hookBatch](#waiting-and-merging-with-hookbatch).
   - A file created and deleted within one wait ran the hook with `D` in version 2 and runs no hook in version 3.
@@ -370,7 +372,7 @@ Error context is passed as environment variables, never interpolated into comman
 
 ## Queue size and warnings
 
-- The runs of a target wait in the target's queue until its hooks run them. `option.queue.size` (default 2048) is the most runs that can wait; the run in progress does not count.
+- The runs of a target wait in the target's queue until they start, as described in [Running hooks with run](#running-hooks-with-run). `option.queue.size` (default 2048) is the most runs that can wait; runs in progress do not count.
 - A run that does not fit stops processing with `dispatch queue full (capacity <size>)` and runs global `onError` once, as described in [Event-loss notification](#event-loss-notification).
   - The watcher does not wait for room in the queue. This also holds for the runs made from events collected for [folder events](#folder-events), which can arrive many at once.
 
@@ -412,12 +414,38 @@ The warning is passed as environment variables:
 - Read the variables with the shell's syntax, as for `onError`. File-event template variables are not available for this hook.
 - A structured `dir` selects its working directory; without it, the command uses the program execution directory.
 
+## Running hooks with run
+
+- `option.run.concurrency` (default 1) is the most runs of a target that run at the same time. With the default, a target runs one run at a time.
+- Runs start in the order they leave the queue, which is the order their events happened. Runs that run at the same time can end in any order.
+- Runs of the same path, or of a folder and a path inside it, can also run at the same time. The `D` run of a file can therefore end before the earlier `C` run of the same file. Keep `concurrency: 1` if the hook depends on the order in which runs end.
+- Each run runs global `onBeforeChange` and `onAfterChange` around its own `onChange`. If these hooks use something shared, such as one output file, runs at the same time can conflict.
+- Whatever `concurrency` is, runs wait for target `onStartWatch` to end. Only with `interrupt: oldest` does the first run cancel a running target `onStartWatch`.
+
+`option.run.interrupt` (default `none`) selects the running runs that a new run cancels:
+
+| `interrupt` | What a new run cancels |
+|---|---|
+| `none` | Nothing. The new run waits for a free slot. |
+| `samePath` | The run of the same path, even when a slot is free. If no run has the same path, the new run cancels nothing and waits for a free slot. |
+| `oldest` | The run that started first, when every slot is taken. With `concurrency: 1`, this is the running run. |
+
+- A new run starts only after the runs it canceled have ended.
+- With `samePath`, hooks that do not end on their own, such as servers, can take every slot, and then runs of other paths wait until watching stops. Run such hooks with `concurrency: 1` and `interrupt: oldest`, so that every new run replaces the running one.
+
+If `concurrency` is less than 1 or `interrupt` is not one of these values, the watcher runs no hook, prints an error such as the ones below, and exits with code 1:
+
+```text
+Error: watchTargets[0].option.run: concurrency 0 is less than 1
+Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, samePath, or oldest
+```
+
 ## Overload and shutdown
 
-- Each target keeps at most `queue.size` pending runs, as described in [Queue size and warnings](#queue-size-and-warnings), and runs one run of its hooks at a time. `hookBatch.deliver: each` preserves received-event order; it does not become latest-only under load. Excluded paths neither make runs nor extend a wait. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the path that `deliver: last` runs.
+- Each target keeps at most `queue.size` pending runs, as described in [Queue size and warnings](#queue-size-and-warnings), and runs at most `run.concurrency` runs of its hooks at a time. `hookBatch.deliver: each` preserves received-event order; it does not become latest-only under load. Excluded paths neither make runs nor extend a wait. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the path that `deliver: last` runs.
 - A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
 - A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
-- With `interruptible: true`, a new run starts only after the canceled previous run has ended. A shutdown signal cancels running start and change commands, discards pending changes, waits for event handling to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
+- A shutdown signal cancels every running start and change run, discards pending changes, waits for event handling and every canceled run to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
 - On Windows, a canceled hook gets CTRL+BREAK, and so do the programs it starts after the cancel, such as the next program of `a & b` in `cmd`. Processes of the hook that are still running 20 seconds after the first CTRL+BREAK are ended together, including processes that ignore the signal or use their own console or process group. Replacement and shutdown wait until every process of the hook has ended, so a hook that does not exit on CTRL+BREAK, including some `powershell` hooks, delays them by up to 20 seconds.
 - On Windows, a hook canceled less than 100 ms after it starts gets CTRL+BREAK only when 100 ms have passed since its start, so replacement and shutdown right after a hook starts take up to 100 ms longer.
 - On Windows, processes started by a hook that finishes without being canceled keep running.
@@ -479,7 +507,7 @@ watchTargets:
           - 'build.log'
 ```
 
-- With `interruptible: false`, other files changed while the hook runs still run the hook after it finishes.
+- With `run.interrupt: none`, the default, other files changed while the hook runs still run the hook after it finishes.
 
 ### Moving from excludeDir and excludeSuffix
 
@@ -515,7 +543,7 @@ For a target with `path: 'site'`:
 - For example, when you watch both `src` and `src/api`, creating `src/api/a.txt` runs the `onChange` of both targets.
 - Global `onBeforeChange` and `onAfterChange` also run for each target, so the single change in that example runs each of them twice.
 - The hooks of one target do not wait for the hooks of the other target to finish.
-- Each target applies its own queue, `hookBatch.waitMillisecond` wait, and `interruptible` cancellation.
+- Each target applies its own queue, `hookBatch.waitMillisecond` wait, and `run` concurrency and cancellation.
 - Each target adds the overlapping folders to its own watch list, so they use OS watch resources, such as inotify watches on Linux or open files on macOS, once per target.
 - When one target's hook writes a file inside another target's `path`, that write runs the other target's hooks.
 

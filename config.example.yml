@@ -47,7 +47,9 @@ watchTargets:
         deliver: lastPerPath # default last; last, lastPerPath, or each
       queue:
         size: 4096 # default 2048; more pending runs stop the watcher
-      interruptible: true
+      run:
+        concurrency: 1 # default 1; runs of this target at the same time
+        interrupt: oldest # default none; none, samePath, or oldest
   - path: 'test/dir3'
     lifeCycle:
       onStartWatch:

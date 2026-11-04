@@ -100,7 +100,7 @@ func testCommandSet(paths ...string) domain.CommandSet {
 	empty := emptyCommand()
 	set := domain.CommandSet{Global: domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: empty, OnBeforeChange: empty, OnAfterChange: empty, OnFinishWatch: empty}}}
 	for _, path := range paths {
-		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, WatchFileEvent: domain.WatchEvent{Create: true}}})
+		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, QueueSize: testQueueSize, Run: domain.RunPolicy{Concurrency: 1}, WatchFileEvent: domain.WatchEvent{Create: true}}})
 	}
 	return set
 }
@@ -136,7 +136,16 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	r.runStartHook = func() {}
 	r.runFinishHook = func() {}
-	r.runChangeHook = func(domain.Event) { close(entered); <-release }
+	// 실제 runChangeHook은 hook을 시작하면 돌아오고, 자리가 없으면 자리가 날 때까지 막힌다. 그래서 첫 실행은 돌고 있는
+	// 실행처럼 돌아오고, 다음 실행은 자리를 기다리며 대기열에 남는다.
+	var calls atomic.Int32
+	r.runChangeHook = func(domain.Event) {
+		if calls.Add(1) == 1 {
+			close(entered)
+			return
+		}
+		<-release
+	}
 	baseline := runtime.NumGoroutine()
 	go func() { result <- r.Run() }()
 	events <- fsnotify.Event{Name: filepath.Join(r.path.String(), "first"), Op: fsnotify.Create}
@@ -177,7 +186,7 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 }
 
 // 기다린 뒤 last로 넘기면 마지막 유효 이벤트 하나만, 기다리지 않고 each로 넘기면 모든 이벤트가 생긴 순서대로 hook에
-// 가는지, 그리고 두 interruptible 값 모두에서 hook이 겹쳐 실행되지 않는지 확인한다.
+// 가는지, 그리고 run.concurrency가 1이면 run.interrupt가 none이든 oldest든 hook이 겹쳐 실행되지 않는지 확인한다.
 func TestControlledModesPreservePolicy(t *testing.T) {
 	modes := []struct {
 		name    string
@@ -188,8 +197,9 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 		{"waitMillisecond=0/deliver=each", 0, domain.DeliverEach},
 	}
 	for _, mode := range modes {
-		for _, interruptible := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/interruptible=%t", mode.name, interruptible), func(t *testing.T) {
+		for name, interrupt := range map[string]domain.Interrupt{"none": domain.InterruptNone, "oldest": domain.InterruptOldest} {
+			t.Run(fmt.Sprintf("%s/interrupt=%s", mode.name, name), func(t *testing.T) {
+				oldest := interrupt == domain.InterruptOldest
 				helper.GlobalLogger = newMockLogger()
 				each := mode.deliver == domain.DeliverEach
 				var mu sync.Mutex
@@ -221,7 +231,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 				empty := emptyCommand()
 				option := hookBatchOption(mode.wait, 1000, mode.deliver)
 				option.Exclude = domain.ExcludePatterns{"**/*.swp"}
-				option.Interruptible = domain.Interruptible(interruptible)
+				option.Run = domain.RunPolicy{Concurrency: 1, Interrupt: interrupt}
 				root := t.TempDir()
 				r := NewWatchTargetRunner(
 					domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnBeforeChange: empty, OnAfterChange: empty}},
@@ -237,7 +247,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 				}
 				for _, name := range names {
 					events <- fsnotify.Event{Name: name, Op: fsnotify.Create}
-					if each && interruptible {
+					if each && oldest {
 						<-began
 					}
 					events <- fsnotify.Event{Name: filepath.Join(root, "excluded.swp"), Op: fsnotify.Create}
@@ -277,7 +287,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 							t.Fatalf("reordered: %v", started)
 						}
 					}
-					if !interruptible && len(completed) != 24 {
+					if !oldest && len(completed) != 24 {
 						t.Fatalf("sequential work canceled: %v", completed)
 					}
 				}

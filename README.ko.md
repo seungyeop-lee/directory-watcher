@@ -20,10 +20,11 @@
 - 기본 동작에서는 이벤트가 몰려도, 마지막 이벤트 뒤 `hookBatch.waitMillisecond`(기본 100ms)가 지나거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000ms)가 지나면 가장 나중에 바뀐 경로의 최종 변화로 hook을 한 번만 실행합니다.
 - `hookBatch.deliver: lastPerPath`로 설정하면 바뀐 경로마다 hook을 한 번씩 실행합니다. `hookBatch.deliver: each`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다. `hookBatch.waitMillisecond: 0`이면 기다리지 않고 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](USAGE.ko.md#hookbatch로-기다리고-합치기)에 있습니다.
 - 대상마다 대기 실행을 최대 `queue.size`(기본 2048)개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
+- `run.concurrency`를 1보다 크게 설정하면 대상은 그 수만큼 실행을 동시에 돌립니다. 실행은 이벤트가 생긴 순서대로 시작하지만 끝나는 순서는 보장하지 않습니다. 자세한 내용은 [run으로 hook 실행하기](USAGE.ko.md#run으로-hook-실행하기)에 있습니다.
 
 ### 오래 실행되는 프로세스 재시작하기
 
-- `interruptible: true`로 설정하면 새 변경이 생겼을 때 실행 중인 명령을 취소하고, 그 명령이 끝나기를 기다린 뒤 변경 명령을 다시 실행합니다. 스스로 끝나지 않는 서버 같은 프로세스에 사용합니다.
+- 기본값 `run.concurrency: 1`에서 `run.interrupt: oldest`로 설정하면 새 변경이 생겼을 때 실행 중인 명령을 취소하고, 그 명령이 끝나기를 기다린 뒤 변경 명령을 다시 실행합니다. 스스로 끝나지 않는 서버 같은 프로세스에 사용합니다.
 - watcher를 멈추면 실행 중인 명령을 취소한 뒤 종료 명령을 실행합니다.
 
 ### 시작·종료 명령 실행하기
@@ -163,8 +164,9 @@ flowchart TD
         mergeRuns["hookBatch.deliver에 따라 실행으로 합치고<br>watch.fileEvent나 watch.dirEvent에서 고른 종류만 남김"]
         queueEvent{"대상의 queue.size 크기<br>대기열에 자리가 있는가?"}
         queueWarning["전역 onQueueWarning,<br>이벤트 처리와 따로 실행"]
-        interruptChoice{"interruptible?"}
-        cancelPrevious["실행 중인 명령을 취소하고<br>끝나기를 기다림"]
+        interruptChoice{"run.interrupt가 취소할<br>실행을 고르는가?"}
+        cancelPrevious["그 실행을 취소하고<br>끝나기를 기다림"]
+        waitSlot["run.concurrency의 자리가 비고<br>대상 onStartWatch가 끝날 때까지 대기"]
         runChange["전역 onBeforeChange → onChange<br>→ 전역 onAfterChange"]
     end
     fatalStop(["치명적 오류: 다음 다이어그램"])
@@ -186,15 +188,16 @@ flowchart TD
     queueEvent -->|"아니오"| fatalStop
     queueEvent -.->|"대기 실행이 70%나 90%에 닿거나<br>80%나 60% 아래로 내려감"| queueWarning
     queueEvent -->|"예"| interruptChoice
-    interruptChoice -->|"true"| cancelPrevious
-    interruptChoice -->|"false: 실행 중인 명령이 끝날 때까지 대기"| runChange
-    cancelPrevious --> runChange
+    interruptChoice -->|"예: samePath는 같은 경로,<br>oldest는 자리가 다 찼을 때"| cancelPrevious
+    interruptChoice -->|"아니오"| waitSlot
+    cancelPrevious --> waitSlot
+    waitSlot --> runChange
     runChange -->|"다음 이벤트"| receiveEvent
 ```
 
 - 명령이 실행되는 동안에도 이벤트를 계속 받아 모으므로, `hookBatch`가 기다리는 시간이 끝날 때마다 그때 만든 실행이 대기열에 들어갑니다.
 - 대기열에 자리가 없는 실행은 곧바로 watcher를 멈추며, 폴더 이벤트를 위해 모은 이벤트에서 만든 실행도 같습니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
-- `interruptible: false`에서는 대상 `onStartWatch`나 변경 명령이 실행되는 동안 들어온 이벤트가 그 명령이 끝날 때까지 대기열에서 기다립니다. `interruptible: true`에서는 실행 중인 대상 `onStartWatch`도 다음 변경이 취소합니다.
+- 실행은 시작할 때까지 대기열에서 기다리므로, 대상 `onStartWatch`나 `run.concurrency`개의 실행이 도는 동안 만든 실행은 대기열에 남습니다. `run.interrupt: oldest`에서는 실행 중인 대상 `onStartWatch`도 첫 실행이 취소합니다.
 - 한 번의 실행에 속한 명령은 차례대로 실행되며, 실패한 명령이 나오면 그 실행을 멈춥니다. 이 실패는 `[ERROR]` 로그로 남습니다. 자세한 내용은 사용 안내의 [`config.yml`](USAGE.ko.md#configyml)을 확인하세요.
 
 종료 신호와 치명적 오류는 모두 전체 감시 대상을 멈춘 뒤 종료 명령을 실행합니다.

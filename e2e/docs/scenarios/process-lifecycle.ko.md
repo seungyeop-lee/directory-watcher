@@ -2,7 +2,7 @@
 
 🇺🇸 [English](process-lifecycle.md) | 🇰🇷 한국어
 
-- 중단 모드(`interruptible: true`)에서 실제 부모·자식·손자 프로세스로 된 hook이 파일 생성으로 교체될 때, 이전 세대가 정상 완료한 뒤에 새 세대가 시작되는지 확인합니다.
+- `run.interrupt: oldest`에서 실제 부모·자식·손자 프로세스로 된 hook이 파일 생성으로 교체될 때, 이전 세대가 정상 완료한 뒤에 새 세대가 시작되는지 확인합니다.
 - watcher를 종료할 때 현재 세대가 정상 완료한 뒤 종료 hook이 실행되는지도 확인합니다.
 
 ## 확인 내용과 성공 조건
@@ -18,7 +18,7 @@
 
 - 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식(`세대|PID|깊이|상태`)과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
 - 대상 `onFinishWatch`는 `TARGET:onFinishWatch`를, 전역 `onFinishWatch`는 `GLOBAL:onFinishWatch`를 기록합니다.
-- 대상 옵션은 `interruptible: true`, `hookBatch.waitMillisecond: 100`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다.
+- 대상 옵션은 `run.interrupt: oldest`, `hookBatch.waitMillisecond: 100`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다.
 
 ## 진행 순서
 

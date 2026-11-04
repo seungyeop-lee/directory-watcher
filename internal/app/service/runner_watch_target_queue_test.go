@@ -28,16 +28,13 @@ func (r *queueRecorder) warn(w queueWarning) {
 // fillQueue는 대기열 q의 기다리는 수가 length가 될 때까지 실행을 넣거나 꺼낸다.
 func fillQueue(t *testing.T, q *runQueue, length int) {
 	t.Helper()
-	stop := make(chan struct{})
 	for q.length() < length {
 		if err := q.push(domain.Event{Path: "a.txt"}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for q.length() > length {
-		if _, ok := q.pop(stop); !ok {
-			t.Fatal("pop stopped")
-		}
+		q.pop()
 	}
 }
 
@@ -165,7 +162,8 @@ func TestSlowQueueWarningKeepsOnlyLatestAndDoesNotBlockWatching(t *testing.T) {
 	}
 	send("first")
 	<-entered
-	// 9개가 기다리면 70과 90에 닿는다. 70 경고 hook이 끝나지 않았으므로 90 경고는 남겨 둔다.
+	// first가 자리를 기다리며 대기열에 남아 있으므로, 9개를 더 넣으면 기다리는 수가 10이 되어 70과 90에 닿는다.
+	// 70 경고 hook이 끝나지 않았으므로 90 경고는 남겨 둔다.
 	for n := range 9 {
 		send(fmt.Sprint(n))
 	}

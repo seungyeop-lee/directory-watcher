@@ -48,7 +48,7 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 ## 유실 검증의 구분
 
 - 실제 파일시스템 부하 테스트는 OS 알림의 중복·병합을 허용합니다. 파일 조작 횟수와 hook 횟수를 같다고 단정하지 않습니다.
-- CLI까지의 오류 전달은 검증 전용 소스 overlay로 fsnotify 유실 오류를 주입해 별도 검사할 수 있습니다. `hookBatch.deliver`·`interruptible` 네 조합에서 최초 치명적 오류 보존, 알림 한 번 실행, 다른 대상의 새 일반 hook 차단을 확인합니다. overlay 실행 명령과 결과는 이슈 보고서에 남기며 배포 바이너리에는 주입 옵션이 없습니다. 주입 성공은 실제 OS overflow 관찰 증거가 아닙니다.
+- CLI까지의 오류 전달은 검증 전용 소스 overlay로 fsnotify 유실 오류를 주입해 별도 검사할 수 있습니다. `hookBatch.deliver`·`run.interrupt` 네 조합에서 최초 치명적 오류 보존, 알림 한 번 실행, 다른 대상의 새 일반 hook 차단을 확인합니다. overlay 실행 명령과 결과는 이슈 보고서에 남기며 배포 바이너리에는 주입 옵션이 없습니다. 주입 성공은 실제 OS overflow 관찰 증거가 아닙니다.
 - 실제 Linux overflow 실험은 fsnotify 수신을 잠시 멈추고 현재 `max_queued_events`보다 많은 파일을 생성한 뒤 `ErrEventOverflow`를 관찰합니다. 호스트·공유 커널 설정은 변경하지 않습니다. macOS kqueue는 이 sentinel을 보고하지 않으므로 같은 보장을 주장하지 않습니다.
 - fsnotify v1.7.0의 [이벤트·오류 계약](https://github.com/fsnotify/fsnotify/blob/v1.7.0/backend_inotify.go)과 [공통 오류](https://github.com/fsnotify/fsnotify/blob/v1.7.0/fsnotify.go)를 기준으로 합니다. 모든 OS 유실의 감지, 무제한 입력의 무손실 처리, 자동 복구는 보장하지 않습니다. 임의의 종료 hook에는 별도 제한 시간이 없으며, 프로세스 트리 검증은 SIGTERM 또는 Windows CTRL+BREAK를 처리하고 자손을 기다리는 보조 프로그램을 대상으로 합니다. Windows에서는 [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md)이 `cmd`가 첫 CTRL+BREAK 뒤에 시작한 프로그램을, [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md)가 `powershell` hook을 함께 확인합니다. 첫 CTRL+BREAK 뒤 20초가 지나도 남은 프로세스를 강제로 끝내는 동작은 `internal/helper`의 단위 테스트 `TestRunCommandEndsProcessTreeAfterGrace`가 20초를 1초로 줄여서만 확인합니다.
 

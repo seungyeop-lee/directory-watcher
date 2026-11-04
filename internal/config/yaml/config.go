@@ -142,16 +142,17 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.Wat
 
 // WatchTargetsOptionConfig는 감시 대상 옵션을 처리 단계별 그룹으로 받는다. watch는 무엇을 감시할지,
 // dirBatch는 폴더 이벤트를 만들려고 이벤트를 모으는 방식, hookBatch는 hook을 실행하기 전에 이벤트를 모으고 합치는
-// 방식, queue는 hook 실행을 기다리는 대기열을 정한다.
+// 방식, queue는 hook 실행을 기다리는 대기열, run은 hook을 동시에 몇 개까지 실행하고 어떤 실행을 취소할지 정한다.
 type WatchTargetsOptionConfig struct {
-	Watch         WatchOptionConfig     `yaml:"watch"`
-	DirBatch      DirBatchOptionConfig  `yaml:"dirBatch"`
-	HookBatch     HookBatchOptionConfig `yaml:"hookBatch"`
-	Queue         QueueOptionConfig     `yaml:"queue"`
-	Interruptible *bool                 `yaml:"interruptible"`
+	Watch     WatchOptionConfig     `yaml:"watch"`
+	DirBatch  DirBatchOptionConfig  `yaml:"dirBatch"`
+	HookBatch HookBatchOptionConfig `yaml:"hookBatch"`
+	Queue     QueueOptionConfig     `yaml:"queue"`
+	Run       RunOptionConfig       `yaml:"run"`
 
 	// Removed로 시작하는 필드는 v3에서 없애거나 그룹 안으로 옮긴 키를 받는다. yaml.Unmarshal은 모르는 키를 무시하므로,
-	// 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더, 파일, 이벤트가 경고 없이 다시 감시되고, 하위 폴더 감시 여부와 기다리는 시간도 경고 없이 기본값으로 돌아간다.
+	// 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더, 파일, 이벤트가 경고 없이 다시 감시되고, 하위 폴더 감시 여부와 기다리는 시간,
+	// 실행을 취소하는 방식도 경고 없이 기본값으로 돌아간다.
 	RemovedExcludeDir      yaml.Node `yaml:"excludeDir" json:"-"`
 	RemovedExcludeSuffix   yaml.Node `yaml:"excludeSuffix" json:"-"`
 	RemovedExclude         yaml.Node `yaml:"exclude" json:"-"`
@@ -159,6 +160,7 @@ type WatchTargetsOptionConfig struct {
 	RemovedWatchSubDir     yaml.Node `yaml:"watchSubDir" json:"-"`
 	RemovedWaitMillisecond yaml.Node `yaml:"waitMillisecond" json:"-"`
 	RemovedNoWait          yaml.Node `yaml:"noWait" json:"-"`
+	RemovedInterruptible   yaml.Node `yaml:"interruptible" json:"-"`
 }
 
 type WatchOptionConfig struct {
@@ -185,6 +187,12 @@ type QueueOptionConfig struct {
 	Size *int `yaml:"size"`
 }
 
+// concurrency는 적지 않은 것과 구별하려고 포인터로, 0 이하를 적은 것을 오류로 알리려고 부호 있는 정수로 받는다.
+type RunOptionConfig struct {
+	Concurrency *int    `yaml:"concurrency"`
+	Interrupt   *string `yaml:"interrupt"`
+}
+
 // 기다리는 시간을 적지 않았을 때 쓰는 값이다.
 const defaultWaitMillisecond, defaultMaxWaitMillisecond config.Millisecond = 100, 1000
 
@@ -204,6 +212,7 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 		{"watchSubDir", "option.watch.subDir", optionsSection, c.RemovedWatchSubDir},
 		{"waitMillisecond", "option.hookBatch.waitMillisecond", optionsSection, c.RemovedWaitMillisecond},
 		{"noWait", "option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait", optionsSection, c.RemovedNoWait},
+		{"interruptible", "option.run.interrupt: oldest in place of interruptible: true, or option.run.interrupt: none in place of interruptible: false", optionsSection, c.RemovedInterruptible},
 	} {
 		if removed.node.Kind != 0 {
 			return domain.WatchTargetsOption{}, fmt.Errorf(`option.%s is no longer supported; use %s (see USAGE %q)`, removed.key, removed.replacement, removed.section)
@@ -240,6 +249,17 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 	if queueSize < 1 {
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.queue: size %d is less than 1", queueSize)
 	}
+	concurrency := 1
+	if c.Run.Concurrency != nil {
+		concurrency = *c.Run.Concurrency
+	}
+	if concurrency < 1 {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.run: concurrency %d is less than 1", concurrency)
+	}
+	interrupt, err := converter.NewInterruptConverter(c.Run.Interrupt).Convert()
+	if err != nil {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.run.%w", err)
+	}
 	return domain.WatchTargetsOption{
 		Exclude:            exclude,
 		WaitMillisecond:    wait,
@@ -251,6 +271,6 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 		DirEventWait:       converter.NewMillisecondConverter(c.DirBatch.WaitMillisecond, defaultWaitMillisecond).Convert(),
 		DirEventMaxWait:    converter.NewMillisecondConverter(c.DirBatch.MaxWaitMillisecond, defaultMaxWaitMillisecond).Convert(),
 		QueueSize:          queueSize,
-		Interruptible:      converter.NewInterruptibleConverter(c.Interruptible).Convert(),
+		Run:                domain.RunPolicy{Concurrency: concurrency, Interrupt: interrupt},
 	}, nil
 }

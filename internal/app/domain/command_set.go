@@ -46,6 +46,6 @@ type WatchTargetsOption struct {
 	DirEventWait    Millisecond
 	DirEventMaxWait Millisecond
 	// QueueSize는 감시 대상의 대기열에 둘 수 있는 실행의 수다. 1 이상이다.
-	QueueSize     int
-	Interruptible Interruptible
+	QueueSize int
+	Run       RunPolicy
 }

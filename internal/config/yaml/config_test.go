@@ -189,6 +189,7 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 		DirEventWait:       100,
 		DirEventMaxWait:    1000,
 		QueueSize:          2048,
+		Run:                domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptNone},
 	}
 	with := func(change func(o *domain.WatchTargetsOption)) domain.WatchTargetsOption {
 		o := defaults
@@ -208,7 +209,7 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
       dirBatch: {waitMillisecond: 300, maxWaitMillisecond: 5000}
       hookBatch: {waitMillisecond: 700, maxWaitMillisecond: 3000, deliver: lastPerPath}
       queue: {size: 4096}
-      interruptible: true`,
+      run: {concurrency: 3, interrupt: samePath}`,
 			want: domain.WatchTargetsOption{
 				Exclude:            domain.ExcludePatterns{"dist/**"},
 				WaitMillisecond:    700,
@@ -220,7 +221,7 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 				DirEventWait:       300,
 				DirEventMaxWait:    5000,
 				QueueSize:          4096,
-				Interruptible:      true,
+				Run:                domain.RunPolicy{Concurrency: 3, Interrupt: domain.InterruptSamePath},
 			},
 		},
 		{
@@ -239,6 +240,16 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 			name:   "queue of one",
 			option: "{queue: {size: 1}}",
 			want:   with(func(o *domain.WatchTargetsOption) { o.QueueSize = 1 }),
+		},
+		{
+			name:   "interrupt oldest",
+			option: "{run: {interrupt: oldest}}",
+			want:   with(func(o *domain.WatchTargetsOption) { o.Run.Interrupt = domain.InterruptOldest }),
+		},
+		{
+			name:   "interrupt none",
+			option: "{run: {concurrency: 1, interrupt: none}}",
+			want:   defaults,
 		},
 		{
 			name:   "deliver last",
@@ -304,11 +315,34 @@ func TestInvalidQueueSizeStopsBuild(t *testing.T) {
 	}
 }
 
+func TestInvalidRunOptionStopsBuild(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{name: "zero concurrency", option: "concurrency: 0", want: "option.run: concurrency 0 is less than 1"},
+		{name: "negative concurrency", option: "concurrency: -2", want: "option.run: concurrency -2 is less than 1"},
+		{name: "unknown interrupt", option: "interrupt: true", want: `option.run.interrupt: unknown value "true"; use none, samePath, or oldest`},
+		{name: "lower case interrupt", option: "interrupt: samepath", want: `option.run.interrupt: unknown value "samepath"; use none, samePath, or oldest`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      run:\n        " + tt.option + "\n"
+			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+			if want := "watchTargets[1]." + tt.want; err == nil || err.Error() != want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
 func TestRemovedOptionKeysStopBuild(t *testing.T) {
 	const (
 		toExclude   = `use option.watch.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`
 		toEvents    = `use option.watch.fileEvent and option.watch.dirEvent (see USAGE "Moving from watchEvent")`
 		fromOptions = `(see USAGE "Moving from version 2 options")`
+		toInterrupt = "use option.run.interrupt: oldest in place of interruptible: true, or option.run.interrupt: none in place of interruptible: false"
 	)
 	tests := []struct {
 		name   string
@@ -327,6 +361,9 @@ func TestRemovedOptionKeysStopBuild(t *testing.T) {
 		{name: "waitMillisecond", option: "waitMillisecond: 500", want: "option.waitMillisecond is no longer supported; use option.hookBatch.waitMillisecond " + fromOptions},
 		{name: "noWait true", option: "noWait: true", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait " + fromOptions},
 		{name: "noWait false", option: "noWait: false", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait " + fromOptions},
+		{name: "interruptible true", option: "interruptible: true", want: "option.interruptible is no longer supported; " + toInterrupt + " " + fromOptions},
+		{name: "interruptible false", option: "interruptible: false", want: "option.interruptible is no longer supported; " + toInterrupt + " " + fromOptions},
+		{name: "interruptible with run group", option: "{run: {interrupt: oldest}, interruptible: true}", want: "option.interruptible is no longer supported; " + toInterrupt + " " + fromOptions},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

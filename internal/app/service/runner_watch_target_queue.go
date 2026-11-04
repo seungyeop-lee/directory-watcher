@@ -86,15 +86,13 @@ func (q *runQueue) push(run domain.Event) error {
 	return nil
 }
 
-// pop은 맨 앞의 실행을 꺼낸다. 대기열이 비었으면 실행이 들어오거나 stop이 닫힐 때까지 기다리고, stop이 닫히면
-// false를 돌려준다.
-func (q *runQueue) pop(stop <-chan struct{}) (domain.Event, bool) {
+// first는 맨 앞의 실행을 꺼내지 않고 돌려준다. 대기열이 비었으면 실행이 들어오거나 stop이 닫힐 때까지 기다리고,
+// stop이 닫히면 false를 돌려준다.
+func (q *runQueue) first(stop <-chan struct{}) (domain.Event, bool) {
 	for {
 		q.mu.Lock()
 		if len(q.runs) > 0 {
 			run := q.runs[0]
-			q.runs = q.runs[1:]
-			q.updateLevel()
 			q.mu.Unlock()
 			return run, true
 		}
@@ -105,6 +103,14 @@ func (q *runQueue) pop(stop <-chan struct{}) (domain.Event, bool) {
 		case <-q.pushed:
 		}
 	}
+}
+
+// pop은 맨 앞의 실행을 뺀다. 대기열에서 실행을 빼는 쪽은 runChanges 하나뿐이므로, first가 돌려준 실행을 뺀다.
+func (q *runQueue) pop() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.runs = q.runs[1:]
+	q.updateLevel()
 }
 
 // updateLevel은 기다리는 수로 단계를 바꾸고, 바꿀 때마다 warn으로 알린다. 용량이 작아 실행 하나로 두 경계를

@@ -32,7 +32,8 @@ watchTargets:
         fileEvent: C
       hookBatch:
         waitMillisecond: 100
-      interruptible: true
+      run:
+        interrupt: oldest
 `, s.Hook("--line=GLOBAL:onFinishWatch"), s.Watch, tree, tree, s.Hook("--line=TARGET:onFinishWatch")))
 	first := s.AwaitReadyGenerations("1 ready process trees", 1)
 	readyCount := 0
@@ -81,8 +82,8 @@ watchTargets:
 
 func TestStartHookShutdownModes(t *testing.T) {
 	for _, deliver := range []string{"last", "each"} {
-		for _, interruptible := range []bool{false, true} {
-			t.Run(fmt.Sprintf("deliver=%s/interruptible=%t", deliver, interruptible), func(t *testing.T) {
+		for _, interrupt := range []string{"none", "oldest"} {
+			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
 				// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
 				wait := 10
 				if deliver == "each" {
@@ -103,11 +104,12 @@ func TestStartHookShutdownModes(t *testing.T) {
       hookBatch:
         waitMillisecond: %d
         deliver: %s
-      interruptible: %t
-`, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), wait, deliver, interruptible))
+      run:
+        interrupt: %s
+`, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), wait, deliver, interrupt))
 				s.AssertRunning("startup process", s.AwaitReadyGenerations("startup process tree ready", 1))
 				s.Write(filepath.Join(s.Watch, "during-start.txt"), nil)
-				if interruptible {
+				if interrupt == "oldest" {
 					s.AwaitReadyGenerations("replacement tree ready", 2)
 				}
 				beforeStop := s.ProcessRecords()
@@ -123,7 +125,7 @@ func TestStartHookShutdownModes(t *testing.T) {
 				records := s.ProcessRecords()
 				harness.AssertGracefulCompletion(t, records)
 				s.AwaitProcessesGone("startup/replacement descendants disappear", records)
-				if !interruptible {
+				if interrupt == "none" {
 					for _, r := range records {
 						if r.Depth == 2 && r.State == "start" && r.Generation != records[0].Generation {
 							t.Fatal("sequential startup was replaced")
@@ -133,6 +135,40 @@ func TestStartHookShutdownModes(t *testing.T) {
 			})
 		}
 	}
+}
+
+// run.concurrency: 2에서 함께 도는 두 프로세스 트리 hook이 감시를 멈출 때 모두 정상 종료하고, 그 뒤에 감시 대상
+// onFinishWatch가 실행되는지 확인한다.
+func TestConcurrentRunsShutdown(t *testing.T) {
+	s := harness.NewScenario(t)
+	s.Start(fmt.Sprintf(`watchTargets:
+  - path: '%s'
+    lifeCycle:
+      onChange:
+        - %s
+      onFinishWatch:
+        - %s
+    option:
+      watch:
+        exclude: ['*.probe']
+        fileEvent: C
+      hookBatch:
+        waitMillisecond: 0
+        deliver: each
+      run:
+        concurrency: 2
+`, s.Watch, s.Hook("--depth=2"), s.Hook("--line=TARGET:onFinishWatch")))
+	s.Write(filepath.Join(s.Watch, "first.txt"), nil)
+	s.Write(filepath.Join(s.Watch, "second.txt"), nil)
+	// hookrec 트리는 신호를 받기 전에는 끝나지 않으므로, 두 generation이 함께 준비되면 두 실행이 동시에 돈다.
+	s.AssertRunning("concurrent process trees before stop", s.AwaitReadyGenerations("2 concurrent process trees ready", 2))
+	s.Stop()
+	records := s.ProcessRecords()
+	harness.AssertGracefulCompletion(t, records)
+	if lines := s.Lines(); len(lines) == 0 || lines[len(lines)-1] != "TARGET:onFinishWatch" {
+		t.Fatalf("finish hook must follow completion of every running tree: %v", lines)
+	}
+	s.AwaitProcessesGone("all process trees disappear", records)
 }
 
 // assertCompletedBeforeRestart는 대체 generation이 시작되기 전에 이전 generation의

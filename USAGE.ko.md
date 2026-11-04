@@ -92,7 +92,9 @@ watchTargets:
         deliver: [ 모은 이벤트로 만드는 실행 (last, lastPerPath, each), default는 last ]
       queue: # hook 실행을 기다리는 대기열
         size: [ 기다릴 수 있는 실행의 최대 수, 1 이상, default는 2048 ]
-      interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
+      run: # hook을 실행하는 방식
+        concurrency: [ 동시에 돌리는 hook 실행의 최대 수, 1 이상, default는 1 ]
+        interrupt: [ 새 실행이 취소하는 실행 (none, samePath, oldest), default는 none ]
 ```
 
 - 변경이 생길 때마다 전역 `onBeforeChange`, 대상의 `onChange`, 전역 `onAfterChange`가 이 순서로 실행됩니다.
@@ -107,7 +109,7 @@ watchTargets:
 
 - `<대상>`은 감시 대상 `path`의 마지막 경로 요소입니다.
 - `<명령>`의 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)에 있습니다.
-- 새 변경이 실행을 취소했거나(`interruptible: true`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
+- 새 실행이 취소했거나(`run.interrupt`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
 
 - 전역 `onStartWatch`나 전역 `onFinishWatch`의 명령이 실패하면 그 hook의 나머지 명령을 건너뜁니다.
 
@@ -246,10 +248,9 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 
 ### 버전 2의 옵션에서 옮기기
 
-- 버전 3에서는 감시 대상 옵션을 `option` 아래의 `watch`, `dirBatch`, `hookBatch` 그룹으로 나눴습니다.
-- `interruptible`은 그대로 `option` 바로 아래에 둡니다.
+- 버전 3에서는 감시 대상 옵션을 `option` 아래의 `watch`, `dirBatch`, `hookBatch`, `queue`, `run` 그룹으로 나눴습니다.
 
-감시 대상의 `option` 바로 아래에 `watchSubDir`, `waitMillisecond`, `noWait`가 남아 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+감시 대상의 `option` 바로 아래에 `watchSubDir`, `waitMillisecond`, `noWait`, `interruptible`이 남아 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
 ```text
 Error: watchTargets[0].option.watchSubDir is no longer supported; use option.watch.subDir (see USAGE "Moving from version 2 options")
@@ -269,7 +270,8 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 | `noWait: false` | `noWait`를 적지 않습니다 |
 | `excludeDir`, `excludeSuffix` | `watch.exclude`, [excludeDir와 excludeSuffix에서 옮기기](#excludedir와-excludesuffix에서-옮기기)를 따릅니다 |
 | `watchEvent` | `watch.fileEvent`와 `watch.dirEvent`, [watchEvent에서 옮기기](#watchevent에서-옮기기)를 따릅니다 |
-| `interruptible` | 바뀌지 않습니다 |
+| `interruptible: true` | `run: {interrupt: oldest}` |
+| `interruptible: false` | `interruptible`을 적지 않습니다. `run.interrupt`의 기본값이 `none`입니다 |
 
 - 버전 2의 `noWait: false`는 기다리는 동안 받은 마지막 이벤트 하나로 hook을 실행했습니다. 버전 3의 기본값 `deliver: last`는 가장 나중에 바뀐 경로의 최종 변화로 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](#hookbatch로-기다리고-합치기)에 있습니다.
   - 한 번 기다리는 동안 만들었다가 지운 파일은 버전 2에서 `D`로 hook을 실행했고, 버전 3에서는 hook을 실행하지 않습니다.
@@ -376,7 +378,7 @@ Error: watchTargets[0].option.hookBatch: maxWaitMillisecond 1000 is less than wa
 
 ## 대기열 용량과 경고
 
-- 대상의 실행은 hook이 실행할 때까지 대상의 대기열에서 기다립니다. `option.queue.size`(기본 2048)는 기다릴 수 있는 실행의 최대 수이며, 실행 중인 실행은 세지 않습니다.
+- 대상의 실행은 [run으로 hook 실행하기](#run으로-hook-실행하기)에 적은 대로 시작할 때까지 대상의 대기열에서 기다립니다. `option.queue.size`(기본 2048)는 기다릴 수 있는 실행의 최대 수이며, 실행 중인 실행은 세지 않습니다.
 - 들어갈 자리가 없는 실행이 생기면 `dispatch queue full (capacity <size>)`로 처리를 중단하고, [이벤트 유실 알림](#이벤트-유실-알림)처럼 전역 `onError`를 한 번 실행합니다.
   - watcher는 대기열에 자리가 나기를 기다리지 않습니다. 한꺼번에 많이 들어올 수 있는 [폴더 이벤트](#폴더-이벤트)용으로 모은 이벤트에서 만든 실행도 같습니다.
 
@@ -418,12 +420,38 @@ Error: watchTargets[0].option.queue: size 0 is less than 1
 - 환경 변수는 `onError`처럼 셸 문법으로 읽습니다. 이 hook에는 파일 이벤트 템플릿 변수를 제공하지 않습니다.
 - 구조화된 `dir`이 있으면 해당 디렉토리에서, 없으면 프로그램 실행 디렉토리에서 실행합니다.
 
+## run으로 hook 실행하기
+
+- `option.run.concurrency`(기본 1)는 한 대상에서 동시에 돌 수 있는 실행의 최대 수입니다. 기본값이면 대상은 실행을 한 번에 하나씩 돌립니다.
+- 실행은 대기열에서 나온 순서, 곧 이벤트가 생긴 순서대로 시작합니다. 동시에 도는 실행이 끝나는 순서는 보장하지 않습니다.
+- 같은 경로의 실행이나, 폴더와 그 안 경로의 실행도 동시에 돌 수 있습니다. 그래서 한 파일의 `D` 실행이 먼저 시작한 같은 파일의 `C` 실행보다 먼저 끝날 수 있습니다. hook이 실행이 끝나는 순서에 기대면 `concurrency: 1`을 유지합니다.
+- 실행마다 자기 `onChange` 앞뒤로 전역 `onBeforeChange`와 `onAfterChange`를 따로 돌립니다. 이 hook이 출력 파일 하나처럼 공유하는 자원을 쓰면 동시에 도는 실행끼리 부딪칠 수 있습니다.
+- `concurrency`와 관계없이 실행은 대상 `onStartWatch`가 끝날 때까지 기다립니다. `interrupt: oldest`일 때만 첫 실행이 실행 중인 대상 `onStartWatch`를 취소합니다.
+
+`option.run.interrupt`(기본 `none`)는 새 실행이 돌고 있는 실행 가운데 무엇을 취소할지 정합니다.
+
+| `interrupt` | 새 실행이 취소하는 실행 |
+|---|---|
+| `none` | 취소하지 않습니다. 새 실행은 자리가 날 때까지 기다립니다. |
+| `samePath` | 같은 경로를 처리하는 실행을 자리가 남아 있어도 취소합니다. 같은 경로의 실행이 없으면 취소하지 않고 자리가 날 때까지 기다립니다. |
+| `oldest` | 자리가 다 찼을 때 가장 먼저 시작한 실행을 취소합니다. `concurrency: 1`이면 실행 중인 실행입니다. |
+
+- 새 실행은 자기가 취소한 실행이 끝난 뒤에 시작합니다.
+- `samePath`에서 서버처럼 스스로 끝나지 않는 hook이 자리를 모두 차지하면, 다른 경로의 실행은 감시를 멈출 때까지 기다립니다. 그런 hook은 `concurrency: 1`과 `interrupt: oldest`로 실행해, 새 실행이 돌고 있는 실행을 늘 대신하게 합니다.
+
+`concurrency`가 1보다 작거나 `interrupt`가 이 값들이 아니면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].option.run: concurrency 0 is less than 1
+Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, samePath, or oldest
+```
+
 ## 과부하와 종료
 
-- 대상마다 대기 실행은 [대기열 용량과 경고](#대기열-용량과-경고)에 적은 대로 최대 `queue.size`개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `hookBatch.deliver: each`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. 제외된 경로는 실행을 만들지 않고 기다리는 시간도 늘리지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로, 마지막으로 만든 파일이 `deliver: last`가 실행하는 경로라고 가정하면 안 됩니다.
+- 대상마다 대기 실행은 [대기열 용량과 경고](#대기열-용량과-경고)에 적은 대로 최대 `queue.size`개까지 두고, hook 실행은 한 번에 최대 `run.concurrency`개까지 진행합니다. `hookBatch.deliver: each`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. 제외된 경로는 실행을 만들지 않고 기다리는 시간도 늘리지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로, 마지막으로 만든 파일이 `deliver: last`가 실행하는 경로라고 가정하면 안 됩니다.
 - 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
-- `interruptible: true`에서는 취소한 이전 실행이 끝난 뒤에 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리가 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
+- 종료 신호는 실행 중인 시작·변경 실행을 모두 취소하고, 대기 변경을 버리고, 이벤트 처리와 취소한 실행이 모두 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
 - Windows에서 취소된 hook은 CTRL+BREAK를 받고, `cmd`에서 `a & b`의 다음 프로그램처럼 hook이 취소 뒤에 시작한 프로그램도 CTRL+BREAK를 받습니다. 첫 CTRL+BREAK 뒤 20초가 지나도 실행 중인 hook의 프로세스는 함께 끝내며, 신호를 무시하거나 자기만의 콘솔이나 프로세스 그룹을 쓰는 프로세스도 여기서 끝납니다. 교체와 종료는 hook의 프로세스가 모두 끝날 때까지 기다리므로, 일부 `powershell` hook처럼 CTRL+BREAK로 끝나지 않는 hook은 교체와 종료를 최대 20초 늦춥니다.
 - Windows에서 시작한 지 100ms가 지나기 전에 취소된 hook은 시작 후 100ms가 지났을 때 CTRL+BREAK를 받으므로, hook이 시작된 직후의 교체와 종료는 최대 100ms 늦어집니다.
 - Windows에서 취소되지 않고 끝난 hook이 시작한 프로세스는 계속 실행됩니다.
@@ -485,7 +513,7 @@ watchTargets:
           - 'build.log'
 ```
 
-- `interruptible: false`에서는 hook이 실행되는 동안 바뀐 다른 파일도 hook이 끝난 뒤 hook을 실행합니다.
+- 기본값인 `run.interrupt: none`에서는 hook이 실행되는 동안 바뀐 다른 파일도 hook이 끝난 뒤 hook을 실행합니다.
 
 ### excludeDir와 excludeSuffix에서 옮기기
 
@@ -523,7 +551,7 @@ Error: watchTargets[0].option.excludeDir is no longer supported; use option.watc
 - 예를 들어 `src`와 `src/api`를 함께 감시하면, `src/api/a.txt`를 만들었을 때 두 대상의 `onChange`가 모두 실행됩니다.
 - 전역 `onBeforeChange`와 `onAfterChange`도 대상마다 실행되므로, 위 예시의 변경 하나에 각각 두 번 실행됩니다.
 - 두 대상의 hook은 상대 대상의 hook이 끝나기를 기다리지 않습니다.
-- 대기열, `hookBatch.waitMillisecond` 대기, `interruptible` 취소는 대상마다 따로 적용됩니다.
+- 대기열, `hookBatch.waitMillisecond` 대기, `run`의 동시 실행과 취소는 대상마다 따로 적용됩니다.
 - 겹치는 폴더는 대상마다 감시 목록에 들어가므로, Linux의 inotify watch나 macOS의 열린 파일 같은 OS 감시 자원도 대상 수만큼 씁니다.
 - 한 대상의 hook이 다른 대상의 `path` 안에 파일을 쓰면, 그 쓰기로 다른 대상의 hook이 실행됩니다.
 

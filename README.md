@@ -20,10 +20,11 @@
 - By default, a burst of events runs the hook once, for the final change of the path that changed last, `hookBatch.waitMillisecond` (100 ms by default) after the last event and at most `hookBatch.maxWaitMillisecond` (1000 ms by default) after the first.
 - With `hookBatch.deliver: lastPerPath`, the hook runs once for each changed path. With `hookBatch.deliver: each`, it runs for every event, in the order the events were received. `hookBatch.waitMillisecond: 0` runs the hook without waiting. See [Waiting and merging with hookBatch](USAGE.md#waiting-and-merging-with-hookbatch).
 - Each target holds at most `queue.size` (2048 by default) pending runs. Instead of growing without bound, the watcher stops when a target's queue is full.
+- With `run.concurrency` above 1, a target runs that many runs at the same time. They start in the order their events happened but can end in any order. See [Running hooks with run](USAGE.md#running-hooks-with-run).
 
 ### Restart long-running processes
 
-- With `interruptible: true`, a new change cancels the running commands, waits for them to exit, and then runs the change commands again. Use it for servers and other processes that do not exit on their own.
+- With `run.interrupt: oldest` and the default `run.concurrency: 1`, a new change cancels the running commands, waits for them to exit, and then runs the change commands again. Use it for servers and other processes that do not exit on their own.
 - When you stop the watcher, it cancels running commands and then runs the finish commands.
 
 ### Run setup and cleanup commands
@@ -163,8 +164,9 @@ flowchart TD
         mergeRuns["Merge them into runs by hookBatch.deliver,<br>keeping types chosen in watch.fileEvent or watch.dirEvent"]
         queueEvent{"Room in the target's queue<br>of queue.size runs?"}
         queueWarning["global onQueueWarning,<br>apart from event handling"]
-        interruptChoice{"interruptible?"}
-        cancelPrevious["Cancel the running commands<br>and wait for them to exit"]
+        interruptChoice{"Does run.interrupt pick<br>running runs to cancel?"}
+        cancelPrevious["Cancel them and wait<br>for them to exit"]
+        waitSlot["Wait until a slot of run.concurrency is free<br>and target onStartWatch has ended"]
         runChange["global onBeforeChange → onChange<br>→ global onAfterChange"]
     end
     fatalStop(["Fatal error: see the next diagram"])
@@ -186,15 +188,16 @@ flowchart TD
     queueEvent -->|"no"| fatalStop
     queueEvent -.->|"pending runs reach 70% or 90%,<br>or fall below 80% or 60%"| queueWarning
     queueEvent -->|"yes"| interruptChoice
-    interruptChoice -->|"true"| cancelPrevious
-    interruptChoice -->|"false: wait until the running commands finish"| runChange
-    cancelPrevious --> runChange
+    interruptChoice -->|"yes: samePath for the same path,<br>oldest when every slot is taken"| cancelPrevious
+    interruptChoice -->|"no"| waitSlot
+    cancelPrevious --> waitSlot
+    waitSlot --> runChange
     runChange -->|"next event"| receiveEvent
 ```
 
 - Events keep being received and collected while commands run, so each `hookBatch` wait that ends adds its runs to the queue.
 - A run that finds no room stops the watcher at once, including runs made from events collected for folder events. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
-- With `interruptible: false`, events that arrive while target `onStartWatch` or a change is running wait in the queue until it finishes. With `interruptible: true`, the next change cancels a running target `onStartWatch` too.
+- A run waits in the queue until it starts, so runs made while target `onStartWatch` or `run.concurrency` runs are running wait there. With `run.interrupt: oldest`, the first run also cancels a running target `onStartWatch`.
 - The commands of one run execute one after another, and the run stops at the first command that fails. The failure is logged as an `[ERROR]` line; see [`config.yml`](USAGE.md#configyml) in the usage guide.
 
 A shutdown signal and a fatal error both stop every target before the finish commands run:

@@ -15,10 +15,11 @@ import (
 
 func TestFastInflowSlowHook(t *testing.T) {
 	for _, deliver := range []string{"last", "each"} {
-		for _, interruptible := range []bool{false, true} {
-			t.Run(fmt.Sprintf("deliver=%s/interruptible=%t", deliver, interruptible), func(t *testing.T) {
+		for _, interrupt := range []string{"none", "oldest"} {
+			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
 				// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
 				each, wait := deliver == "each", 30
+				sequential := each && interrupt == "none"
 				if each {
 					wait = 0
 				}
@@ -37,8 +38,9 @@ func TestFastInflowSlowHook(t *testing.T) {
       hookBatch:
         waitMillisecond: %d
         deliver: %s
-      interruptible: %t
-`, s.Watch, s.Hook("--delay=80ms", "--line=DONE:{{.Path}}"), s.Hook("--line=FINISH"), wait, deliver, interruptible))
+      run:
+        interrupt: %s
+`, s.Watch, s.Hook("--delay=80ms", "--line=DONE:{{.Path}}"), s.Hook("--line=FINISH"), wait, deliver, interrupt))
 				initial := filepath.Join(s.Watch, "initial.txt")
 				s.Write(initial, []byte("initial"))
 				s.Await("slow hook starts", 5*time.Second, func() bool { return harness.DelayedHookBegun(s.Lines(), "DONE:"+initial) })
@@ -56,13 +58,13 @@ func TestFastInflowSlowHook(t *testing.T) {
 				elapsed := time.Since(started)
 				deadline := time.Now().Add(30 * time.Second)
 				inflowPaths := append([]string{initial, shared}, paths...)
-				s.AwaitChangesComplete("DONE:", inflowPaths, fsnotify.Create|fsnotify.Write, each && !interruptible, time.Until(deadline))
+				s.AwaitChangesComplete("DONE:", inflowPaths, fsnotify.Create|fsnotify.Write, sequential, time.Until(deadline))
 				last := filepath.Join(s.Watch, "last.txt")
 				s.Write(last, []byte("last"))
 				s.Write(filepath.Join(s.Watch, "excluded.swp"), []byte("after isolated valid event"))
 				s.AwaitLine("isolated valid change completes after inflow", time.Until(deadline), "DONE:"+last)
 				lines := s.Lines()
-				if each && !interruptible {
+				if sequential {
 					for _, path := range paths {
 						if harness.CountRecord(lines, "DONE:"+path) == 0 {
 							t.Errorf("sequential accepted change not completed: %s", path)

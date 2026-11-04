@@ -40,6 +40,7 @@ func hookBatchOption(wait, maxWait domain.Millisecond, deliver domain.Deliver) d
 		DirEventWait:       100,
 		DirEventMaxWait:    1000,
 		QueueSize:          testQueueSize,
+		Run:                domain.RunPolicy{Concurrency: 1},
 	}
 }
 

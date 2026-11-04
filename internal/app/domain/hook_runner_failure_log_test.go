@@ -71,7 +71,10 @@ func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 			var afterRuns atomic.Int32
 			after := fakeCmd(func(*helper.WatcherContext) error { afterRuns.Add(1); return nil })
 			info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: tc.failing, OnAfterChange: after, OnFinishWatch: fakeCmd(succeed)}
-			hooks := domain.Interruptible(false).BuildHookFuncBuilder("[target-alias]", info, logger)(".")
+			hooks := domain.RunPolicy{Concurrency: 1}.BuildHookFuncBuilder("[target-alias]", info, logger)(".")
+			hooks.RunChangeHook(domain.Event{})
+			// 자리가 하나이면 다음 실행은 앞 실행이 끝난 뒤 시작하므로, 두 번째 RunChangeHook이 돌아오면 첫 실행은
+			// 끝났다. RunFinishHook은 돌고 있는 실행을 취소하므로, 첫 실행이 끝나기 전에 부르면 실패가 기록되지 않는다.
 			hooks.RunChangeHook(domain.Event{})
 			hooks.RunFinishHook()
 			if afterRuns.Load() != 0 {
@@ -89,7 +92,7 @@ func TestTargetFinishHookFailureIsLogged(t *testing.T) {
 	exitCommand := testBinaryCommand("-test.run=^TestHookExitProcess$")
 	logger := &errorLog{}
 	info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: fakeCmd(succeed), OnAfterChange: fakeCmd(succeed), OnFinishWatch: command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: exitCommand})}
-	hooks := domain.Interruptible(false).BuildHookFuncBuilder("[target-alias]", info, logger)(".")
+	hooks := domain.RunPolicy{Concurrency: 1}.BuildHookFuncBuilder("[target-alias]", info, logger)(".")
 	hooks.RunFinishHook()
 	if got := logger.String(); !strings.Contains(got, "[target-alias]") || !strings.Contains(got, exitCommand) {
 		t.Fatalf("finish hook failure log lacks alias or command: %q", got)
@@ -110,7 +113,7 @@ func TestInterruptedRunIsNotLoggedAsFailure(t *testing.T) {
 		return errors.New("signal: terminated")
 	})
 	info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: interrupted, OnAfterChange: fakeCmd(succeed), OnFinishWatch: fakeCmd(succeed)}
-	hooks := domain.Interruptible(true).BuildHookFuncBuilder("[target-alias]", info, logger)(".")
+	hooks := domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}.BuildHookFuncBuilder("[target-alias]", info, logger)(".")
 	hooks.RunChangeHook(domain.Event{})
 	<-started
 	hooks.RunChangeHook(domain.Event{})
@@ -139,7 +142,7 @@ func TestTargetHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			logger := &errorLog{}
 			info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: fakeCmd(succeed), OnAfterChange: fakeCmd(succeed), OnFinishWatch: tc.finish}
-			domain.Interruptible(false).BuildHookFuncBuilder("[target-alias]", info, logger)(tc.targetPath).RunFinishHook()
+			domain.RunPolicy{Concurrency: 1}.BuildHookFuncBuilder("[target-alias]", info, logger)(tc.targetPath).RunFinishHook()
 			if got := logger.String(); !strings.Contains(got, "[target-alias]") || !strings.Contains(got, "working directory "+missingDir) {
 				t.Fatalf("failure log lacks alias or working directory: %q", got)
 			}

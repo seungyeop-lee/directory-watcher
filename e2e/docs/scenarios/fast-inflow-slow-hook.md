@@ -3,13 +3,13 @@
 🇺🇸 English | 🇰🇷 [한국어](fast-inflow-slow-hook.ko.md)
 
 - While a change hook that takes 80ms is running, file changes pour in at 10ms intervals.
-- Checks, in the four `hookBatch.deliver`·`interruptible` combinations, that processing reaches the last valid change received.
+- Checks, in the four `hookBatch.deliver`·`run.interrupt` combinations, that processing reaches the last valid change received.
 - It also checks that excluded files do not run the hook, and that after shutdown no new hook runs and the hook processes are gone.
 
 ## What it checks and success criteria
 
 - **Completion of the inflow batch**: Only the `CREATE` and `WRITE` events for valid paths (`initial.txt`, `shared.txt`, `00.txt`–`23.txt`) that were actually received in the DEBUG log count. The path of the last `DONE:` record must equal the last received path, every hook that recorded `BEGIN` must have completed (`DONE:`) or been cancelled (`CANCEL`), and the log and records must stay unchanged for 120ms. The basis and limits of this judgment are in [Receive boundary checks in OS E2E](../reliability.md#receive-boundary-checks-in-os-e2e).
-- **Sequential processing without interruption**: With `deliver=each/interruptible=false`, the number of `DONE:` records must equal the number of valid events received, and each of `00.txt`–`23.txt` must have at least one `DONE:` record. The baseline is the observed number of receipts, not the number of file operations.
+- **Sequential processing without interruption**: With `deliver=each/interrupt=none`, the number of `DONE:` records must equal the number of valid events received, and each of `00.txt`–`23.txt` must have at least one `DONE:` record. The baseline is the observed number of receipts, not the number of file operations.
 - **Isolated change**: The `DONE:` record for `last.txt`, written after the batch settles, must appear. This wait and the batch completion wait share one 30-second limit.
 - **Excluded files**: Records up to shutdown must contain no line with `excluded.swp` or `readiness.probe`.
 - **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be no `BEGIN|` record after the last `FINISH` record. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
@@ -18,16 +18,16 @@
 
 - The target `onChange` is `hookrec --delay=80ms --line=DONE:{{.Path}}`. It records `BEGIN|PID|DONE:<path>` when it starts, `DONE:<path>` after 80ms, and `CANCEL|PID|DONE:<path>` if it is cancelled before that.
 - The target `onFinishWatch` records `FINISH`.
-- The target options are the per-subtest `hookBatch.deliver` and `interruptible`, plus `hookBatch.waitMillisecond`, which is 30 with `deliver: last` and 0 with `deliver: each`, `watch.fileEvent: CU`, and `watch.exclude: ['*.probe', '*.swp']`.
+- The target options are the per-subtest `hookBatch.deliver` and `run.interrupt`, plus `hookBatch.waitMillisecond`, which is 30 with `deliver: last` and 0 with `deliver: each`, `watch.fileEvent: CU`, and `watch.exclude: ['*.probe', '*.swp']`.
 
 ## Subtests
 
 | Subtest | Change event handling | Extra checks |
 |---|---|---|
-| `deliver=last/interruptible=false` | Last changed path after a 30ms wait, running hook kept | None |
-| `deliver=last/interruptible=true` | Last changed path after a 30ms wait, running hook cancelled and replaced | None |
-| `deliver=each/interruptible=false` | Sequential run for each received event | Completion count matches receipt count, all 24 unique files completed |
-| `deliver=each/interruptible=true` | Run for each received event, running hook cancelled and replaced | None |
+| `deliver=last/interrupt=none` | Last changed path after a 30ms wait, running hook kept | None |
+| `deliver=last/interrupt=oldest` | Last changed path after a 30ms wait, running hook cancelled and replaced | None |
+| `deliver=each/interrupt=none` | Sequential run for each received event | Completion count matches receipt count, all 24 unique files completed |
+| `deliver=each/interrupt=oldest` | Run for each received event, running hook cancelled and replaced | None |
 
 ## Sequence
 
@@ -80,7 +80,7 @@ go run ./e2e/linux -- -run '^TestFastInflowSlowHook$'
 make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ```
 
-- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestFastInflowSlowHook$/^deliver=each$/^interruptible=false$'`.
+- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestFastInflowSlowHook$/^deliver=each$/^interrupt=none$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
 - The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 

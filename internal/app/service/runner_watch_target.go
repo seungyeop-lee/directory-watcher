@@ -100,7 +100,7 @@ type watchTargetRunner struct {
 
 func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger) *watchTargetRunner {
 	watcher, err := fsnotify.NewWatcher()
-	hookFuncBuilder := commandSet.Option.Interruptible.BuildHookFuncBuilder(commandSet.Path.Alias(), domain.HookInfo{
+	hookFuncBuilder := commandSet.Option.Run.BuildHookFuncBuilder(commandSet.Path.Alias(), domain.HookInfo{
 		OnStartWatch:   commandSet.LifeCycle.OnStartWatch,
 		OnBeforeChange: globalCommandSet.LifeCycle.OnBeforeChange,
 		OnChange:       commandSet.LifeCycle.OnChange,
@@ -465,20 +465,22 @@ func (r *watchTargetRunner) isExcluded(name string) bool {
 	return ok && r.exclude.Excludes(filepath.ToSlash(rel))
 }
 
-// runChanges는 대기열 events의 실행을 넣은 순서대로 hook에 넘긴다.
+// runChanges는 대기열 events의 실행을 넣은 순서대로 hook에 넘긴다. 실행은 hook이 시작할 때까지 대기열에 남겨,
+// 자리를 기다리는 실행도 대기열의 용량과 경고에 들어가게 한다.
 func (r *watchTargetRunner) runChanges(events *runQueue) {
 	for {
-		event, ok := events.pop(r.stop)
+		event, ok := events.first(r.stop)
 		if !ok {
 			return
 		}
-		// 감시를 멈춘 뒤에 꺼낸 실행은 hook에 넘기지 않는다.
+		// 감시를 멈춘 뒤에 본 실행은 hook에 넘기지 않는다.
 		select {
 		case <-r.stop:
 			return
 		default:
 		}
 		r.runChangeHook(event)
+		events.pop()
 	}
 }
 
