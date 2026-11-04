@@ -12,6 +12,13 @@
 - 순서가 있는 절차는 번호 목록으로 쓴다. 코드 블록, 표, 다이어그램, 인용 블록은 목록으로 바꾸지 않는다.
 - 목록, 코드 블록, 표 바로 앞에서 그것을 소개하는 한 문장(예: "Then install the cask:")은 문단으로 둔다.
 
+# 테스트 파일 이름
+
+- 테스트 파일 `<이름>_test.go`는 같은 폴더에 있는 본체 파일 `<이름>.go`를 시험한다. `runner_watch_target_rename_test.go`처럼 본체 파일 이름에 주제를 덧붙인 테스트 파일은 만들지 않는다.
+- `internal/app/service`에서 runner 전체를 띄워야만 확인되는 시나리오는 단계별 본체 파일의 테스트에 두지 않는다. 감시 대상 하나의 시나리오는 `runner_watch_target_test.go`에, 전체 runner의 시나리오는 `runner_test.go`에 둔다.
+- 저장소 루트에서 문서와 코드가 같은지 보는 테스트는 예외라서, 같은 이름의 본체 파일이 없어도 된다.
+- 한 패키지의 여러 테스트 파일이 함께 쓰는 helper는 그 패키지의 `helpers_test.go`에 둔다. 이 파일은 같은 이름의 본체 파일이 없어도 된다.
+
 # 검증
 
 - Windows 동작을 확인해야 하면, Windows 환경이 없다고 판단하기 전에 `/Applications/UTM.app/Contents/MacOS/utmctl list`로 UTM VM을 찾는다. VM이 있으면 [UTM Windows VM에서 E2E 실행](e2e/docs/windows-utm.ko.md)을 읽고 `make e2e-windows-all ARGS="-vm=<VM 이름>"`으로 게스트에서 테스트를 실행한다. `./e2e/scenarios` 밖의 패키지를 함께 실행하는 방법과 이 VM으로 대신할 수 없는 Windows 검증도 그 문서에 있다.
