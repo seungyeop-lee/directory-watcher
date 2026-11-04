@@ -6,11 +6,14 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
-var deliverValues = map[string]domain.Deliver{
-	"last":        domain.DeliverLast,
-	"lastPerPath": domain.DeliverLastPerPath,
-	"each":        domain.DeliverEach,
+var deliverValues = choices[domain.Deliver]{
+	{"last", domain.DeliverLast},
+	{"lastPerPath", domain.DeliverLastPerPath},
+	{"each", domain.DeliverEach},
 }
+
+// DeliverNames는 설정 파일의 deliver에 쓸 수 있는 값을 오류 메시지가 안내하는 순서대로 돌려준다.
+func DeliverNames() []string { return deliverValues.names() }
 
 // DeliverConverter는 option.hookBatch.deliver 값을 바꾼다. 값을 적지 않았으면 last를 쓴다.
 type DeliverConverter struct {
@@ -25,9 +28,9 @@ func (c DeliverConverter) Convert() (domain.Deliver, error) {
 	if c.deliver == nil {
 		return domain.DeliverLast, nil
 	}
-	deliver, ok := deliverValues[*c.deliver]
+	deliver, ok := deliverValues.lookup(*c.deliver)
 	if !ok {
-		return 0, fmt.Errorf("deliver: unknown value %q; use last, lastPerPath, or each", *c.deliver)
+		return 0, fmt.Errorf("deliver: unknown value %q; use %s", *c.deliver, deliverValues.list())
 	}
 	return deliver, nil
 }

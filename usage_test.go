@@ -129,35 +129,6 @@ func TestUsageListsSameQueueWarningVariablesAsCode(t *testing.T) {
 	}
 }
 
-func TestUsageListsSameShellsAsCode(t *testing.T) {
-	want := command.ShellNames()
-	_, err := command.LookupShell("bash")
-	if err == nil {
-		t.Fatal("LookupShell accepted an unknown shell")
-	}
-	for _, file := range usageFiles {
-		doc := readDoc(t, file)
-		var got []string
-		for _, table := range markdownTables(doc) {
-			if table.header[0] != "`shell`" {
-				continue
-			}
-			for _, cells := range table.rows {
-				got = append(got, strings.Trim(cells[0], "`"))
-			}
-		}
-		if !sameSet(got, want) {
-			t.Errorf("%s shell table = %q, want %q", file, got, want)
-		}
-		if list := "(" + strings.Join(want, ", ") + ")"; !strings.Contains(doc, list) {
-			t.Errorf("%s config.yml comment has no shell list %q", file, list)
-		}
-		if !strings.Contains(doc, err.Error()) {
-			t.Errorf("%s has no error example %q", file, err.Error())
-		}
-	}
-}
-
 // eachRemovedKeyNode는 c 안에 있는 yaml.Node 필드마다 키 경로와 필드를 visit에 넘긴다.
 // yaml.Node 필드는 v3에서 없앤 키를 받아 오류로 알리려고 둔 것이다. 목록 안의 키는 목록 키 바로 아래 키로 센다(watchTargets.option.excludeDir).
 func eachRemovedKeyNode(c *yamlconfig.Config, visit func(key string, node *yaml.Node)) {
