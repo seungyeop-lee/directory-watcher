@@ -280,53 +280,6 @@ Inside quotes, variables behave as follows:
   - The variables above then hold paths based on the fully resolved path instead of `path`.
   - `exclude` patterns exclude the same locations in the linked folder.
 
-### Moving from FileName, DirPath, and DirAbsPath
-
-- Version 3 renamed three template variables and their environment variables.
-  - The values of the renamed variables stay the same.
-- A hook that still uses an old template variable stops the watcher at startup with the `unknown template variable` error in [Variables in commands](#variables-in-commands).
-- The watcher no longer sets the old environment variables and does not check commands for them.
-  - A command or script that reads `DW_FILE_NAME`, `DW_DIR_PATH`, or `DW_DIR_ABS_PATH` runs without the value, so search your hook commands and the scripts they run for these names.
-
-Rename each variable as follows:
-
-| Before | After |
-|---|---|
-| `{{.FileName}}`, `DW_FILE_NAME` | `{{.Name}}`, `DW_NAME` |
-| `{{.DirPath}}`, `DW_DIR_PATH` | `{{.ParentPath}}`, `DW_PARENT_PATH` |
-| `{{.DirAbsPath}}`, `DW_DIR_ABS_PATH` | `{{.ParentAbsPath}}`, `DW_PARENT_ABS_PATH` |
-
-### Moving from version 2 options
-
-- Version 3 groups the target options under `watch`, `dirBatch`, `hookBatch`, `queue`, and `run` in `option`.
-
-If a target's `option` still has `watchSubDir`, `waitMillisecond`, `noWait`, or `interruptible` directly under it, the watcher runs no hook, prints an error like the one below, and exits with code 1:
-
-```text
-Error: watchTargets[0].option.watchSubDir is no longer supported; use option.watch.subDir (see USAGE "Moving from version 2 options")
-```
-
-Move each version 2 option as follows:
-
-| Version 2 | Version 3 |
-|---|---|
-| `watchSubDir: false` | `watch: {subDir: false}` |
-| `waitMillisecond: 500` | `hookBatch: {waitMillisecond: 500}` |
-| `waitMillisecond: 0` | No `waitMillisecond`: in version 3, `0` means no waiting instead of the default 100 |
-| `waitMillisecond` above 1000, such as `waitMillisecond: 3000` | `hookBatch: {waitMillisecond: 3000}`: without `maxWaitMillisecond`, the longest wait is the same as `waitMillisecond` instead of 1000 |
-| `noWait: true` | `hookBatch: {waitMillisecond: 0, deliver: each}` |
-| `noWait: false` | No `noWait` |
-| `excludeDir`, `excludeSuffix` | `watch.exclude`, as described in [Moving from excludeDir and excludeSuffix](#moving-from-excludedir-and-excludesuffix) |
-| `watchEvent` | `watch.fileEvent` and `watch.dirEvent`, as described in [Moving from watchEvent](#moving-from-watchevent) |
-| `interruptible: true` | `run: {interrupt: oldest}` |
-| `interruptible: false` | No `interruptible`: `run.interrupt` defaults to `none` |
-
-- With `noWait: false`, version 2 ran the hook once with the last event received in the wait. Version 3 defaults to `deliver: last`, which runs the hook with the final change of the path that changed last, as described in [Waiting and merging with hookBatch](#waiting-and-merging-with-hookbatch).
-  - A file created and deleted within one wait ran the hook with `D` in version 2 and runs no hook in version 3.
-  - A file whose create event the watcher missed reaches the hook as `C` instead of `U`.
-- Version 2 kept waiting while events kept arriving. Version 3 runs the hook at most `hookBatch.maxWaitMillisecond` (default 1000, or `hookBatch.waitMillisecond` if larger) after the first event.
-- Version 2 left events that arrived while a hook ran waiting in the OS. Version 3 keeps reading them and holds at most `queue.size` (default 2048) runs per target waiting for the hook. A run that does not fit stops the watcher, as described in [Queue size and warnings](#queue-size-and-warnings).
-
 ## Renamed and moved files
 
 - The watcher reports a renamed or moved file as a deletion (`D`) of its old path and a creation (`C`) of its new path inside the target.
@@ -344,12 +297,6 @@ The hook receives these events for each action:
 - If the old path matches `exclude` or the [default exclusion](#default-exclusion), the hook does not receive the `D`.
 - macOS can report the new path before the old one. The watcher then holds the `C` and the events after it until the `D` for the old path arrives, for at most 1 second.
 - Renamed and moved folders are covered in [Folder events](#folder-events).
-
-### Moving from version 2 rename events
-
-- Before version 3, on macOS and Linux, the hook received only `C` for the new path of a file renamed or moved inside the target, and no event for a file moved out of the target.
-  - On Windows, a move to another folder or out of the target already arrived as `D` for the old path, but a rename in the same folder did not.
-- A hook that runs on `D` now also runs when a file is renamed or moved away, and it cannot tell that case from a deletion.
 
 ## Waiting and merging with hookBatch
 
@@ -648,31 +595,6 @@ watchTargets:
 
 - With `run.interrupt: none`, the default, other files changed while the hook runs still run the hook after it finishes.
 
-### Moving from excludeDir and excludeSuffix
-
-- Version 3 removed `excludeDir` and `excludeSuffix`.
-
-If a target's `option` still has either, the watcher runs no hook, prints the error below, and exits with code 1:
-
-```text
-Error: watchTargets[0].option.excludeDir is no longer supported; use option.watch.exclude (see USAGE "Moving from excludeDir and excludeSuffix")
-```
-
-Move each value to `watch.exclude`, keeping these differences in mind:
-
-- An `excludeDir` value was a folder path relative to the directory the watcher runs in. An `exclude` pattern is relative to the target's `path`.
-- An `excludeSuffix` value was compared with the end of the absolute path, so `out.txt` also excluded `layout.txt`. In `exclude`, write `**/` before the file name to match that name at any depth.
-- A pattern moved from `excludeSuffix` that matches a folder name, such as `**/*~` for a folder `backup~`, now also excludes everything in that folder.
-
-For a target with `path: 'site'`:
-
-| Before | After |
-|---|---|
-| `excludeDir: ['site/dist']` | `watch: {exclude: ['dist/**']}` |
-| `excludeSuffix: ['_test.go']` | `watch: {exclude: ['**/*_test.go']}` |
-| `excludeSuffix: ['~']` | `watch: {exclude: ['**/*~']}` |
-| `excludeSuffix: ['/out.txt']` | `watch: {exclude: ['**/out.txt']}` |
-
 ## Overlapping target paths
 
 - When two watch targets have the same `path`, or one target's `path` is a parent folder of the other's, both targets watch the overlapping folders.
@@ -707,6 +629,7 @@ watchTargets:
 - The hook receives events of folders as well as files. `{{.IsDir}}` and `DW_IS_DIR` are `true` for a folder event and `false` for a file event.
 - A folder event is `C` or `D`. A folder has no `U`: a change inside a folder reaches the hook as an event of the file inside it.
 - `option.watch.fileEvent` chooses the file events that run the hook, and `option.watch.dirEvent` chooses the folder events. They default to `CUD` and `CD`, and `none` turns one of them off.
+- A hook that expects the path of a file, such as `cat {{.Path}}`, has to check `{{.IsDir}}` in the shell, as in `if [ {{.IsDir}} = false ]; then cat {{.Path}}; fi`, or the target has to set `watch.dirEvent: none`.
 
 The hook receives these events for each action, written as event, `IsDir`, and path:
 
@@ -755,26 +678,3 @@ Error: watchTargets[0].option.watch.dirEvent: U is not a folder event; use C, D,
 - After a folder is moved out of the target, changes in it no longer run hooks.
   - On Windows, the watcher re-creates its watches of the target about 100 ms after such a move, and changes made in the target at that moment can reach the hook twice.
 - On Windows, renaming or moving a folder that holds a watched subfolder fails with `Access is denied` while the folder is watched.
-
-### Moving from watchEvent
-
-- Version 3 replaced `watchEvent` with `watch.fileEvent` and `watch.dirEvent`.
-
-If a target's `option` still has `watchEvent`, the watcher runs no hook, prints the error below, and exits with code 1:
-
-```text
-Error: watchTargets[0].option.watchEvent is no longer supported; use option.watch.fileEvent and option.watch.dirEvent (see USAGE "Moving from watchEvent")
-```
-
-Move the value as follows:
-
-| Before | After |
-|---|---|
-| `watchEvent: CU` | `watch: {fileEvent: CU}` |
-| `watchEvent: ''` | `watch: {fileEvent: CUD}`, or no `fileEvent` |
-
-- Folder events are on by default. A hook that expects the path of a file, such as `cat {{.Path}}`, has to check `{{.IsDir}}` in the shell, as in `if [ {{.IsDir}} = false ]; then cat {{.Path}}; fi`, or the target has to set `watch.dirEvent: none`.
-- Before version 3, the hook received these events for folders:
-  - Creating a folder or moving one in ran no hook. A file written right after its folder was created sometimes ran the hook, and it is now absorbed into the folder `C`.
-  - Deleting a folder ran the hook with `D` for the folder path, with `IsDir` unavailable, and on Linux and macOS also with `D` for each file inside. Now the hook receives one folder `D`.
-  - These file events stay absorbed with `watch.dirEvent: none` as well.

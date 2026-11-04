@@ -73,7 +73,7 @@ watchTargets:
 
 	_, stderr, err := executeRoot(t, "-c", config)
 
-	want := `Error: watchTargets[0].option.excludeDir is no longer supported; use option.watch.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`
+	want := `Error: watchTargets[0].option.excludeDir is no longer supported; use option.watch.exclude`
 	if err == nil || !strings.Contains(stderr, want) {
 		t.Fatalf("Execute error = %v, stderr:\n%s\nwant %q", err, stderr, want)
 	}

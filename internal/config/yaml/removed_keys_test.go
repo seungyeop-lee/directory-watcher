@@ -8,9 +8,8 @@ import (
 
 func TestRemovedOptionKeysStopBuild(t *testing.T) {
 	const (
-		toExclude   = `use option.watch.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`
-		toEvents    = `use option.watch.fileEvent and option.watch.dirEvent (see USAGE "Moving from watchEvent")`
-		fromOptions = `(see USAGE "Moving from version 2 options")`
+		toExclude   = "use option.watch.exclude"
+		toEvents    = "use option.watch.fileEvent and option.watch.dirEvent"
 		toInterrupt = "use option.run.interrupt: oldest in place of interruptible: true, or option.run.interrupt: none in place of interruptible: false"
 	)
 	tests := []struct {
@@ -26,13 +25,13 @@ func TestRemovedOptionKeysStopBuild(t *testing.T) {
 		{name: "exclude outside watch", option: "exclude: ['dist/**']", want: "option.exclude is no longer supported; " + toExclude},
 		{name: "watchEvent", option: "watchEvent: CUD", want: "option.watchEvent is no longer supported; " + toEvents},
 		{name: "watchEvent with watch group", option: "{watch: {fileEvent: CUD}, watchEvent: ''}", want: "option.watchEvent is no longer supported; " + toEvents},
-		{name: "watchSubDir", option: "watchSubDir: false", want: "option.watchSubDir is no longer supported; use option.watch.subDir " + fromOptions},
-		{name: "waitMillisecond", option: "waitMillisecond: 500", want: "option.waitMillisecond is no longer supported; use option.hookBatch.waitMillisecond " + fromOptions},
-		{name: "noWait true", option: "noWait: true", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait " + fromOptions},
-		{name: "noWait false", option: "noWait: false", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait " + fromOptions},
-		{name: "interruptible true", option: "interruptible: true", want: "option.interruptible is no longer supported; " + toInterrupt + " " + fromOptions},
-		{name: "interruptible false", option: "interruptible: false", want: "option.interruptible is no longer supported; " + toInterrupt + " " + fromOptions},
-		{name: "interruptible with run group", option: "{run: {interrupt: oldest}, interruptible: true}", want: "option.interruptible is no longer supported; " + toInterrupt + " " + fromOptions},
+		{name: "watchSubDir", option: "watchSubDir: false", want: "option.watchSubDir is no longer supported; use option.watch.subDir"},
+		{name: "waitMillisecond", option: "waitMillisecond: 500", want: "option.waitMillisecond is no longer supported; use option.hookBatch.waitMillisecond"},
+		{name: "noWait true", option: "noWait: true", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait"},
+		{name: "noWait false", option: "noWait: false", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait"},
+		{name: "interruptible true", option: "interruptible: true", want: "option.interruptible is no longer supported; " + toInterrupt},
+		{name: "interruptible false", option: "interruptible: false", want: "option.interruptible is no longer supported; " + toInterrupt},
+		{name: "interruptible with run group", option: "{run: {interrupt: oldest}, interruptible: true}", want: "option.interruptible is no longer supported; " + toInterrupt},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

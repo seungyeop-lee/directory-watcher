@@ -1,10 +1,6 @@
 package domain
 
-import (
-	"path/filepath"
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestExcludePatterns_Excludes(t *testing.T) {
 	tests := []struct {
@@ -74,47 +70,6 @@ func TestExcludePatterns_Excludes(t *testing.T) {
 			for _, rel := range tt.watched {
 				if tt.patterns.Excludes(rel) {
 					t.Errorf("Excludes(%q) = true, want false", rel)
-				}
-			}
-		})
-	}
-}
-
-// USAGE "Moving from excludeDir and excludeSuffix"의 각 행에서, 옛 옵션이 빼던 경로와 exclude 패턴이 빼는
-// 경로가 같은지 확인한다. 감시 대상 path는 site다.
-func TestExcludePatternsMatchRemovedOptions(t *testing.T) {
-	const target = "site"
-	// 옛 excludeDir는 실행 위치 기준 폴더 경로였고, 그 폴더와 그 아래를 감시 목록에 넣지 않았다.
-	excludeDir := func(dir string) func(rel string) bool {
-		return func(rel string) bool { return Path(dir).Contains(Path(target + "/" + rel)) }
-	}
-	// 옛 excludeSuffix는 이벤트 경로의 절대 경로 끝부분을 비교했다.
-	excludeSuffix := func(suffix string) func(rel string) bool {
-		return func(rel string) bool {
-			return strings.HasSuffix(filepath.ToSlash(Path(target+"/"+rel).Abs()), suffix)
-		}
-	}
-	paths := []string{
-		"dist", "dist/a.js", "dist/sub/b.js", "distx/a.js", "src/dist/a.js",
-		"a_test.go", "pkg/b_test.go", "test.go", "a_test.go.bak",
-		"a.txt~", "sub/b~", "a~.txt",
-		"out.txt", "sub/out.txt", "layout.txt", "out.txt.bak",
-	}
-	rows := []struct {
-		old      string
-		removed  func(rel string) bool
-		patterns ExcludePatterns
-	}{
-		{old: "excludeDir: ['site/dist']", removed: excludeDir("site/dist"), patterns: ExcludePatterns{"dist/**"}},
-		{old: "excludeSuffix: ['_test.go']", removed: excludeSuffix("_test.go"), patterns: ExcludePatterns{"**/*_test.go"}},
-		{old: "excludeSuffix: ['~']", removed: excludeSuffix("~"), patterns: ExcludePatterns{"**/*~"}},
-		{old: "excludeSuffix: ['/out.txt']", removed: excludeSuffix("/out.txt"), patterns: ExcludePatterns{"**/out.txt"}},
-	}
-	for _, row := range rows {
-		t.Run(row.old, func(t *testing.T) {
-			for _, rel := range paths {
-				if old, got := row.removed(rel), row.patterns.Excludes(rel); old != got {
-					t.Errorf("%s: old option excludes = %v, exclude %q excludes = %v", rel, old, row.patterns, got)
 				}
 			}
 		})
