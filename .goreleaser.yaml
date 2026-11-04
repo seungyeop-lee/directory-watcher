@@ -35,12 +35,12 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-# 릴리스 노트는 tag workflow가 CHANGELOG.md의 version 절을 --release-notes로 넘긴다.
+# 릴리스 노트는 배포 workflow(.github/workflows/goreleaser.yml)가 CHANGELOG.md의 version 절을 --release-notes로 넘긴다.
 # changelog.disable을 켜면 --release-notes 파일도 읽지 않으므로 changelog 설정은 두지 않는다.
 
 # homebrew-tap과 scoop-bucket에는 각 저장소에만 쓰기 권한이 있는 SSH deploy key로 push한다.
 # GitHub는 deploy key 하나를 여러 저장소에 등록할 수 없으므로 저장소마다 키가 따로 있고,
-# 개인키는 tag workflow가 저장소 비밀값 TAP_SSH_KEY와 SCOOP_BUCKET_SSH_KEY에서 넘긴다.
+# 개인키는 배포 workflow가 저장소 비밀값 TAP_SSH_KEY와 SCOOP_BUCKET_SSH_KEY에서 넘긴다.
 homebrew_casks:
   - repository:
       owner: seungyeop-lee

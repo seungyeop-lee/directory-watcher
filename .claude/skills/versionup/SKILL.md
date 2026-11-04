@@ -7,13 +7,13 @@ disable-model-invocation: true
 
 # versionup
 
-`feature/working`의 커밋을 `master`로 옮기고, `master`에 `CHANGELOG.md`의 새 version 절을 담은 릴리스 커밋 하나를 만든 뒤, 그 커밋에 annotated tag `v<새 version>`을 달고 `v<새 version의 major>` 브랜치(아래에서 `v<major>`)를 그 커밋으로 옮깁니다. 이어서 `master`, `v<major>`, tag를 push하고 `feature/working`을 릴리스 커밋에 맞춥니다. tag가 push되면 `.github/workflows/goreleaser.yml`이 그 tag로 배포하고 GitHub Release를 만듭니다. 릴리스 규칙은 `docs/release.md`와 `goreleaser.yml`에 있고, 이 skill은 `docs/release.md` "릴리스 절차" 절을 대신 실행합니다. 시작하기 전에 그 둘을 읽고, 이 skill이 그 둘과 어긋나는 곳을 발견하면 skill에 맞추지 말고 멈춘 뒤 어긋난 곳을 사용자에게 알립니다.
+`v<새 version의 major>` 브랜치(아래에서 `v<major>`)를 `feature/working`으로 옮기고, `v<major>`에 `CHANGELOG.md`의 새 version 절을 담은 릴리스 커밋 하나를 만들어 push합니다. `v<major>` push의 `ci`가 3-OS 테스트에 성공하면 같은 실행의 `release` job이 `.github/workflows/goreleaser.yml`을 불러 annotated tag `v<새 version>`을 만들고 배포하며 GitHub Release를 만듭니다. 이 skill은 그 실행이 성공할 때까지 기다린 뒤 `master`와 `feature/working`을 릴리스 커밋으로 옮깁니다. tag는 만들거나 push하지 않고, `feature/working`은 로컬 전용 브랜치라서 push하지 않습니다. 릴리스 규칙은 `docs/release.md`와 `goreleaser.yml`에 있고, 이 skill은 `docs/release.md` "릴리스 절차" 절을 대신 실행합니다. 시작하기 전에 그 둘을 읽고, 이 skill이 그 둘과 어긋나는 곳을 발견하면 skill에 맞추지 말고 멈춘 뒤 어긋난 곳을 사용자에게 알립니다.
 
 **브랜치는 모두 fast-forward로만 옮기고, push와 브랜치 이동은 아래 세 확인에서 사용자가 동의한 뒤에만 합니다.**
 
-- 확인 ①(5단계): `master`를 `feature/working`으로 옮기기 전
-- 확인 ②(9단계): push하기 전
-- 확인 ③(10단계): `feature/working`을 릴리스 커밋에 맞추기 전
+- 확인 ①(5단계): `v<major>`를 `feature/working`으로 옮기기 전
+- 확인 ②(9단계): `v<major>`를 push하기 전
+- 확인 ③(11단계): 배포가 성공한 뒤 `master`를 옮겨 push하기 전
 
 각 확인에서는 그 단계가 정한 내용을 보여 주고, 진행할지 사용자에게 묻고 답을 기다립니다. 사용자가 분명히 동의했을 때만 진행합니다. 거절하거나 답이 분명하지 않으면 그 자리에서 멈추고, 그 단계의 "거절하면"대로 그때까지 한 일과 남은 단계의 명령을 알립니다. skill을 부를 때 함께 준 말은 확인에 대한 답으로 보지 않습니다.
 
@@ -31,16 +31,14 @@ disable-model-invocation: true
 
 아래 조건 중 하나라도 맞지 않으면 아무것도 바꾸지 않고, 맞지 않는 조건을 알린 뒤 멈춥니다.
 
-1. `git branch --show-current`가 `feature/working`이나 `master`를 출력합니다. 이 브랜치를 실행 브랜치라고 부릅니다. 릴리스 커밋은 지금 `HEAD` 위에 만들어집니다.
+1. `git branch --show-current`가 `feature/working`을 출력합니다. 릴리스 커밋은 지금 `HEAD` 위에 만들어집니다.
 2. `git status --porcelain`이 아무것도 출력하지 않습니다.
 3. `git fetch --tags origin`이 성공합니다. 실패하면 출력을 보여 줍니다. 원격 브랜치와 tag를 받아 오지 못하면 아래 조건과 4단계의 충돌 여부를 확인할 수 없습니다.
 4. `git rev-parse master`와 `git rev-parse origin/master`가 같은 커밋을 출력합니다. 다르면 로컬 `master`에 push하지 않은 커밋이 있거나 원격보다 뒤처진 것이므로, 사용자가 먼저 맞춰야 합니다.
-5. `git merge-base --is-ancestor master HEAD`가 성공합니다. 실패하면 `master`를 실행 브랜치로 fast-forward할 수 없습니다.
-6. 로컬 `feature/working`이 있으면(`git rev-parse -q --verify refs/heads/feature/working`이 성공하면) 아래 둘이 성공합니다. 10단계에서 `feature/working`과 `origin/feature/working`을 릴리스 커밋으로 fast-forward하기 때문입니다.
-   - `git merge-base --is-ancestor feature/working HEAD`
-   - `origin/feature/working`이 있으면 `git merge-base --is-ancestor origin/feature/working HEAD`
-7. `git describe --tags --abbrev=0`이 출력한 마지막 릴리스 tag가 `v<X.Y.Z>` 형식이고 prerelease 부분(`-` 뒤)이 없습니다. 이 tag에서 `v`를 뺀 값이 지금 version입니다.
-8. `go vet ./...`와 `go test ./...`가 통과합니다. 1–7이 모두 맞을 때 마지막으로 실행합니다. tag workflow도 게시 전에 같은 검사를 하므로, 여기서 실패하면 그대로 배포할 수 없습니다. 실패하면 실패한 검사와 출력을 알리고, 아직 아무것도 바꾸지 않았으므로 문제를 고쳐 커밋한 뒤 skill을 바로 다시 실행하면 된다고 안내합니다.
+5. `git merge-base --is-ancestor master HEAD`가 성공합니다. 실패하면 11단계에서 `master`를 릴리스 커밋으로 fast-forward할 수 없습니다.
+6. `git describe --tags --abbrev=0`이 출력한 마지막 릴리스 tag가 `v<X.Y.Z>` 형식이고 prerelease 부분(`-` 뒤)이 없습니다. 이 tag에서 `v`를 뺀 값이 지금 version입니다.
+7. `gh release view v<지금 version> --json tagName`이 성공합니다. `release not found`로 실패하면 지난 배포가 게시되지 않은 것이므로, `docs/release.md` "배포 흐름" 절의 복구 절차를 먼저 따르라고 안내합니다. 그 밖의 이유로 실패하면 출력을 보여 줍니다.
+8. `go vet ./...`와 `go test ./...`가 통과합니다. 1–7이 모두 맞을 때 마지막으로 실행합니다. `v<major>` push의 `ci`도 같은 검사를 하므로, 여기서 실패하면 push해도 배포되지 않습니다. 실패하면 실패한 검사와 출력을 알리고, 아직 아무것도 바꾸지 않았으므로 문제를 고쳐 커밋한 뒤 skill을 바로 다시 실행하면 된다고 안내합니다.
 
 ## 3. 올릴 단계 정하기
 
@@ -71,7 +69,7 @@ git log --format='--- %h %s%n%b' --name-only v<지금 version>..HEAD
 
 이 가운데 가장 높은 단계를 고릅니다.
 
-- 센 커밋도 `[Unreleased]` 항목도 없으면 릴리스할 변경이 없다고 알리고 멈춥니다. 인수를 받았어도 멈춥니다. CHANGELOG 절의 본문이 비면 tag workflow가 게시 전에 실패합니다.
+- 센 커밋도 `[Unreleased]` 항목도 없으면 릴리스할 변경이 없다고 알리고 멈춥니다. 인수를 받았어도 멈춥니다. CHANGELOG 절의 본문이 비면 배포가 게시 전에 실패합니다.
 - 인수 없이 실행했으면 고른 단계와 그 근거가 된 커밋(hash와 제목)이나 항목을 사용자에게 알립니다.
 - 인수를 받았는데 판단한 단계와 다르면, 그 차이를 알리되 인수의 단계를 씁니다.
 
@@ -85,33 +83,33 @@ git log --format='--- %h %s%n%b' --name-only v<지금 version>..HEAD
    - major로 올리려면 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령을 새 major로 바꿔 먼저 커밋합니다.
    - major로 올리지 않으려면 모듈 경로가 지금 major와 맞는지 확인하고, 모듈 경로를 이미 올렸다면 `major`로 다시 실행합니다.
 2. `git rev-parse -q --verify refs/tags/v<새 version>`이 실패합니다. 성공하면 그 version은 이미 tag가 있으므로 멈춥니다. 2단계에서 원격 tag를 받아 왔으므로 이 확인은 원격 tag도 포함합니다.
-3. `refs/heads/v<major>`와 `refs/remotes/origin/v<major>` 가운데 있는 것(`git rev-parse -q --verify <ref>`가 성공하는 것)마다 `git merge-base --is-ancestor <ref> HEAD`가 성공합니다. 릴리스 커밋은 `HEAD` 위에 만들어지므로, 이 조건이 맞아야 `v<major>`를 릴리스 커밋으로 fast-forward할 수 있습니다. 둘 다 없으면 이번이 그 major의 첫 릴리스이고, 8단계에서 `v<major>`를 새로 만듭니다.
+3. `refs/heads/v<major>`와 `refs/remotes/origin/v<major>` 가운데 있는 것(`git rev-parse -q --verify <ref>`가 성공하는 것)마다 `git merge-base --is-ancestor <ref> HEAD`가 성공합니다. 릴리스 커밋은 `HEAD` 위에 만들어지므로, 이 조건이 맞아야 `v<major>`를 릴리스 커밋으로 fast-forward할 수 있습니다. 둘 다 없으면 이번이 그 major의 첫 릴리스이고, 5단계에서 `v<major>`를 새로 만듭니다.
 4. `git for-each-ref refs/tags/v<major> refs/heads/v<새 version> refs/remotes/origin/v<새 version>`이 아무것도 출력하지 않습니다. 브랜치 `v<major>`와 같은 이름의 tag나, tag `v<새 version>`과 같은 이름의 브랜치가 있으면 같은 이름이 브랜치와 tag를 함께 가리키게 되므로 멈춥니다.
 
-## 5. 확인 ①: `master`로 옮기기
+## 5. 확인 ①: `v<major>`로 옮기기
 
-실행 브랜치가 `master`이면 이 단계를 건너뜁니다. 실행 브랜치가 `feature/working`이고 `git rev-parse master`와 `git rev-parse HEAD`가 같으면, 옮길 커밋이 없으므로 확인 없이 `git switch master`만 실행합니다.
-
-그 밖의 경우 `master`로 옮겨질 커밋 목록과 새 version을 보여 주고, `master`를 `feature/working`으로 fast-forward할지 묻습니다.
+`v<major>`로 옮겨질 커밋 목록과 새 version을 보여 줍니다. `origin/v<major>`가 없으면 `master..feature/working`의 목록을 보여 줍니다.
 
 ```sh
-git log --oneline master..feature/working
+git log --oneline origin/v<major>..feature/working
 ```
 
-동의하면 실행합니다.
+`v<major>`를 `feature/working`으로 옮기고 그 브랜치로 바꿀지 묻습니다. 동의하면 실행합니다.
 
 ```sh
-git switch master
-git merge --ff-only feature/working
+git fetch . refs/heads/feature/working:refs/heads/v<major>
+git switch v<major>
 ```
 
-**거절하면:** 아무것도 바꾸지 않았다고 알립니다. 남은 단계는 위 두 명령으로 `master`를 옮기는 일부터 시작하는 `docs/release.md` "릴리스 절차"의 2단계 이후이며, skill을 다시 실행해도 된다고 안내합니다.
+첫 명령은 로컬 `v<major>`가 없으면 `feature/working`에 새로 만들고, 있으면 fast-forward만 합니다. fast-forward가 아니면 git이 `rejected`로 거절합니다. 거절되면 출력을 알리고 멈춥니다.
+
+**거절하면:** 아무것도 바꾸지 않았다고 알립니다. 남은 단계는 위 두 명령으로 `v<major>`를 옮기는 일부터 시작하는 `docs/release.md` "릴리스 절차"의 2단계 이후이며, skill을 다시 실행해도 된다고 안내합니다.
 
 ## 6. CHANGELOG 절 쓰기
 
 저장소 루트 `CHANGELOG.md`에 새 version의 절을 씁니다. 날짜는 `date +%F`의 오늘 날짜이고, 제목은 `## [<새 version>] - <오늘 날짜>`입니다.
 
-- `## [Unreleased]` 절이 있으면 그 절을 새 version 절로 바꿉니다. 초안의 항목은 그대로 두고, 3단계에서 센 커밋 가운데 초안에 없는 변경만 더한 뒤, 절 제목을 새 version의 제목으로 바꿉니다. 다만 초안 항목이 지난 릴리스가 아니라 릴리스되지 않은 중간 상태와 비교해 쓰였으면, 지난 릴리스의 사용자가 겪는 변화로 고치고 11단계에서 고친 항목을 알립니다.
+- `## [Unreleased]` 절이 있으면 그 절을 새 version 절로 바꿉니다. 초안의 항목은 그대로 두고, 3단계에서 센 커밋 가운데 초안에 없는 변경만 더한 뒤, 절 제목을 새 version의 제목으로 바꿉니다. 다만 초안 항목이 지난 릴리스가 아니라 릴리스되지 않은 중간 상태와 비교해 쓰였으면, 지난 릴리스의 사용자가 겪는 변화로 고치고 12단계에서 고친 항목을 알립니다.
 - 없으면 머리말 뒤, 가장 최근 version 절(첫 번째 `## [` 제목) 위에 새 절을 추가합니다.
 
 본문은 영어로, 파일 머리말의 Keep a Changelog 1.1.0 형식을 따라 씁니다. 이 본문이 GitHub Release의 노트가 됩니다.
@@ -126,7 +124,7 @@ git merge --ff-only feature/working
 
 ## 7. 검사
 
-tag workflow가 릴리스 노트를 뽑는 명령으로 새 절을 확인합니다.
+배포가 릴리스 노트를 뽑는 명령으로 새 절을 확인합니다.
 
 ```sh
 go run ./scripts/releasenotes <새 version>
@@ -134,69 +132,74 @@ go run ./scripts/releasenotes <새 version>
 
 이 명령은 `CHANGELOG.md`에 새 version 절이 없거나, 본문이 비었거나, 제목이 날짜로 끝나지 않으면 실패합니다. 성공하면 출력이 6단계에서 쓴 본문과 같은지 확인합니다.
 
-실패하면 원인은 6단계에서 쓴 내용이므로, 실패 출력을 보고 6단계의 규칙대로 절을 고친 뒤 다시 실행합니다. 한 번만 고칩니다. 고친 뒤에도 실패하면 커밋하지 않고, 바꾼 파일을 그대로 둔 채 실패 출력을 알리고 멈춥니다. 이때 skill을 다시 실행하려면 `git restore CHANGELOG.md`로 파일을 먼저 되돌려야 하고, 5단계에서 `master`를 옮겼다면 `git switch feature/working`과 `git branch -f master origin/master`로 `master`도 되돌려야 한다고 함께 알립니다. 되돌리지 않으면 2단계의 4번 조건에서 멈춥니다.
+실패하면 원인은 6단계에서 쓴 내용이므로, 실패 출력을 보고 6단계의 규칙대로 절을 고친 뒤 다시 실행합니다. 한 번만 고칩니다. 고친 뒤에도 실패하면 커밋하지 않고, 바꾼 파일을 그대로 둔 채 실패 출력을 알리고 멈춥니다. 이때 skill을 다시 실행하려면 `git restore CHANGELOG.md`로 파일을 되돌리고 `git switch feature/working`으로 돌아가야 한다고 함께 알립니다. 로컬 `v<major>`는 `feature/working`을 가리키므로 그대로 두어도 됩니다.
 
-## 8. 커밋, tag, `v<major>`
+## 8. 커밋
 
-`CHANGELOG.md`만 stage해 커밋 하나로 만들고, 그 커밋에 annotated tag를 답니다. git hook을 건너뛰지 않습니다(`--no-verify` 금지). 이어서 로컬 `v<major>`를 그 커밋으로 옮깁니다. 이 단계는 확인 없이 진행합니다.
+`CHANGELOG.md`만 stage해 `v<major>`에 커밋 하나로 만듭니다. tag는 달지 않습니다. git hook을 건너뛰지 않습니다(`--no-verify` 금지). 이 단계는 확인 없이 진행합니다.
 
 ```sh
 git add CHANGELOG.md
 git commit -m "chore(release): <새 version> 릴리스의 CHANGELOG 절을 추가함"
-git tag -a v<새 version> -m "v<새 version>"
-git fetch . refs/heads/master:refs/heads/v<major>
 ```
 
-마지막 명령은 로컬 `v<major>`를 `master`로 fast-forward하고, 로컬 `v<major>`가 없으면 `master`에 새로 만듭니다. fast-forward가 아니면 git이 `rejected`로 거절합니다. 거절되면 출력을 알리고 멈춥니다. 이때 커밋과 tag는 로컬에 남아 있고 아무것도 push하지 않았다고 함께 알립니다.
-
-## 9. 확인 ②: push
+## 9. 확인 ②: `v<major>` push
 
 아래 내용을 보여 줍니다.
 
 - 새 CHANGELOG 절: 7단계의 `go run ./scripts/releasenotes <새 version>` 출력
-- 릴리스 커밋의 hash와 제목, tag `v<새 version>`, `v<major>`가 가리키는 커밋: `git log -1 --format='%h %s' refs/heads/v<major>`
-- 실행할 명령: `git push --atomic origin refs/heads/master refs/heads/v<major> refs/tags/v<새 version>`
-- push하면 `.github/workflows/goreleaser.yml`이 tag `v<새 version>`으로 배포를 시작해 GitHub Release, ghcr Docker 이미지, Homebrew cask, scoop에 게시한다는 것
+- 릴리스 커밋의 hash와 제목
+- 실행할 명령: `git push origin refs/heads/v<major>`
+- push하면 `v<major>`의 `ci`가 3-OS 테스트를 실행하고, 모두 성공하면 `release` job이 tag `v<새 version>`을 만들어 GitHub Release, ghcr Docker 이미지, Homebrew cask, scoop에 게시한다는 것
 
 push할지 묻고, 동의하면 실행합니다.
 
 ```sh
-git push --atomic origin refs/heads/master refs/heads/v<major> refs/tags/v<새 version>
+git push origin refs/heads/v<major>
 ```
 
-ref를 `refs/heads/`와 `refs/tags/`로 적어 브랜치와 tag를 구분하고, `--atomic`으로 셋 중 하나라도 거절되면 아무것도 바꾸지 않습니다. push가 실패하면 출력을 알리고 멈춥니다. 이때 원격은 바뀌지 않았고, 로컬에는 커밋, tag, `v<major>`가 남아 있다고 함께 알립니다.
+push가 실패하면 출력을 알리고 멈춥니다. 이때 원격은 바뀌지 않았고, 로컬 `v<major>`에 릴리스 커밋이 남아 있다고 함께 알립니다.
 
-**거절하면:** 로컬 `master`에 릴리스 커밋을 만들고 tag `v<새 version>`을 달았으며 로컬 `v<major>`를 옮겼고, 아무것도 push하지 않았다고 알립니다. 남은 단계의 명령을 함께 알립니다.
+**거절하면:** 로컬 `v<major>`에 릴리스 커밋을 만들었고 아무것도 push하지 않았다고 알립니다. 남은 단계는 위 push 명령부터 시작하는 `docs/release.md` "릴리스 절차"의 5단계 이후라고 안내합니다.
+
+## 10. 배포 기다리기
+
+이 단계는 확인 없이 진행합니다. 9단계의 push로 시작한 `ci` 실행을 찾습니다. 실행이 바로 보이지 않으면 잠시 뒤 다시 찾습니다.
 
 ```sh
-git push --atomic origin refs/heads/master refs/heads/v<major> refs/tags/v<새 version>
-git switch feature/working
-git merge --ff-only master
-git push origin refs/heads/feature/working
+gh run list --workflow ci --branch v<major> --event push --commit <릴리스 커밋 hash> --limit 1 --json databaseId,status,conclusion,url
 ```
 
-뒤의 세 줄은 로컬 `feature/working`이 있을 때만 알립니다. push하기 전에 커밋을 고치면 tag와 `v<major>`는 고치기 전 커밋에 남는다는 것도 알립니다. 이때는 `master`에서 `git tag -d v<새 version>`으로 tag를 지우고 `git branch -f v<major> master`로 `v<major>`를 고친 커밋으로 옮긴 뒤, 8단계의 `git tag` 명령으로 tag를 다시 답니다.
-
-## 10. 확인 ③: `feature/working` 맞추기
-
-로컬 `feature/working`이 없으면 이 단계를 건너뜁니다. 5단계를 건너뛰었어도 로컬 `feature/working`이 있으면 이 단계를 실행합니다.
-
-`feature/working`을 `master`(릴리스 커밋)로 fast-forward하고 `origin/feature/working`에 push할지 묻습니다. 실행할 명령을 함께 보여 주고, 동의하면 실행합니다.
+그 실행이 끝날 때까지 기다립니다. 테스트와 배포를 합쳐 20분 넘게 걸릴 수 있습니다.
 
 ```sh
-git switch feature/working
-git merge --ff-only master
-git push origin refs/heads/feature/working
+gh run watch <databaseId> --exit-status
 ```
 
-push가 실패하면 출력을 알리고 멈춥니다. 릴리스는 이미 push되었고, 로컬 `feature/working`만 옮겨졌다고 함께 알립니다.
+실행이 성공하면 `gh release view v<새 version> --json tagName,url`로 GitHub Release가 만들어졌는지 확인합니다.
 
-**거절하면:** 릴리스는 push되었고 `feature/working`은 옮기지 않았다고 알립니다. 지금 브랜치는 `master`입니다. 남은 단계는 위 세 명령입니다.
+실행이 실패했거나 Release가 없으면 실패한 job과 실행 URL을 알리고 멈춥니다. `master`와 `feature/working`은 옮기지 않았다고 함께 알리고, `docs/release.md` "배포 흐름" 절의 복구 절차를 안내합니다.
 
-## 11. 안내
+## 11. 확인 ③: `master`와 `feature/working` 옮기기
+
+배포가 성공했음을 Release URL과 함께 보여 주고, `master`를 릴리스 커밋으로 fast-forward해 push하고 로컬 `feature/working`도 옮길지 묻습니다. 실행할 명령과, `master` push에서는 `ci`가 실행되지 않는다는 것을 함께 보여 주고, 동의하면 실행합니다.
+
+```sh
+git switch master
+git merge --ff-only v<major>
+git push origin refs/heads/master
+git switch feature/working
+git merge --ff-only v<major>
+```
+
+push가 실패하면 출력을 알리고 멈춥니다. 배포는 이미 끝났고, 로컬 `master`만 옮겨졌다고 함께 알립니다.
+
+**거절하면:** 배포는 끝났고 `master`와 `feature/working`은 옮기지 않았다고 알립니다. 지금 브랜치는 `v<major>`입니다. 남은 단계는 위 다섯 명령입니다.
+
+## 12. 안내
 
 사용자에게 아래 내용을 알립니다.
 
-- 커밋 hash와 제목, 만든 tag, `v<major>`가 가리키는 커밋, 지금 version과 새 version, 고른 단계와 그 근거가 된 커밋이나 항목, 6단계에서 고친 초안 항목
-- push한 ref와 `feature/working`을 맞췄는지, 지금 브랜치
-- 배포 진행은 GitHub Actions의 `goreleaser` workflow에서 확인합니다. 검사나 노트 추출에서 실패하면 `docs/release.md` "배포 흐름" 절의 복구 절차를 따릅니다.
+- 커밋 hash와 제목, 지금 version과 새 version, 고른 단계와 그 근거가 된 커밋이나 항목, 6단계에서 고친 초안 항목
+- push한 ref, `ci` 실행 URL, 만든 tag와 GitHub Release URL
+- `master`와 `feature/working`을 옮겼는지, 지금 브랜치

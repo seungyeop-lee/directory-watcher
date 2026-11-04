@@ -1,20 +1,21 @@
 name: ci
 
 on:
-  # 릴리스는 같은 커밋을 master, v<major>, tag, feature/working에 함께 push하므로, feature/working의 실행 하나만 남긴다.
-  # branches-ignore만 적으면 tag push에서는 실행하지 않고, tag는 goreleaser.yml이 게시 전에 검사한다.
+  # master는 배포에 성공한 v<major>의 커밋으로 fast-forward만 하므로, master push에서는 같은 커밋을 다시 검사하지 않는다.
+  # branches-ignore를 적으면 tag push에서도 실행하지 않는다.
   push:
     branches-ignore:
       - master
-      - 'v[0-9]+'
   pull_request:
 
 permissions:
   contents: read
 
+# 같은 브랜치에 다시 push하면 이전 실행을 취소한다. 다만 v<major> push의 실행은 release job이 게시하는 도중일 수 있으므로 취소하지 않는다.
+# 이름이 v로 시작하는 다른 브랜치도 취소하지 않지만, 배포는 goreleaser.yml이 브랜치 이름을 확인한 뒤에만 한다.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || !startsWith(github.ref, 'refs/heads/v') }}
 
 jobs:
   test:
@@ -117,3 +118,16 @@ jobs:
           name: e2e-diagnostics-${{ matrix.os }}
           path: ${{ env.DW_E2E_DIAGNOSTICS }}
           if-no-files-found: ignore
+
+  # v<major> push에서 test가 모든 OS에서 성공하면 같은 커밋을 배포한다. goreleaser.yml은 검사를 다시 하지 않는다.
+  # 같은 저장소의 reusable workflow는 push한 커밋의 파일로 실행되므로, goreleaser.yml을 고친 내용도 그 push부터 적용된다.
+  release:
+    needs: test
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/v')
+    permissions:
+      contents: write # tag, GitHub Release
+      packages: write # ghcr Docker 이미지
+    uses: ./.github/workflows/goreleaser.yml
+    secrets:
+      TAP_SSH_KEY: ${{ secrets.TAP_SSH_KEY }}
+      SCOOP_BUCKET_SSH_KEY: ${{ secrets.SCOOP_BUCKET_SSH_KEY }}

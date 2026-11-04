@@ -1,17 +1,79 @@
 name: goreleaser
 
+# ci.yml의 release job이 v<major> push에서 test가 성공한 뒤에만 이 workflow를 부른다. 검사는 다시 하지 않는다.
+# 호출된 workflow의 github context는 ci 실행의 것이므로, github.sha는 push한 커밋이고 github.ref_name은 push한 브랜치다.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    secrets:
+      TAP_SSH_KEY:
+        required: true
+      SCOOP_BUCKET_SSH_KEY:
+        required: true
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-  goreleaser:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.lookup.outputs.version }}
+      publish: ${{ steps.lookup.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      # tag는 게시하기 전에 만들므로, 게시하기 전에 실패한 실행도 tag를 남긴다. 그래서 tag가 아니라 GitHub Release로 릴리스 여부를 판단한다.
+      - name: Look up the version on GitHub Releases
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          # ci.yml은 이름이 v로 시작하는 브랜치이면 이 workflow를 부르므로, v<major> 브랜치가 아니면 여기서 게시하지 않고 끝낸다.
+          if ! [[ "$BRANCH" =~ ^v[0-9]+$ ]]; then
+            echo "$BRANCH is not a v<major> branch; nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          version="$(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "CHANGELOG.md has no ## [X.Y.Z] section" >&2
+            exit 1
+          fi
+          if [ "v${version%%.*}" != "$BRANCH" ]; then
+            echo "CHANGELOG.md version $version does not belong to branch $BRANCH" >&2
+            exit 1
+          fi
+
+          # Release가 없을 때만 gh가 release not found로 실패하므로, 그 밖의 실패(네트워크 오류 등)는 workflow를 실패시킨다.
+          if gh release view "v$version" --json tagName > /dev/null 2> "$RUNNER_TEMP/release-view.log"; then
+            publish=false
+          elif grep -q 'release not found' "$RUNNER_TEMP/release-view.log"; then
+            publish=true
+          else
+            cat "$RUNNER_TEMP/release-view.log" >&2
+            exit 1
+          fi
+
+          echo "v$version publish: $publish"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    # 같은 version을 두 번 게시하지 않도록 게시는 하나씩 차례로 실행한다.
+    concurrency:
+      group: goreleaser-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write # tag, GitHub Release
+      packages: write # ghcr Docker 이미지
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      HEAD_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -21,14 +83,41 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true # go.sum 파일이 필수
-      # 게시는 마지막 goreleaser 단계에서만 일어나므로, 아래 검사 중 하나라도 실패하면 아무것도 게시하지 않는다.
-      - run: go vet ./...
-      - run: go test ./...
-      # CHANGELOG.md에 tag의 version 절이 없거나, 본문이 비었거나, 제목이 날짜로 끝나지 않으면 여기서 실패한다.
+      # 게시는 마지막 goreleaser 단계에서만 일어난다. 노트 추출이 실패하면 tag도 만들지 않는다.
+      # CHANGELOG.md의 version 절 본문이 비었거나, 제목이 날짜로 끝나지 않으면 여기서 실패한다.
       - name: Read release notes from CHANGELOG.md
         run: |
-          go run ./scripts/releasenotes "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/release-notes.md"
+          go run ./scripts/releasenotes "$VERSION" > "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/release-notes.md"
+      - name: Create the tag
+        run: |
+          major="${VERSION%%.*}"
+          tag_ref="refs/tags/v$VERSION"
+
+          # 브랜치 v<major>와 tag v<X.Y.Z>는 이름이 비슷하므로, 같은 이름의 브랜치와 tag는 만들지 않는다.
+          conflicts="$(git ls-remote origin "refs/heads/v$VERSION" "refs/tags/v$major")"
+          if [ -n "$conflicts" ]; then
+            echo "A branch named v$VERSION or a tag named v$major already exists:" >&2
+            echo "$conflicts" >&2
+            exit 1
+          fi
+
+          # Release가 없는데 tag가 있으면 이전 실행이 게시하기 전에 실패한 것이다.
+          # tag가 이 커밋에 있으면 그대로 쓰고, 고치기 전 커밋에 있으면 이 커밋으로 옮긴다.
+          old_commit="$(git rev-parse -q --verify "$tag_ref^{commit}" || true)"
+          if [ "$old_commit" = "$HEAD_SHA" ]; then
+            echo "Tag v$VERSION already points to $HEAD_SHA"
+            exit 0
+          fi
+          push_ref="$tag_ref:$tag_ref"
+          if [ -n "$old_commit" ]; then
+            echo "Moving unpublished tag v$VERSION from $old_commit to $HEAD_SHA"
+            git tag -d "v$VERSION"
+            push_ref="+$push_ref"
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            tag -a "v$VERSION" -m "v$VERSION" "$HEAD_SHA"
+          git push origin "$push_ref"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
@@ -48,3 +137,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_SSH_KEY: ${{ secrets.TAP_SSH_KEY }}
           SCOOP_BUCKET_SSH_KEY: ${{ secrets.SCOOP_BUCKET_SSH_KEY }}
+          GORELEASER_CURRENT_TAG: v${{ env.VERSION }}

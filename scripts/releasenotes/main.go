@@ -3,7 +3,7 @@
 // 절이 없거나, 본문이 비었거나, 제목이 날짜로 끝나지 않으면 오류를 stderr에 출력하고 종료 코드 1로 끝난다.
 //
 // 저장소 루트에서 `go run ./scripts/releasenotes <version>`으로 실행한다. version에는 tag의 v를 뺀 값(예: 3.0.0)을 준다.
-// tag workflow가 이 출력을 goreleaser의 --release-notes로 넘긴다.
+// 배포 workflow(.github/workflows/goreleaser.yml)가 이 출력을 goreleaser의 --release-notes로 넘긴다.
 package main
 
 import (
