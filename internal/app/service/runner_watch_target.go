@@ -13,6 +13,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 type watchTargetRunners []*watchTargetRunner
@@ -52,7 +53,7 @@ type watchTargetRunner struct {
 	finishOnce sync.Once
 }
 
-func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger) *watchTargetRunner {
+func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet domain.WatchTargetsCommandSet, logger helper.Logger, mode process.CommandMode) *watchTargetRunner {
 	watcher, err := fsnotify.NewWatcher()
 	hooks := newHookFunc(commandSet.Option.Run, commandSet.Path.Alias(), commandSet.Path, hookInfo{
 		OnStartWatch:   commandSet.LifeCycle.OnStartWatch,
@@ -60,10 +61,10 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		OnChange:       commandSet.LifeCycle.OnChange,
 		OnAfterChange:  globalCommandSet.LifeCycle.OnAfterChange,
 		OnFinishWatch:  commandSet.LifeCycle.OnFinishWatch,
-	}, logger)
+	}, logger, mode)
 	var warner *queueWarner
 	if hook := globalCommandSet.LifeCycle.OnQueueWarning; hook != nil {
-		warner = &queueWarner{hook: hook, target: commandSet.Path, logger: logger}
+		warner = &queueWarner{hook: hook, target: commandSet.Path, logger: logger, mode: mode}
 	}
 	stop := make(chan struct{})
 

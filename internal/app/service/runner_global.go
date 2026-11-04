@@ -12,6 +12,7 @@ import (
 
 type globalRunner struct {
 	watchCtx *process.WatcherContext
+	mode     process.CommandMode
 
 	onStartWatch  domain.Cmd
 	onFinishWatch domain.Cmd
@@ -20,9 +21,10 @@ type globalRunner struct {
 	logger helper.Logger
 }
 
-func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger) *globalRunner {
+func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger, mode process.CommandMode) *globalRunner {
 	return &globalRunner{
-		watchCtx:      process.NewWatcherContext("[GLOBAL]"),
+		watchCtx:      process.NewWatcherContext("[GLOBAL]", mode),
+		mode:          mode,
 		onStartWatch:  commandSet.LifeCycle.OnStartWatch,
 		onFinishWatch: commandSet.LifeCycle.OnFinishWatch,
 		logger:        logger,
@@ -32,7 +34,7 @@ func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger) *
 
 func (g *globalRunner) CallOnStartWatch() {
 	err := g.printInfo("CallOnStartWatch", g.onStartWatch, func() error {
-		return g.onStartWatch.Run(g.watchCtx, "", nil)
+		return g.onStartWatch.Run(g.watchCtx.WithHook("onStartWatch"), "", nil)
 	})
 	if err != nil {
 		g.logger.Error(err.Error())
@@ -41,7 +43,7 @@ func (g *globalRunner) CallOnStartWatch() {
 
 func (g *globalRunner) CallOnFinishWatch() {
 	err := g.printInfo("CallOnFinishWatch", g.onFinishWatch, func() error {
-		return g.onFinishWatch.Run(g.watchCtx, "", nil)
+		return g.onFinishWatch.Run(g.watchCtx.WithHook("onFinishWatch"), "", nil)
 	})
 	if err != nil {
 		g.logger.Error(err.Error())
@@ -80,7 +82,7 @@ func (g *globalRunner) CallOnError(err error) {
 	if !errors.As(err, &fatal) {
 		return
 	}
-	base := process.NewWatcherContext("[ERROR HOOK]")
+	base := process.NewWatcherContext("[ERROR HOOK]", g.mode)
 	defer base.Cancel()
 	var env []string
 	for _, v := range errorVariables {
@@ -88,7 +90,7 @@ func (g *globalRunner) CallOnError(err error) {
 	}
 	ctx := base.NewTimeoutRun(notificationTimeout, env)
 	defer ctx.Cancel()
-	if notifyErr := g.onError.Run(ctx, "", nil); notifyErr != nil {
+	if notifyErr := g.onError.Run(ctx.WithHook("onError"), "", nil); notifyErr != nil {
 		if ctx.Context().Err() != nil {
 			g.logger.Error(fmt.Sprintf("onError notification failed: %v: %v", ctx.Context().Err(), notifyErr))
 		} else {

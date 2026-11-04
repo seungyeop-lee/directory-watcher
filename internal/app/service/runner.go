@@ -8,6 +8,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 type runner struct {
@@ -19,11 +20,11 @@ type runner struct {
 	done         chan struct{}
 }
 
-func NewRunner(commandSet domain.CommandSet, logger helper.Logger) *runner {
+func NewRunner(commandSet domain.CommandSet, logger helper.Logger, mode process.CommandMode) *runner {
 	result := runner{errors: make(chan error, 1), done: make(chan struct{})}
-	result.global = NewGlobalRunner(commandSet.Global, logger)
+	result.global = NewGlobalRunner(commandSet.Global, logger, mode)
 	for _, watchTarget := range commandSet.WatchTargets {
-		result.watchTargets = append(result.watchTargets, NewWatchTargetRunner(commandSet.Global, watchTarget, logger))
+		result.watchTargets = append(result.watchTargets, NewWatchTargetRunner(commandSet.Global, watchTarget, logger, mode))
 	}
 	return &result
 }

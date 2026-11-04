@@ -18,6 +18,12 @@ type hookInfo struct {
 	OnFinishWatch  domain.Cmd
 }
 
+// namedHook은 설정에 적는 hook 이름과 그 hook의 명령이다.
+type namedHook struct {
+	name string
+	cmd  domain.Cmd
+}
+
 // hookFunc는 감시 대상 하나의 hook을 실행한다.
 //   - runStartHook은 onStartWatch를 시작하고 끝나기를 기다리지 않는다. onStartWatch가 도는 동안에는 자리가 모두 찬
 //     것으로 보므로, interrupt: oldest일 때만 첫 실행이 onStartWatch를 취소한다.
@@ -54,12 +60,12 @@ type hookRunner struct {
 	stopped bool
 }
 
-// newHookFunc는 별칭이 alias인 감시 대상 target에서 hook 명령 info를 policy에 따라 실행하는 hookFunc를 만든다.
-func newHookFunc(policy domain.RunPolicy, alias string, target domain.Path, info hookInfo, logger helper.Logger) hookFunc {
-	r := &hookRunner{policy: policy, alias: alias, target: target, logger: logger, base: process.NewWatcherContext(alias)}
+// newHookFunc는 별칭이 alias인 감시 대상 target에서 hook 명령 info를 policy와 mode에 따라 실행하는 hookFunc를 만든다.
+func newHookFunc(policy domain.RunPolicy, alias string, target domain.Path, info hookInfo, logger helper.Logger, mode process.CommandMode) hookFunc {
+	r := &hookRunner{policy: policy, alias: alias, target: target, logger: logger, base: process.NewWatcherContext(alias, mode)}
 	r.ended = sync.NewCond(&r.mu)
-	startCommands := []domain.Cmd{info.OnStartWatch}
-	changeCommands := []domain.Cmd{info.OnBeforeChange, info.OnChange, info.OnAfterChange}
+	startCommands := []namedHook{{"onStartWatch", info.OnStartWatch}}
+	changeCommands := []namedHook{{"onBeforeChange", info.OnBeforeChange}, {"onChange", info.OnChange}, {"onAfterChange", info.OnAfterChange}}
 	return hookFunc{
 		runStartHook: func() {
 			r.mu.Lock()
@@ -80,13 +86,13 @@ func newHookFunc(policy domain.RunPolicy, alias string, target domain.Path, info
 			finish := r.base.NewRun()
 			defer r.base.Cancel()
 			defer finish.Cancel()
-			_ = r.runCommand(finish, info.OnFinishWatch, nil)
+			_ = r.runCommand(finish, namedHook{"onFinishWatch", info.OnFinishWatch}, nil)
 		},
 	}
 }
 
 // admit은 event의 실행을 시작할 수 있을 때까지 기다린 뒤 시작한다. 그동안 cancel을 부르면 시작하지 않는다.
-func (r *hookRunner) admit(event domain.Event, commands []domain.Cmd) {
+func (r *hookRunner) admit(event domain.Event, commands []namedHook) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// canceled는 이 실행을 시작하려고 취소해서, 끝나기를 기다리는 실행이다.
@@ -132,7 +138,7 @@ func (r *hookRunner) toCancel(path domain.Path) []*hookRun {
 }
 
 // start는 run으로 commands를 차례로 실행하기 시작한다. r.mu를 잡고 부른다.
-func (r *hookRunner) start(run *hookRun, commands []domain.Cmd, event *domain.Event) {
+func (r *hookRunner) start(run *hookRun, commands []namedHook, event *domain.Event) {
 	run.ctx = r.base.NewRun()
 	r.runs = append(r.runs, run)
 	go func() {
@@ -162,8 +168,8 @@ func (r *hookRunner) cancel() {
 	r.ended.Broadcast()
 }
 
-func (r *hookRunner) runCommand(ctx *process.WatcherContext, command domain.Cmd, event *domain.Event) error {
-	err := command.Run(ctx, r.target, event)
+func (r *hookRunner) runCommand(ctx *process.WatcherContext, hook namedHook, event *domain.Event) error {
+	err := hook.cmd.Run(ctx.WithHook(hook.name), r.target, event)
 	// 새 변경이나 감시 종료로 실행을 취소하면 명령도 오류로 끝나는데, 이는 실패가 아니므로 기록하지 않는다.
 	if err != nil && ctx.Context().Err() == nil {
 		r.logger.Error(fmt.Sprintf("%s hook command failed, skipping remaining commands: %v", r.alias, err))

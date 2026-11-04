@@ -97,5 +97,5 @@ watchTargets:
 - [설치와 실행](docs/guide/installation.ko.md)은 Homebrew로 설치하기, 명령줄 옵션, Docker로 실행하기, Windows에서 실행하기를 다룹니다.
 - [설정 파일](docs/guide/configuration.ko.md)은 `config.yml` 전체 사양, hook 명령을 실행하는 셸, 명령 실행 위치, 명령에서 쓸 수 있는 변수를 다룹니다.
 - [이벤트와 감시 경로](docs/guide/events.ko.md)는 파일의 이름 바꾸기와 옮기기, 폴더 이벤트, 기본 제외 규칙, `exclude`로 경로 제외하기, 감시 대상의 경로가 겹칠 때를 다룹니다.
-- [hook 실행](docs/guide/running.ko.md)은 `hookBatch`로 이벤트를 기다리고 합치기, 대기열 용량과 경고, `run`으로 hook 실행하기, 이벤트 유실 알림, 과부하와 종료를 다룹니다.
+- [hook 실행](docs/guide/running.ko.md)은 hook 명령 출력과 dry run, `hookBatch`로 이벤트를 기다리고 합치기, 대기열 용량과 경고, `run`으로 hook 실행하기, 이벤트 유실 알림, 과부하와 종료를 다룹니다.
 - [동작 방식](docs/guide/how-it-works.ko.md)은 watcher가 변경을 처리하는 순서와 멈추는 순서를 그림으로 보여 줍니다.

@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 func TestGlobalHookFailureNamesMissingWorkingDirectory(t *testing.T) {
@@ -25,7 +27,7 @@ func TestGlobalHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 	for name, call := range cases {
 		t.Run(name, func(t *testing.T) {
 			logger := &notificationLog{}
-			call(NewGlobalRunner(domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: missingDirCmd, OnFinishWatch: missingDirCmd, OnError: missingDirCmd}}, logger))
+			call(NewGlobalRunner(domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: missingDirCmd, OnFinishWatch: missingDirCmd, OnError: missingDirCmd}}, logger, process.CommandMode{}))
 			if got := logger.String(); !strings.Contains(got, "working directory "+missingDir) {
 				t.Fatalf("failure log lacks working directory: %q", got)
 			}
@@ -45,7 +47,7 @@ func TestGlobalHookDebugLogShowsCommand(t *testing.T) {
 	logger := &debugLog{}
 	start := command.NewManager(command.Cmds{command.SingleCmd{Shell: command.DefaultShell(), Cmd: "exit 0"}})
 	finish := command.NewManager(command.EmptyCmd{})
-	g := NewGlobalRunner(domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: start, OnFinishWatch: finish}}, logger)
+	g := NewGlobalRunner(domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: start, OnFinishWatch: finish}}, logger, process.CommandMode{})
 
 	g.CallOnStartWatch()
 	g.CallOnFinishWatch()
@@ -58,5 +60,22 @@ func TestGlobalHookDebugLogShowsCommand(t *testing.T) {
 	}
 	if strings.Join(logger.debug, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("debug log = %q, want %q", logger.debug, want)
+	}
+}
+
+func TestGlobalHooksRunWithTheirHookNamesAndCommandMode(t *testing.T) {
+	calls := &hookCalls{}
+	lifeCycle := domain.GlobalLifeCycle{OnStartWatch: calls.command("start"), OnFinishWatch: calls.command("finish"), OnError: calls.command("error")}
+	g := NewGlobalRunner(domain.GlobalCommandSet{LifeCycle: lifeCycle}, newMockLogger(), process.CommandMode{Silent: true})
+	g.CallOnStartWatch()
+	g.CallOnError(&FatalError{Path: "target", Cause: fsnotify.ErrEventOverflow})
+	g.CallOnFinishWatch()
+	want := []string{
+		"start onStartWatch {Silent:true DryRun:false}",
+		"error onError {Silent:true DryRun:false}",
+		"finish onFinishWatch {Silent:true DryRun:false}",
+	}
+	if got := calls.list(); !slices.Equal(got, want) {
+		t.Fatalf("hook calls = %q, want %q", got, want)
 	}
 }

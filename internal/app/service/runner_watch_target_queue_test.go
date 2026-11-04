@@ -10,6 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // queueRecorder는 대기열이 알린 단계 변화를 "70 up 70"처럼 단계, 방향, 기다리는 수로 모은다.
@@ -109,5 +110,15 @@ func TestDispatcherRunTerminatesWhenStopCloses(t *testing.T) {
 	case <-done:
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("stop leaked the run loop waiting on an empty queue")
+	}
+}
+
+func TestQueueWarningHookRunsWithItsHookNameAndCommandMode(t *testing.T) {
+	calls := &hookCalls{}
+	qw := &queueWarner{hook: calls.command("warning"), target: "target", logger: newMockLogger(), mode: process.CommandMode{DryRun: true}}
+	qw.notify(queueWarning{level: 70, direction: "up", length: 7, capacity: 10})
+	qw.stop()
+	if got, want := calls.list(), []string{"warning onQueueWarning {Silent:false DryRun:true}"}; !slices.Equal(got, want) {
+		t.Fatalf("hook calls = %q, want %q", got, want)
 	}
 }

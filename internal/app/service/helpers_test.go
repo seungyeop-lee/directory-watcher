@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -134,6 +135,29 @@ type runnerCommand func(*process.WatcherContext, *domain.Event) error
 func (f runnerCommand) Run(ctx *process.WatcherContext, _ domain.Path, event *domain.Event) error {
 	return f(ctx, event)
 }
+
+// hookCalls는 명령이 실행될 때 받은 context의 hook 이름과 명령 실행 방식을 실행한 순서대로 모은다.
+type hookCalls struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+// command는 실행될 때 "start onStartWatch {Silent:false DryRun:true}"처럼 label, hook 이름, 명령 실행 방식을 기록하는 명령이다.
+func (c *hookCalls) command(label string) domain.Cmd {
+	return runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.calls = append(c.calls, fmt.Sprintf("%s %s %+v", label, ctx.Hook(), ctx.Mode()))
+		return nil
+	})
+}
+
+func (c *hookCalls) list() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.calls)
+}
+
 func emptyCommand() domain.Cmd {
 	return runnerCommand(func(*process.WatcherContext, *domain.Event) error { return nil })
 }
@@ -285,7 +309,7 @@ func (f *renameFixture) start(exclude domain.ExcludePatterns) {
 }
 
 func (f *renameFixture) startWith(option domain.WatchTargetsOption) {
-	f.runner = NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger())
+	f.runner = NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger(), process.CommandMode{})
 	f.changed, f.result = startRunner(f.t, f.runner, nil)
 }
 
@@ -413,7 +437,7 @@ type controlledFixture struct {
 // startControlledRunner는 root를 option으로 감시하는 runner를 시작한다. onChange는 hook이 실행을 받을 때 먼저 실행한다.
 func startControlledRunner(t *testing.T, root string, option domain.WatchTargetsOption, onChange func(domain.Event)) *controlledFixture {
 	t.Helper()
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger(), process.CommandMode{})
 	events, _ := controlledSource(r)
 	runs, result := startRunner(t, r, onChange)
 	return &controlledFixture{t: t, root: root, events: events, runs: runs, result: result}

@@ -24,12 +24,16 @@ type ExecCmdBuilder interface {
 	fmt.Stringer
 }
 
-// Command는 실행할 프로세스와, 실패 로그에 함께 보여 줄 템플릿 값을 채운 명령 문자열이다.
+// Command는 실행할 프로세스와, 실패 로그와 실행 전 출력에 보여 줄 명령 문자열이다.
 type Command struct {
 	*exec.Cmd
-	// Filled는 템플릿 변수 자리에 값을 그대로 넣은 명령이다. 실행하지 않고 실패 로그에만 쓴다.
+	// Filled는 템플릿 변수 자리에 값을 그대로 넣은 명령이다. 실행하지 않고 실패 로그와 실행 전 출력에만 쓴다.
 	// 템플릿 변수가 없는 명령이면 비어 있다.
 	Filled string
+	// written은 설정에 적힌 명령이다.
+	written string
+	// dir은 설정의 dir로 지정한 작업 폴더다. dir을 적지 않은 명령이면 비어 있다.
+	dir string
 }
 
 func (c Command) String() string {
@@ -37,6 +41,19 @@ func (c Command) String() string {
 		return c.Cmd.String()
 	}
 	return fmt.Sprintf("%s (with values: %s)", c.Cmd, c.Filled)
+}
+
+// announcement는 명령을 실행하기 직전에 hook 이름과 함께 출력하는 줄이다. 셸에 넘기는 명령은 템플릿 변수 자리가
+// 환경 변수 참조라서 읽기 어려우므로, 값을 채운 명령을 보여 준다.
+func (c Command) announcement(hook string) string {
+	line := c.Filled
+	if line == "" {
+		line = c.written
+	}
+	if c.dir != "" {
+		line += " (dir: " + c.dir + ")"
+	}
+	return hook + ": " + line + "\n"
 }
 
 type Manager struct {
@@ -65,10 +82,14 @@ func (c *Manager) Run(ctx *process.WatcherContext, runDir domain.Path, event *do
 		return err
 	}
 	out := hookOutput(ctx.Context())
+	mode := ctx.Mode()
 	for _, cmd := range cmds {
 		ctx.ApplyGracefulShutdown(cmd.Cmd)
+		if !mode.Silent {
+			_, _ = fmt.Fprint(out, cmd.announcement(ctx.Hook()))
+		}
 		err := checkWorkingDir(cmd.Dir)
-		if err == nil {
+		if err == nil && !mode.DryRun {
 			err = runPrintingOutput(ctx, cmd.Cmd, out)
 		}
 		if err != nil {

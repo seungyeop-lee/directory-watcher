@@ -15,7 +15,11 @@ type StructuredCmd struct {
 var _ ExecCmdBuilder = (*StructuredCmd)(nil)
 
 func (s StructuredCmd) Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]Command, error) {
-	return s.Cmd.Build(ctx, s.Dir, event)
+	cmds, err := s.Cmd.Build(ctx, s.Dir, event)
+	for i := range cmds {
+		cmds[i].dir = s.Dir.String()
+	}
+	return cmds, err
 }
 
 // String은 명령을 괄호로 묶어 dir이 어느 명령까지 적용되는지 보여 준다.

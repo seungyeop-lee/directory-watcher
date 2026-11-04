@@ -14,6 +14,7 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/config"
 	yamlConfig "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +42,9 @@ func Execute() {
 func init() {
 	rootCmd.Flags().StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
 	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
+	rootCmd.Flags().BoolP("silent", "s", false, "don't print hook commands before running them")
+	rootCmd.Flags().BoolP("dry-run", "n", false, "print hook commands without running them")
+	rootCmd.MarkFlagsMutuallyExclusive("silent", "dry-run")
 }
 
 var rootCmd = &cobra.Command{
@@ -69,7 +73,11 @@ var rootCmd = &cobra.Command{
 		}
 		debugLogCommandSet(logger, commandSet)
 
-		r := service.NewRunner(commandSet, logger)
+		mode, err := getCommandMode(cmd)
+		if err != nil {
+			return err
+		}
+		r := service.NewRunner(commandSet, logger, mode)
 
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -102,6 +110,18 @@ func getLogger(cmd *cobra.Command) (helper.Logger, error) {
 	logger := helper.NewBasicLogger(logLevel)
 
 	return logger, nil
+}
+
+func getCommandMode(cmd *cobra.Command) (process.CommandMode, error) {
+	silent, err := cmd.Flags().GetBool("silent")
+	if err != nil {
+		return process.CommandMode{}, err
+	}
+	dryRun, err := cmd.Flags().GetBool("dry-run")
+	if err != nil {
+		return process.CommandMode{}, err
+	}
+	return process.CommandMode{Silent: silent, DryRun: dryRun}, nil
 }
 
 func getConfigFile(cmd *cobra.Command) ([]byte, error) {

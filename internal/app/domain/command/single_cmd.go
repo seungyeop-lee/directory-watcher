@@ -37,7 +37,7 @@ func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.
 
 	process.SetupForOs(cmd)
 
-	return []Command{{Cmd: cmd, Filled: filled}}, nil
+	return []Command{{Cmd: cmd, Filled: filled, written: c.Cmd}}, nil
 }
 
 func (c SingleCmd) String() string {

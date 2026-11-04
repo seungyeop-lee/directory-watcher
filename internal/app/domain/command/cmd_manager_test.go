@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,8 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/command"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // 훅 출력 테스트가 출력을 내는 실제 프로세스로 쓰려고 이 테스트 바이너리를 다시 실행한다.
@@ -260,7 +264,7 @@ func TestErrorEnvironmentReachesCommandInEveryShell(t *testing.T) {
 	}
 	for _, shell := range testedShells(t) {
 		t.Run(shell.String(), func(t *testing.T) {
-			base, output := capturedBase(t)
+			base, output := capturedBase(t, process.CommandMode{Silent: true})
 			ctx := base.NewTimeoutRun(10*time.Second, []string{"DW_ERROR_KIND=event_loss"})
 			defer ctx.Cancel()
 			cmd := command.NewManager(command.SingleCmd{Shell: shell, Cmd: reference[shell.String()]})
@@ -304,5 +308,74 @@ func TestManagerStringShowsConfiguredCommands(t *testing.T) {
 				t.Fatalf("String() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRunPrintsEachCommandWithFilledValuesBeforeRunningIt(t *testing.T) {
+	base, output := capturedBase(t, process.CommandMode{})
+	event := &domain.Event{Path: domain.Path(filepath.Join("dir", "a.txt")), Operation: domain.Operation(fsnotify.Create)}
+	cmd := command.NewManager(command.MultiLineCmd{Cmds: []command.SingleCmd{
+		{Shell: command.DefaultShell(), Cmd: "echo {{.Name}}"},
+		{Shell: command.DefaultShell(), Cmd: "echo done"},
+	}})
+	if err := cmd.Run(base.NewRun().WithHook("onChange"), domain.Path(t.TempDir()), event); err != nil {
+		t.Fatal(err)
+	}
+	// cmd의 echo는 템플릿 값을 감싼 따옴표까지 출력하므로, 첫 명령의 출력은 값이 들어 있는지만 본다.
+	got := hookLines(output())
+	if len(got) != 4 || got[0] != "onChange: echo a.txt" || !strings.Contains(got[1], "a.txt") || got[2] != "onChange: echo done" || got[3] != "done" {
+		t.Fatalf("output = %q, want each command line before that command's output", got)
+	}
+}
+
+func TestRunPrintsWorkingDirectoryOfCommandWithDir(t *testing.T) {
+	dir := t.TempDir()
+	base, output := capturedBase(t, process.CommandMode{})
+	cmd := command.NewManager(command.StructuredCmd{Cmd: command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo hi"}, Dir: domain.Path(dir)})
+	if err := cmd.Run(base.NewRun().WithHook("onStartWatch"), "", nil); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"onStartWatch: echo hi (dir: " + dir + ")", "hi"}
+	if got := hookLines(output()); !equalLines(got, want) {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestSilentRunPrintsOnlyHookOutput(t *testing.T) {
+	base, output := capturedBase(t, process.CommandMode{Silent: true})
+	cmd := command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo hi"})
+	if err := cmd.Run(base.NewRun().WithHook("onStartWatch"), domain.Path(t.TempDir()), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := hookLines(output()), []string{"hi"}; !equalLines(got, want) {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestDryRunPrintsCommandWithoutRunningIt(t *testing.T) {
+	dir := t.TempDir()
+	base, output := capturedBase(t, process.CommandMode{DryRun: true})
+	cmd := command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo made> made.txt"})
+	if err := cmd.Run(base.NewRun().WithHook("onStartWatch"), domain.Path(dir), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := hookLines(output()), []string{"onStartWatch: echo made> made.txt"}; !equalLines(got, want) {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "made.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dry run ran the command: %v", err)
+	}
+}
+
+func TestDryRunReportsMissingWorkingDirectory(t *testing.T) {
+	missingDir := filepath.Join(t.TempDir(), "missing-dir")
+	base, output := capturedBase(t, process.CommandMode{DryRun: true})
+	cmd := command.NewManager(command.StructuredCmd{Cmd: command.SingleCmd{Shell: command.DefaultShell(), Cmd: "echo hi"}, Dir: domain.Path(missingDir)})
+	err := cmd.Run(base.NewRun().WithHook("onStartWatch"), "", nil)
+	if err == nil || !strings.Contains(err.Error(), "working directory "+missingDir) {
+		t.Fatalf("error does not name the missing working directory %q: %v", missingDir, err)
+	}
+	if got, want := hookLines(output()), []string{"onStartWatch: echo hi (dir: " + missingDir + ")"}; !equalLines(got, want) {
+		t.Fatalf("output = %q, want %q", got, want)
 	}
 }

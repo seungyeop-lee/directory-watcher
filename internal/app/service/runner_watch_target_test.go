@@ -24,7 +24,7 @@ import (
 
 func deletionRunner(t *testing.T, root string, option domain.WatchTargetsOption) *watchTargetRunner {
 	t.Helper()
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger(), process.CommandMode{})
 	t.Cleanup(func() { close(r.stop); r.tree.close() })
 	if err := r.tree.add(); err != nil {
 		t.Fatal(err)
@@ -464,7 +464,7 @@ func TestBatchLargerThanQueueOverflows(t *testing.T) {
 	release := make(chan struct{})
 	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}})
 	option.Queue.Size = queueSize
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger(), process.CommandMode{})
 	f.changed, f.result = startRunner(t, r, func(domain.Event) { <-release })
 	t.Cleanup(func() { close(release) })
 	for i := 0; i < files; i++ {
@@ -664,7 +664,7 @@ func TestDefaultExcludeChecksCreatedFileName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.watchPath(t)
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
 			changed, _ := startRunner(t, r, nil)
 
 			// 제외된 이벤트가 오지 않았음을 시간 초과만으로 판단하지 않도록,
@@ -718,7 +718,7 @@ func TestDefaultExcludeChecksModifiedAndRemovedName(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(path, ".cache"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()})}, newMockLogger(), process.CommandMode{})
 			changed, _ := startRunner(t, r, nil)
 
 			// 제외된 이벤트가 오지 않았음을 시간 초과만으로 판단하지 않도록, 제외 대상을 먼저 바꾸고
@@ -749,7 +749,7 @@ func TestEventOutsideWatchTargetIsDropped(t *testing.T) {
 	if err := os.Mkdir(outsideDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}})}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true, Update: true, Delete: true}})}, newMockLogger(), process.CommandMode{})
 	events, _ := controlledSource(r)
 	changed, result := startRunner(t, r, nil)
 
@@ -798,7 +798,7 @@ func TestExcludedFolderStaysOutOfWatchList(t *testing.T) {
 			if atStart {
 				makeDirs()
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: exclude, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: exclude, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
 			changed, result := startRunner(t, r, nil)
 			if !atStart {
 				makeDirs()
@@ -849,7 +849,7 @@ func TestExcludePatternDropsFileEvents(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			target := t.TempDir()
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchAllEvent()})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchAllEvent()})}, newMockLogger(), process.CommandMode{})
 			events, _ := controlledSource(r)
 			changed, result := startRunner(t, r, nil)
 
@@ -898,7 +898,7 @@ func TestHookOutputInExcludedPathDoesNotRerunHook(t *testing.T) {
 	var once sync.Once
 	var mu sync.Mutex
 	var runs []string // hook이 시작하고 끝난 순서
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: domain.ExcludePatterns{"out.txt"}, FileEvent: domain.WatchAllEvent()})}, logger)
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: domain.ExcludePatterns{"out.txt"}, FileEvent: domain.WatchAllEvent()})}, logger, process.CommandMode{})
 	changed, result := startRunner(t, r, func(event domain.Event) {
 		mu.Lock()
 		runs = append(runs, "start "+event.Path.Name())
@@ -1221,7 +1221,7 @@ func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
 	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchEvent{Create: true}, DirEvent: domain.WatchEvent{Create: true}})
 	// 폴더 이벤트를 모으지 않아, 보류를 푼 d의 C가 묶음을 기다리지 않고 곧바로 hook에 간다.
 	option.DirBatch = domain.DirBatchOption{}
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: option}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: option}, newMockLogger(), process.CommandMode{})
 	if err := r.tree.watcher.Add(outside); err != nil {
 		t.Fatal(err)
 	}
@@ -1330,7 +1330,7 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 					build(target)
 				}
 
-				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}})}, newMockLogger())
+				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(target), Option: watchTargetOption(domain.WatchOption{SubDir: true, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}})}, newMockLogger(), process.CommandMode{})
 				changed, result := startRunner(t, r, nil)
 
 				seen := map[string]bool{}
@@ -1440,7 +1440,7 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 			}
 			makeDirs(tc.startDirs)
 
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(link), Option: watchTargetOption(domain.WatchOption{SubDir: tc.subDir, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(link), Option: watchTargetOption(domain.WatchOption{SubDir: tc.subDir, Exclude: tc.exclude, FileEvent: domain.WatchEvent{Create: true, Update: true}})}, newMockLogger(), process.CommandMode{})
 			changed, result := startRunner(t, r, nil)
 
 			seen := map[string]bool{}
@@ -1487,7 +1487,7 @@ func TestNativeWatcherStopReleasesDirectory(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(path, "child"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: recursive, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: recursive, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
 			assertWatchDirectoriesRemovable(t, r)
 			changed, result := startRunner(t, r, nil)
 			// finish hook은 Stop을 부른 고루틴이 실행하므로, 감시를 시작한 뒤에 바꿔도 Run과 겹치지 않는다.
@@ -1520,7 +1520,7 @@ func TestSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 			if err := os.Mkdir(child, 0700); err != nil {
 				t.Fatal(err)
 			}
-			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: subDir, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(path), Option: watchTargetOption(domain.WatchOption{SubDir: subDir, FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
 			assertWatchDirectoriesRemovable(t, r)
 			changed, _ := startRunner(t, r, nil)
 
@@ -1548,7 +1548,7 @@ func TestSubDirControlsExistingSubdirectoryEvents(t *testing.T) {
 }
 
 func TestStopDiscardsPendingEvents(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -1583,7 +1583,7 @@ func TestStopDiscardsPendingEvents(t *testing.T) {
 }
 
 func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r)
 	events, watchErrors := controlledSource(r)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -1609,7 +1609,7 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 	const boundedQueueSize = 16
 	option := watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})
 	option.Queue.Size = boundedQueueSize
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: option}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: option}, newMockLogger(), process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)
@@ -1715,7 +1715,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 				r := NewWatchTargetRunner(
 					domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnBeforeChange: empty, OnAfterChange: empty}},
 					domain.WatchTargetsCommandSet{Path: domain.Path(root), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: command, OnFinishWatch: empty}, Option: option},
-					newMockLogger())
+					newMockLogger(), process.CommandMode{})
 				events, _ := controlledSource(r)
 				go r.Run()
 				// 파일을 모두 만든 뒤 이벤트를 몰아 넣어, last의 이벤트가 한 번 기다리는 동안 모두 모이게 한다.
@@ -1794,7 +1794,7 @@ func TestSlowQueueWarningKeepsOnlyLatestAndDoesNotBlockWatching(t *testing.T) {
 	})}}
 	option := hookBatchOption(0, 1000, domain.DeliverEach)
 	option.Queue.Size = 10
-	r := NewWatchTargetRunner(global, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger())
+	r := NewWatchTargetRunner(global, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: option}, newMockLogger(), process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, releaseChange, changed := make(chan struct{}), make(chan struct{}), make(chan string, 16)

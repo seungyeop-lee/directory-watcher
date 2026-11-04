@@ -28,10 +28,14 @@ Usage:
 
 Flags:
   -c, --config-path string   set config path (default "config.yml")
+  -n, --dry-run              print hook commands without running them
   -h, --help                 help for directory-watcher
   -l, --log-level string     set log level (default "ERROR")
+  -s, --silent               don't print hook commands before running them
   -v, --version              version for directory-watcher
 ```
+
+- The watcher prints each hook command before running it. For `-s` and `-n`, see [Printing hook commands](running.md#printing-hook-commands).
 
 ## Running with Docker
 

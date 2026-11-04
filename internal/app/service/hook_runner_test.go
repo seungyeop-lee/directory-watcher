@@ -35,7 +35,7 @@ func TestReplacementWaitsForCanceledGeneration(t *testing.T) {
 		close(completed)
 		return original.Err()
 	})
-	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}, "test", ".", hookInfo{emptyCommand(), command, emptyCommand(), emptyCommand(), emptyCommand()}, newMockLogger())
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}, "test", ".", hookInfo{emptyCommand(), command, emptyCommand(), emptyCommand(), emptyCommand()}, newMockLogger(), process.CommandMode{})
 	// 첫 명령이 onBeforeChange를 차지하고 있으므로, 대체 명령은 그 실행에 합류해야 한다.
 	hooks.runChangeHook(domain.Event{})
 	<-started
@@ -71,7 +71,7 @@ func TestShutdownDuringReplacementPreventsNewGeneration(t *testing.T) {
 		return ctx.Context().Err()
 	})
 	empty := emptyCommand()
-	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}, "test", ".", hookInfo{OnStartWatch: empty, OnBeforeChange: command, OnChange: empty, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger())
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}, "test", ".", hookInfo{OnStartWatch: empty, OnBeforeChange: command, OnChange: empty, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger(), process.CommandMode{})
 	hooks.runChangeHook(domain.Event{})
 	<-started
 	replaced := make(chan struct{})
@@ -199,7 +199,7 @@ func (p *runProbe) expectNothing(t *testing.T) {
 // probeHooks는 onChange가 probe이고 다른 명령은 아무것도 하지 않는 hook을 policy로 만든다.
 func probeHooks(t *testing.T, policy domain.RunPolicy, p *runProbe) hookFunc {
 	empty := emptyCommand()
-	hooks := newHookFunc(policy, "test", ".", hookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: p, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger())
+	hooks := newHookFunc(policy, "test", ".", hookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: p, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger(), process.CommandMode{})
 	t.Cleanup(hooks.runFinishHook)
 	return hooks
 }
@@ -308,7 +308,7 @@ func TestInterruptCancelsRunsByPolicy(t *testing.T) {
 // 실행이 동시에 돌아도 전역 onBeforeChange와 onAfterChange는 실행마다 그 실행의 onChange 앞뒤로 돈다.
 func TestGlobalChangeHooksRunForEachRun(t *testing.T) {
 	p := newRunProbe()
-	hooks := newHookFunc(domain.RunPolicy{Concurrency: 2}, "test", ".", hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: p.record("before"), OnChange: p, OnAfterChange: p.record("after"), OnFinishWatch: emptyCommand()}, newMockLogger())
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 2}, "test", ".", hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: p.record("before"), OnChange: p, OnAfterChange: p.record("after"), OnFinishWatch: emptyCommand()}, newMockLogger(), process.CommandMode{})
 	hooks.runChangeHook(pathEvent("a"))
 	hooks.runChangeHook(pathEvent("b"))
 	p.expectAnyOrder(t, "before a", "start a", "before b", "start b")
@@ -322,7 +322,7 @@ func TestGlobalChangeHooksRunForEachRun(t *testing.T) {
 func TestFinishCancelsAllRunsBeforeFinishHook(t *testing.T) {
 	p := newRunProbe()
 	empty := emptyCommand()
-	hooks := newHookFunc(domain.RunPolicy{Concurrency: 2}, "test", ".", hookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: p, OnAfterChange: empty, OnFinishWatch: p.record("finish")}, newMockLogger())
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 2}, "test", ".", hookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: p, OnAfterChange: empty, OnFinishWatch: p.record("finish")}, newMockLogger(), process.CommandMode{})
 	hooks.runChangeHook(pathEvent("a"))
 	hooks.runChangeHook(pathEvent("b"))
 	p.expectAnyOrder(t, "start a", "start b")
@@ -343,7 +343,7 @@ func TestRunsWaitForStartHookUnlessOldest(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := newRunProbe()
 			empty := emptyCommand()
-			hooks := newHookFunc(domain.RunPolicy{Concurrency: 2, Interrupt: interrupt}, "test", ".", hookInfo{OnStartWatch: p, OnBeforeChange: empty, OnChange: p, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger())
+			hooks := newHookFunc(domain.RunPolicy{Concurrency: 2, Interrupt: interrupt}, "test", ".", hookInfo{OnStartWatch: p, OnBeforeChange: empty, OnChange: p, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger(), process.CommandMode{})
 			t.Cleanup(hooks.runFinishHook)
 			hooks.runStartHook()
 			p.expect(t, "start watch")
@@ -390,7 +390,7 @@ func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 			var afterRuns atomic.Int32
 			after := runnerCommand(func(*process.WatcherContext, *domain.Event) error { afterRuns.Add(1); return nil })
 			info := hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: emptyCommand(), OnChange: tc.failing, OnAfterChange: after, OnFinishWatch: emptyCommand()}
-			hooks := newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", ".", info, logger)
+			hooks := newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", ".", info, logger, process.CommandMode{})
 			hooks.runChangeHook(domain.Event{})
 			// 자리가 하나이면 다음 실행은 앞 실행이 끝난 뒤 시작하므로, 두 번째 runChangeHook이 돌아오면 첫 실행은
 			// 끝났다. runFinishHook은 돌고 있는 실행을 취소하므로, 첫 실행이 끝나기 전에 부르면 실패가 기록되지 않는다.
@@ -411,7 +411,7 @@ func TestTargetFinishHookFailureIsLogged(t *testing.T) {
 	exitCommand := testBinaryCommand("-test.run=^TestHookExitProcess$")
 	logger := &notificationLog{}
 	info := hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: emptyCommand(), OnChange: emptyCommand(), OnAfterChange: emptyCommand(), OnFinishWatch: command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: exitCommand})}
-	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", ".", info, logger)
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", ".", info, logger, process.CommandMode{})
 	hooks.runFinishHook()
 	if got := logger.String(); !strings.Contains(got, "[target-alias]") || !strings.Contains(got, exitCommand) {
 		t.Fatalf("finish hook failure log lacks alias or command: %q", got)
@@ -432,7 +432,7 @@ func TestInterruptedRunIsNotLoggedAsFailure(t *testing.T) {
 		return errors.New("signal: terminated")
 	})
 	info := hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: emptyCommand(), OnChange: interrupted, OnAfterChange: emptyCommand(), OnFinishWatch: emptyCommand()}
-	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}, "[target-alias]", ".", info, logger)
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1, Interrupt: domain.InterruptOldest}, "[target-alias]", ".", info, logger, process.CommandMode{})
 	hooks.runChangeHook(domain.Event{})
 	<-started
 	hooks.runChangeHook(domain.Event{})
@@ -461,10 +461,32 @@ func TestTargetHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			logger := &notificationLog{}
 			info := hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: emptyCommand(), OnChange: emptyCommand(), OnAfterChange: emptyCommand(), OnFinishWatch: tc.finish}
-			newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", tc.targetPath, info, logger).runFinishHook()
+			newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", tc.targetPath, info, logger, process.CommandMode{}).runFinishHook()
 			if got := logger.String(); !strings.Contains(got, "[target-alias]") || !strings.Contains(got, "working directory "+missingDir) {
 				t.Fatalf("failure log lacks alias or working directory: %q", got)
 			}
 		})
+	}
+}
+
+func TestTargetHooksRunWithTheirHookNamesAndCommandMode(t *testing.T) {
+	calls := &hookCalls{}
+	info := hookInfo{OnStartWatch: calls.command("start"), OnBeforeChange: calls.command("before"), OnChange: calls.command("change"), OnAfterChange: calls.command("after"), OnFinishWatch: calls.command("finish")}
+	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1}, "test", ".", info, newMockLogger(), process.CommandMode{DryRun: true})
+	hooks.runStartHook()
+	hooks.runChangeHook(domain.Event{})
+	// 자리가 하나이면 두 번째 runChangeHook은 첫 실행이 끝난 뒤에 돌아온다. 두 번째 실행은 runFinishHook이 취소할 수 있다.
+	hooks.runChangeHook(domain.Event{})
+	hooks.runFinishHook()
+	got := calls.list()
+	want := []string{
+		"start onStartWatch {Silent:false DryRun:true}",
+		"before onBeforeChange {Silent:false DryRun:true}",
+		"change onChange {Silent:false DryRun:true}",
+		"after onAfterChange {Silent:false DryRun:true}",
+	}
+	finish := "finish onFinishWatch {Silent:false DryRun:true}"
+	if len(got) < len(want)+1 || !slices.Equal(got[:len(want)], want) || got[len(got)-1] != finish {
+		t.Fatalf("hook calls = %q, want %q first and %q last", got, want, finish)
 	}
 }

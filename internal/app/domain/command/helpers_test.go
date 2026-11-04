@@ -32,14 +32,16 @@ func testedShells(t *testing.T) []command.Shell {
 }
 
 // capturedContext는 훅 출력이 가는 표준 출력을 파일로 바꾼 뒤 만든 실행 context와, 그 파일의 내용을 읽는 함수를 돌려준다.
+// hook이 낸 출력만 보도록, 명령을 실행하기 전에 출력하지 않는 context를 만든다.
 func capturedContext(t *testing.T) (*process.WatcherContext, func() string) {
 	t.Helper()
-	base, output := capturedBase(t)
+	base, output := capturedBase(t, process.CommandMode{Silent: true})
 	return base.NewRun(), output
 }
 
-// capturedBase는 capturedContext와 같지만, NewRun이나 NewTimeoutRun으로 실행 context를 직접 만들 수 있게 바탕 context를 돌려준다.
-func capturedBase(t *testing.T) (*process.WatcherContext, func() string) {
+// capturedBase는 capturedContext와 같지만, 명령 실행 방식 mode를 정하고 NewRun이나 NewTimeoutRun으로 실행 context를
+// 직접 만들 수 있게 바탕 context를 돌려준다.
+func capturedBase(t *testing.T, mode process.CommandMode) (*process.WatcherContext, func() string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stdout")
 	file, err := os.Create(path)
@@ -48,7 +50,7 @@ func capturedBase(t *testing.T) (*process.WatcherContext, func() string) {
 	}
 	original := os.Stdout
 	os.Stdout = file
-	base := process.NewWatcherContext("[test]")
+	base := process.NewWatcherContext("[test]", mode)
 	os.Stdout = original
 	t.Cleanup(func() {
 		base.Cancel()

@@ -140,7 +140,7 @@ func assertEndedBySignal(t *testing.T, cmd *exec.Cmd, ran time.Duration, codes .
 
 // 시작 직후에 취소된 hook은 시작 후 minRunBeforeBreak가 지난 뒤에 CTRL+BREAK를 받아야 한다.
 func TestRunCommandDelaysBreakRightAfterStart(t *testing.T) {
-	ctx := NewWatcherContext("").NewRun()
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
 	cmd, sentAt := breakSignalHook(t, ctx)
 	// os/exec는 프로세스를 만든 뒤에 Stdin을 읽기 시작하므로, 첫 Read에서 취소하면 시작 직후에 취소된다.
 	cmd.Stdin = readFunc(func([]byte) (int, error) {
@@ -159,7 +159,7 @@ func TestRunCommandDelaysBreakRightAfterStart(t *testing.T) {
 
 // 최소 시간이 지난 뒤에 취소된 hook은 지금처럼 바로 CTRL+BREAK를 받아야 한다.
 func TestRunCommandSendsBreakAtOnceAfterMinimumRunTime(t *testing.T) {
-	ctx := NewWatcherContext("").NewRun()
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
 	cmd, sentAt := breakSignalHook(t, ctx)
 	out, in, err := os.Pipe()
 	if err != nil {
@@ -191,7 +191,7 @@ func TestRunCommandSendsBreakAtOnceAfterMinimumRunTime(t *testing.T) {
 func TestRunCommandSendsBreakAgainToProgramStartedAfterBreak(t *testing.T) {
 	record := filepath.Join(t.TempDir(), "record")
 	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
-	ctx := NewWatcherContext("").NewRun()
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
 	cmd, sentAt := breakSignalShellHook(t, ctx, 2)
 	done := runUntilReady(t, ctx, cmd)
 	canceled := time.Now()
@@ -217,7 +217,7 @@ func TestRunCommandDelaysBreakRightAfterDescendantStart(t *testing.T) {
 	record := filepath.Join(t.TempDir(), "record")
 	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
 	t.Setenv("DW_BREAK_SIGNAL_CHILD", "1")
-	ctx := NewWatcherContext("").NewRun()
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
 	cmd, sentAt := breakSignalHook(t, ctx)
 	done := runUntilReady(t, ctx, cmd)
 	canceled := time.Now()
@@ -245,7 +245,7 @@ func TestRunCommandDelaysBreakForDescendantStartedWhileWaiting(t *testing.T) {
 	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
 	t.Setenv("DW_BREAK_SIGNAL_CHILD", "1")
 	t.Setenv("DW_BREAK_SIGNAL_LATE_CHILD", "1")
-	ctx := NewWatcherContext("").NewRun()
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
 	cmd, sentAt := breakSignalHook(t, ctx)
 	stdin, startChild, err := os.Pipe()
 	if err != nil {
@@ -295,7 +295,7 @@ func TestRunCommandEndsProcessTreeAfterGrace(t *testing.T) {
 	record := filepath.Join(t.TempDir(), "record")
 	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
 	t.Setenv("DW_BREAK_SIGNAL_IGNORE", "1")
-	ctx := NewWatcherContext("").NewRun()
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
 	cmd, sentAt := breakSignalShellHook(t, ctx, 1)
 	done := runUntilReady(t, ctx, cmd)
 	// 끝난 프로그램의 pid는 바로 다른 프로세스가 쓸 수 있으므로, 실행 중에 연 handle로 종료를 확인한다.

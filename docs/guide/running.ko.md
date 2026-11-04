@@ -2,6 +2,46 @@
 
 🇺🇸 [English](running.md) | 🇰🇷 한국어
 
+## hook 명령 출력
+
+- watcher는 hook 명령을 하나씩 실행하기 직전에 hook 이름과 명령을 한 줄로 출력하며, 이 줄 앞에는 hook 출력과 같은 머리말이 붙습니다.
+  - 변경이 생겼을 때 실행하는 hook에서는 템플릿 변수 자리에 값을 채운 명령을 보여 줍니다.
+  - `dir`을 적은 명령이면 줄 끝에 `(dir: <dir>)`을 붙입니다.
+  - 이 줄에는 `[INFO]` 같은 로그 머리말이 붙지 않고, `--log-level`로 바뀌지도 않습니다.
+
+아래 설정에서 `server/main.go`를 저장하면 다음 줄이 출력됩니다.
+
+```yaml
+watchTargets:
+  - path: server
+    lifeCycle:
+      onChange:
+        - echo changed {{.Name}}
+        - dir: web
+          cmd: echo building
+```
+
+```text
+server      | onChange: echo changed main.go
+server      | changed main.go
+server      | onChange: echo building (dir: web)
+server      | building
+```
+
+- `-s`, `--silent`는 명령 줄만 출력하지 않습니다. hook 명령이 내는 출력은 그대로 나옵니다.
+- `-n`, `--dry-run`은 명령 줄을 출력하고 명령은 실행하지 않습니다.
+  - watcher는 감시 대상을 실제로 감시하고 `onError`와 `onQueueWarning`을 포함한 모든 hook을 실행하되, 명령만 실행하지 않고 넘어갑니다.
+  - 명령을 넘어가기 전에 명령을 만들고 작업 폴더를 확인하므로, 작업 폴더가 없으면 실제로 실행할 때처럼 오류를 보고합니다.
+- 실행하지 않은 명령은 바로 끝나므로, dry run에서는 명령이 시간에 따라 어떻게 동작하는지 볼 수 없습니다.
+  - 실행끼리 거의 겹치지 않으므로 `run.concurrency`와 `run.interrupt`의 효과가 거의 드러나지 않고, 대기열이 거의 차지 않으므로 대기열 경고와 대기열이 가득 찬 오류도 거의 생기지 않습니다.
+  - 실행하지 않은 명령은 실패하지 않으므로, 실제로는 실패했을 명령 뒤의 명령도 건너뛰지 않고 출력합니다.
+
+`-s`와 `-n`은 함께 쓸 수 없습니다. 함께 주면 watcher는 hook을 하나도 실행하지 않고 다음 오류와 사용법을 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: if any flags in the group [silent dry-run] are set none of the others can be; [dry-run silent] were all set
+```
+
 ## hookBatch로 기다리고 합치기
 
 - watcher는 감시 대상의 이벤트를 모으다가, `hookBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000, `hookBatch.waitMillisecond`가 더 크면 그 값)가 지나면 모은 이벤트로 hook 실행을 만듭니다.

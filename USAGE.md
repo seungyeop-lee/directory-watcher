@@ -97,5 +97,5 @@ watchTargets:
 - [Installing and running](docs/guide/installation.md) covers installing with Homebrew, the command-line options, running with Docker, and running on Windows.
 - [Configuration file](docs/guide/configuration.md) covers the full `config.yml` format, the shell that runs hook commands, where commands run, and the variables that commands can use.
 - [Events and watched paths](docs/guide/events.md) covers the events of renamed and moved files and of folders, default exclusion, excluding paths with `exclude`, and overlapping target paths.
-- [Running hooks](docs/guide/running.md) covers waiting and merging events with `hookBatch`, the queue size and its warnings, running hooks with `run`, event-loss notification, and overload and shutdown.
+- [Running hooks](docs/guide/running.md) covers printing hook commands and dry runs, waiting and merging events with `hookBatch`, the queue size and its warnings, running hooks with `run`, event-loss notification, and overload and shutdown.
 - [How it works](docs/guide/how-it-works.md) draws how the watcher handles changes and how it stops.

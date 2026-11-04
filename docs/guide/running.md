@@ -2,6 +2,46 @@
 
 🇺🇸 English | 🇰🇷 [한국어](running.ko.md)
 
+## Printing hook commands
+
+- Before it runs each hook command, the watcher prints a line with the hook name and the command, with the same prefix as the hook's output.
+  - In hooks that run on a change, the line shows the command with its template variables filled in.
+  - For a command with a `dir`, the line ends with `(dir: <dir>)`.
+  - The line has no log prefix such as `[INFO]`, and `--log-level` does not change it.
+
+With the configuration below, saving `server/main.go` prints the following lines:
+
+```yaml
+watchTargets:
+  - path: server
+    lifeCycle:
+      onChange:
+        - echo changed {{.Name}}
+        - dir: web
+          cmd: echo building
+```
+
+```text
+server      | onChange: echo changed main.go
+server      | changed main.go
+server      | onChange: echo building (dir: web)
+server      | building
+```
+
+- `-s`, `--silent` turns off only the command lines. The output of the hook commands still appears.
+- `-n`, `--dry-run` prints the command lines without running the commands.
+  - The watcher still watches the targets and runs every hook, including `onError` and `onQueueWarning`, but skips the commands themselves.
+  - Before it skips a command, the watcher builds it and checks its working directory, so a missing working directory is reported as in a real run.
+- Because a skipped command ends at once, a dry run does not show how commands behave over time:
+  - Runs rarely overlap, so `run.concurrency` and `run.interrupt` have almost no visible effect, and the queue rarely fills, so queue warnings and the full-queue error rarely occur.
+  - A skipped command never fails, so the commands after one that would fail are printed instead of being skipped.
+
+`-s` and `-n` cannot be used together. The watcher then runs no hook, prints the error below with the usage, and exits with code 1:
+
+```text
+Error: if any flags in the group [silent dry-run] are set none of the others can be; [dry-run silent] were all set
+```
+
 ## Waiting and merging with hookBatch
 
 - The watcher collects the events of a target and turns them into runs of the hook once no event has arrived for `hookBatch.waitMillisecond` (default 100), or `hookBatch.maxWaitMillisecond` (default 1000, or `hookBatch.waitMillisecond` if larger) after the first event.

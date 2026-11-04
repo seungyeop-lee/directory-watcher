@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,7 +44,7 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 		return nil
 	})
 	logger := &notificationLog{}
-	r := NewRunner(set, logger)
+	r := NewRunner(set, logger, process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	events := []chan fsnotify.Event{make(chan fsnotify.Event, 8), make(chan fsnotify.Event, 8)}
 	sources := []chan error{make(chan error, 1), make(chan error, 1)}
@@ -130,7 +131,7 @@ func TestFatalLossNotificationReceivesOriginalContext(t *testing.T) {
 	t.Setenv("DW_ERROR_KIND", "stale-parent-value")
 	set := testCommandSet(t.TempDir())
 	set.Global.LifeCycle.OnError = command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^TestNotificationRecorderProcess$"`, os.Args[0])})
-	r := NewRunner(set, &notificationLog{})
+	r := NewRunner(set, &notificationLog{}, process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, source := controlledSource(r.watchTargets[0])
 	go r.Run()
@@ -166,7 +167,7 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 					return errors.New("notification failed deliberately")
 				})
 			}
-			r := NewRunner(set, logger)
+			r := NewRunner(set, logger, process.CommandMode{})
 			assertWatchDirectoriesRemovable(t, r.watchTargets...)
 			_, source := controlledSource(r.watchTargets[0])
 			go r.Run()
@@ -200,7 +201,7 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 
 func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 	helper.GlobalLogger = newMockLogger()
-	r := NewRunner(testCommandSet(t.TempDir(), t.TempDir()), newMockLogger())
+	r := NewRunner(testCommandSet(t.TempDir(), t.TempDir()), newMockLogger(), process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, firstErrors := controlledSource(r.watchTargets[0])
 	secondErrors := make(chan error, 1)
@@ -230,7 +231,7 @@ func TestTargetThatFailedToStartSkipsFinishHook(t *testing.T) {
 	set.WatchTargets[0].LifeCycle.OnFinishWatch = counter(&missingFinished)
 	set.WatchTargets[1].LifeCycle.OnFinishWatch = counter(&startedFinished)
 	set.Global.LifeCycle.OnFinishWatch = counter(&globalFinished)
-	r := NewRunner(set, newMockLogger())
+	r := NewRunner(set, newMockLogger(), process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r.watchTargets[1])
 	go r.Run()
 	if err := <-r.Errors(); err == nil {
@@ -268,7 +269,7 @@ func TestQueueSizeOverflowStopsWatchingAndNotifies(t *testing.T) {
 				notified <- errors.New(hookEnvironment(ctx)["DW_ERROR_CAUSE"])
 				return nil
 			})
-			r := NewRunner(set, &notificationLog{})
+			r := NewRunner(set, &notificationLog{}, process.CommandMode{})
 			assertWatchDirectoriesRemovable(t, r.watchTargets...)
 			defer close(release)
 			events, _ := controlledSource(r.watchTargets[0])
@@ -299,5 +300,30 @@ func TestQueueSizeOverflowStopsWatchingAndNotifies(t *testing.T) {
 				t.Fatalf("DW_ERROR_CAUSE = %q", cause)
 			}
 		})
+	}
+}
+
+func TestRunnerPassesCommandModeToGlobalAndTargetHooks(t *testing.T) {
+	calls := &hookCalls{}
+	set := testCommandSet(t.TempDir())
+	set.Global.LifeCycle.OnStartWatch = calls.command("global")
+	targetStarted := make(chan struct{})
+	record := calls.command("target")
+	set.WatchTargets[0].LifeCycle.OnStartWatch = runnerCommand(func(ctx *process.WatcherContext, event *domain.Event) error {
+		defer close(targetStarted)
+		return record.Run(ctx, "", event)
+	})
+	r := NewRunner(set, newMockLogger(), process.CommandMode{DryRun: true})
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
+	go r.Run()
+	select {
+	case <-targetStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("target onStartWatch did not run")
+	}
+	r.Stop()
+	want := []string{"global onStartWatch {Silent:false DryRun:true}", "target onStartWatch {Silent:false DryRun:true}"}
+	if got := calls.list(); !slices.Equal(got, want) {
+		t.Fatalf("hook calls = %q, want %q", got, want)
 	}
 }

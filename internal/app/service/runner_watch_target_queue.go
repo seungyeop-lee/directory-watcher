@@ -186,6 +186,7 @@ type queueWarner struct {
 	hook   domain.Cmd
 	target domain.Path
 	logger helper.Logger
+	mode   process.CommandMode
 
 	mu      sync.Mutex
 	running bool
@@ -227,7 +228,7 @@ func (qw *queueWarner) run(w queueWarning) {
 
 // runHook은 onError처럼 정해진 시간 안에 hook을 실행하고, 실패하면 기록한다.
 func (qw *queueWarner) runHook(w queueWarning) {
-	base := process.NewWatcherContext("[QUEUE WARNING HOOK]")
+	base := process.NewWatcherContext("[QUEUE WARNING HOOK]", qw.mode)
 	defer base.Cancel()
 	var env []string
 	for _, v := range queueWarningVariables {
@@ -235,7 +236,7 @@ func (qw *queueWarner) runHook(w queueWarning) {
 	}
 	ctx := base.NewTimeoutRun(notificationTimeout, env)
 	defer ctx.Cancel()
-	if err := qw.hook.Run(ctx, "", nil); err != nil {
+	if err := qw.hook.Run(ctx.WithHook("onQueueWarning"), "", nil); err != nil {
 		if ctx.Context().Err() != nil {
 			qw.logger.Error(fmt.Sprintf("onQueueWarning notification failed: %v: %v", ctx.Context().Err(), err))
 		} else {
