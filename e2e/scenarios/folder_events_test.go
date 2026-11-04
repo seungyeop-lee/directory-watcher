@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
@@ -74,7 +75,16 @@ func TestFolderEvents(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, []string{"D,true,src/big"}, ""},
-		{"move a folder out of the target", func() { move(watch("src/x"), filepath.Join(outside, "x")) }, []string{"D,true,src/x"}, ""},
+		{"move a folder out of the target", func() {
+			move(watch("src/x"), filepath.Join(outside, "x"))
+			if runtime.GOOS == "windows" {
+				// 감시 대상 밖으로 옮긴 뒤 감시를 다시 만드는 순간의 중복은 사용 안내가 허용한다.
+				// 다음 동작과 표지는 재생성 로그를 받은 뒤 만들어 모든 단계의 기록을 그대로 비교한다.
+				s.Await("watcher rebuilt after moving a folder out", 10*time.Second, func() bool {
+					return strings.Contains(s.Log(), "rebuilt watcher to release watches of folders moved out")
+				})
+			}
+		}, []string{"D,true,src/x"}, ""},
 		{"create a file in a folder moved out", func() { createEmpty(t, filepath.Join(outside, "x", "after-move-out.txt")) }, nil, ""},
 		{"rename a folder", func() { move(watch("src/n"), watch("src/m")) }, []string{"D,true,src/n", "C,true,src/m"}, ""},
 		createLater("create a file in a renamed folder", "src/m/after-rename.txt"),
@@ -97,11 +107,6 @@ func TestFolderEvents(t *testing.T) {
 			dirs = append(dirs, step.folder)
 		}
 		got := changes.next(step.name, nil, dirs...)
-		// Windows는 폴더를 옮긴 뒤 감시를 다시 만드는 순간에 감시 대상 안에서 생긴 변경을 hook에 두 번 보낼 수 있다.
-		// 사용 안내가 허용하는 동작이므로 폴더 안에 만든 파일의 연이은 같은 기록은 하나로 본다.
-		if step.folder != "" && runtime.GOOS == "windows" {
-			got = slices.Compact(got)
-		}
 		if !reflect.DeepEqual(got, step.want) {
 			t.Errorf("%s: hook received %q, want %q", step.name, got, step.want)
 		}

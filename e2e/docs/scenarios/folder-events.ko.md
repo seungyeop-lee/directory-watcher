@@ -34,7 +34,9 @@
 | `src/g.txt` 지우기 | `D,false,src/g.txt` |
 
 - Windows는 감시 중인 하위 폴더가 있는 폴더의 이름 바꾸기와 옮기기를 거부하므로, 옮기거나 이름을 바꾸는 폴더에는 파일만 둡니다.
-- 사용 안내에 적힌 대로 Windows에서는 폴더를 옮긴 뒤 watcher가 감시를 다시 만드는 순간에 감시 대상 안에서 생긴 변경이 hook에 두 번 갈 수 있습니다. 그래서 감시 대상 안의 폴더에 파일을 만드는 행에서는 Windows에 한해 연이은 같은 기록을 하나로 셉니다. 다른 OS와 나머지 행에서는 이런 반복을 허용하지 않습니다.
+- 사용 안내는 Windows에서 감시 대상 밖으로 폴더를 옮기고 약 100ms 뒤 감시를 다시 만드는 순간에 대상 안에서 생긴 변경의 중복 전달만 허용합니다.
+- 테스트는 `src/x`를 밖으로 옮긴 뒤, 그 행의 표지를 만들거나 다음 동작을 실행하기 전에 재생성 DEBUG 로그를 기다립니다.
+- 대상 안 폴더의 이름 바꾸기와 옮기기를 포함한 모든 행에서 중복을 합치지 않고 원래 기록을 비교합니다.
 - watcher는 종료 신호를 받은 뒤 10초 안에 종료 코드 0으로 끝나야 합니다.
 
 ## 설정
@@ -56,8 +58,14 @@ sequenceDiagram
     testCode->>watcherProc: Start (DEBUG 로그로 감시 준비 확인)
     loop 표의 동작마다 한 번씩
         testCode->>watchDir: 동작 실행
+        watchDir-->>watcherProc: 동작으로 생긴 폴더와 파일 이벤트
+        rect rgba(234, 88, 12, 0.15)
+            opt Windows에서 src/x를 감시 대상 밖으로 옮긴 경우만
+                watcherProc-->>testCode: 감시 재생성 DEBUG 로그 (최대 10초 대기)
+            end
+        end
         testCode->>watchDir: 감시 폴더, src, dst, 동작이 파일을 만든 폴더에 표지 파일 만들기
-        watchDir-->>watcherProc: 폴더와 파일 이벤트
+        watchDir-->>watcherProc: 표지 이벤트
         watcherProc->>hookRec: 폴더 이벤트와 다른 이벤트의 onChange를 순서대로 실행
         hookRec->>recordFile: 이벤트마다 한 줄
         testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (최대 10초)
@@ -72,6 +80,13 @@ sequenceDiagram
   - 밖으로 옮긴 폴더는 감시 대상 밖에 있으므로 표지를 두지 않습니다. 그 동작의 기록이 표지보다 늦게 오면 뒤의 행에서 더 있는 기록으로 실패합니다.
 - 표지 파일은 `O_CREATE|O_EXCL|O_RDONLY`로 내용 없이 만들므로, 어느 OS에서든 생성 이벤트만 생깁니다.
 
+## Windows 감시 재생성 관찰
+
+- 수정 전 2026-11-04 UTM Windows 11 ARM64에서 DEBUG 로그를 켜고 실행한 결과는 PASS였으며, `watcher.log`의 `rebuilt watcher to release watches of folders moved out` 줄은 정확히 하나였습니다.
+  - 867행의 `REMOVE "...\\watch\\src\\x"` 뒤에 재생성 로그가 879행에 나왔으며, 밖으로 옮긴 행의 `zz-sentinel-9.txt` 이벤트와 다음 행의 `zz-sentinel-10.txt` 이벤트 사이였습니다.
+  - 대상 안 이름 바꾸기는 900행의 `RENAME "...\\watch\\src\\n"`에서, 대상 안 옮기기는 932행의 `REMOVE "...\\watch\\src\\m"`에서 시작했으며, 두 동작 뒤부터 종료까지 재생성 로그는 더 없었습니다.
+- 이 관찰에서 재생성 경계는 대상 안 이름 바꾸기나 옮기기가 아니라 밖으로 옮기는 전환이었습니다. 테스트는 뒤의 파일 기록 중복을 허용하는 대신 이 경계에서 기다립니다.
+
 ## 실행
 
 - 저장소 루트에서 실행합니다.
@@ -81,7 +96,7 @@ sequenceDiagram
 ```sh
 go test -count=1 -v -run '^TestFolderEvents$' ./e2e/scenarios
 go run ./e2e/linux -- -run '^TestFolderEvents$'
-make e2e-windows ARGS="-- -run '^TestFolderEvents$'"
+make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestFolderEvents$'"
 ```
 
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.

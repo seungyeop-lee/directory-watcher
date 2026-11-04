@@ -34,7 +34,9 @@
 | Delete `src/g.txt` | `D,false,src/g.txt` |
 
 - The folders that are moved or renamed hold only files, because Windows refuses to rename or move a folder that holds a watched subfolder.
-- On Windows, the watcher re-creates its watches after a folder is moved, and a change made in the target at that moment can reach the hook twice, as the usage guide states. In the rows that create a file in a folder in the target, the test therefore counts consecutive identical records as one on Windows. Other OSes and the other rows allow no such repeat.
+- On Windows, the usage guide allows duplicate delivery only for changes made in the target while the watcher re-creates its watches about 100 ms after a folder is moved out of the target.
+- After moving `src/x` out, the test waits for the rebuild DEBUG log before creating that row's sentinels or running the next action.
+- Every row compares the original records without collapsing duplicates, including internal folder renames and moves.
 - The watcher must exit with exit code 0 within 10 seconds of receiving the shutdown signal.
 
 ## Configuration
@@ -56,8 +58,14 @@ sequenceDiagram
     testCode->>watcherProc: Start (confirm watch readiness via DEBUG log)
     loop once for each action in the table
         testCode->>watchDir: run the action
+        watchDir-->>watcherProc: folder and file events from the action
+        rect rgba(234, 88, 12, 0.15)
+            opt Windows, only when moving src/x out of the target
+                watcherProc-->>testCode: rebuilt watcher DEBUG log (wait up to 10s)
+            end
+        end
         testCode->>watchDir: create a sentinel file in the watch folder, src, dst, and the folder the action created a file in
-        watchDir-->>watcherProc: folder and file events
+        watchDir-->>watcherProc: sentinel events
         watcherProc->>hookRec: onChange for the folder event and the other events in order
         hookRec->>recordFile: one line per event
         testCode->>recordFile: wait for all sentinel records (up to 10s)
@@ -72,6 +80,13 @@ sequenceDiagram
   - The moved-out folder gets no sentinel because it is outside the target. A record of that action that arrives after the sentinels fails a later row as an extra record.
 - Sentinel files are created empty with `O_CREATE|O_EXCL|O_RDONLY`, so they make only a create event on every OS.
 
+## Windows rebuild observation
+
+- Before this change, a UTM Windows 11 ARM64 run on 2026-11-04 passed with DEBUG logging enabled. Its `watcher.log` contained exactly one `rebuilt watcher to release watches of folders moved out` line.
+  - `REMOVE "...\\watch\\src\\x"` appeared at line 867; the rebuild appeared at line 879, after the move-out row's `zz-sentinel-9.txt` events and before the following row's `zz-sentinel-10.txt` events.
+  - The internal rename started with `RENAME "...\\watch\\src\\n"` at line 900; the internal move started with `REMOVE "...\\watch\\src\\m"` at line 932. Neither was followed by another rebuild through shutdown.
+- The observation identifies the move-out transition, not an internal rename or move, as the rebuild boundary. The test now waits at that boundary instead of allowing duplicate file records in later rows.
+
 ## Running
 
 - Run from the repository root.
@@ -81,7 +96,7 @@ The commands run locally, in Linux Docker, and on the UTM Windows VM, in that or
 ```sh
 go test -count=1 -v -run '^TestFolderEvents$' ./e2e/scenarios
 go run ./e2e/linux -- -run '^TestFolderEvents$'
-make e2e-windows ARGS="-- -run '^TestFolderEvents$'"
+make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestFolderEvents$'"
 ```
 
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
