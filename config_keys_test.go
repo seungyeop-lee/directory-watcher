@@ -55,9 +55,7 @@ func joinKey(parent, name string) string {
 	return parent + "." + name
 }
 
-// schemaKeys는 스키마에서 parents에 든 키 아래의 속성 이름을 키 경로로 모은다.
-// hook 명령의 dir, cmd처럼 yaml 태그가 하위 키를 정하지 않는 값의 속성은 모으지 않는다.
-func schemaKeys(t *testing.T, parents map[string]bool) []string {
+func readSchema(t *testing.T) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(schemaFile)
 	if err != nil {
@@ -67,6 +65,14 @@ func schemaKeys(t *testing.T, parents map[string]bool) []string {
 	if err := json.Unmarshal(data, &root); err != nil {
 		t.Fatal(err)
 	}
+	return root
+}
+
+// schemaKeys는 스키마에서 parents에 든 키 아래의 속성 이름을 키 경로로 모은다.
+// hook 명령의 dir, cmd처럼 yaml 태그가 하위 키를 정하지 않는 값의 속성은 모으지 않는다.
+func schemaKeys(t *testing.T, parents map[string]bool) []string {
+	t.Helper()
+	root := readSchema(t)
 	definitions, _ := root["definitions"].(map[string]any)
 	var keys []string
 	var walk func(node map[string]any, parent string)
