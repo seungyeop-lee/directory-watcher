@@ -1,7 +1,12 @@
 name: ci
 
 on:
+  # 릴리스는 같은 커밋을 master, v<major>, tag, feature/working에 함께 push하므로, feature/working의 실행 하나만 남긴다.
+  # branches-ignore만 적으면 tag push에서는 실행하지 않고, tag는 goreleaser.yml이 게시 전에 검사한다.
   push:
+    branches-ignore:
+      - master
+      - 'v[0-9]+'
   pull_request:
 
 permissions:
