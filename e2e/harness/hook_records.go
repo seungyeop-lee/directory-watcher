@@ -11,9 +11,10 @@ import (
 )
 
 // hookrec은 hook마다 시나리오의 기록 파일에 아래 형식의 줄을 덧붙인다: 주어진 --line 텍스트,
-// --delay 앞뒤의 BEGIN|PID|line과 CANCEL|PID|line, --error-context의 ERROR|JSON(이름이
-// DW_ERROR_로 시작하는 환경 변수 전부와 workdir), --queue-context의 QUEUE|JSON(이름이
-// DW_QUEUE_로 시작하는 환경 변수 전부)이다. 프로세스 트리 기록은 process_records.go가 읽는다.
+// --delay를 기다리기 전의 BEGIN|PID|line, 기다리는 동안 SIGINT나 SIGTERM을 받았을 때만 --line
+// 텍스트 대신 남기는 CANCEL|PID|line, --error-context의 ERROR|JSON(이름이 DW_ERROR_로 시작하는
+// 환경 변수 전부와 workdir), --queue-context의 QUEUE|JSON(이름이 DW_QUEUE_로 시작하는 환경 변수
+// 전부)이다. 프로세스 트리 기록은 process_records.go가 읽는다.
 
 func ReadLinesLenient(path string) []string {
 	data, _ := os.ReadFile(path)
