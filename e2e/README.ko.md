@@ -19,7 +19,7 @@ Mac에서 UTM Windows VM으로 실행하려면 [UTM Windows VM에서 E2E 실행]
 DW_E2E_UTM_VM=Windows-E2E make e2e-windows-all
 ```
 
-성공하면 각 테스트에 `PASS`가 표시되고 명령이 0으로 종료합니다. 실패·시간 초과는 0이 아닌 종료 코드로 전달합니다. Linux 기본 이미지는 `golang:1.23-bookworm`이며, 다른 Go 이미지는 `go run ./e2e/linux -image=<이미지>`로 지정합니다.
+성공하면 각 테스트에 `PASS`가 표시되고 명령이 0으로 종료합니다. 실패·시간 초과는 0이 아닌 종료 코드로 전달합니다. Linux 기본 이미지는 `golang:1.27-bookworm`이며, 다른 Go 이미지는 `go run ./e2e/linux -image=<이미지>`로 지정합니다.
 
 ### 특정 시나리오 선택·반복
 

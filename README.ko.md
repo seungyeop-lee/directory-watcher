@@ -35,7 +35,7 @@ Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·�
 
 - macOS 또는 Linux. 이 두 환경에서 정상 작동하는 것을 확인했습니다.
 - Windows. 아래 경고의 제약이 있습니다.
-- Go 1.23 이상. `go install`로 설치할 때만 필요합니다.
+- Go 1.27 이상. `go install`로 설치할 때만 필요합니다.
 
 > [!WARNING]
 > Windows에서는 다음을 주의하세요.

@@ -18,7 +18,7 @@ func main() { os.Exit(run()) }
 
 func run() (code int) {
 	deadline := flag.Duration("deadline", 10*time.Minute, "container execution deadline")
-	image := flag.String("image", "golang:1.23-bookworm", "Linux Go image")
+	image := flag.String("image", "golang:1.27-bookworm", "Linux Go image")
 	flag.Parse()
 	root, err := os.Getwd()
 	if err != nil {

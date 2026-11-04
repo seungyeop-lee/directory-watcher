@@ -1,20 +1,19 @@
 module github.com/seungyeop-lee/directory-watcher/v3
 
-go 1.23
+go 1.27
 
 require (
-	github.com/fsnotify/fsnotify v1.7.0
-	github.com/moby/term v0.5.0
-	github.com/spf13/cobra v1.8.1
-	github.com/stretchr/testify v1.10.0
-	golang.org/x/sys v0.27.0
+	github.com/fsnotify/fsnotify v1.10.1
+	github.com/moby/term v0.5.2
+	github.com/spf13/cobra v1.10.2
+	github.com/stretchr/testify v1.12.1
+	golang.org/x/sys v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 )

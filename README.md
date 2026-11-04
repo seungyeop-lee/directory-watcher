@@ -35,7 +35,7 @@ Directory Watcher runs the commands you define when files are created, modified,
 
 - macOS or Linux. The program has been verified to work correctly on these systems.
 - Windows, with the limits below.
-- Go 1.23 or later, only if you install with `go install`.
+- Go 1.27 or later, only if you install with `go install`.
 
 > [!WARNING]
 > On Windows:

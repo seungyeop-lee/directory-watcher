@@ -19,7 +19,7 @@ To run on a UTM Windows VM from a Mac, finish the prerequisites in [Running E2E 
 DW_E2E_UTM_VM=Windows-E2E make e2e-windows-all
 ```
 
-On success, each test shows `PASS` and the command exits with 0. Failures and timeouts are reported as a non-zero exit code. The default Linux image is `golang:1.23-bookworm`; specify another Go image with `go run ./e2e/linux -image=<image>`.
+On success, each test shows `PASS` and the command exits with 0. Failures and timeouts are reported as a non-zero exit code. The default Linux image is `golang:1.27-bookworm`; specify another Go image with `go run ./e2e/linux -image=<image>`.
 
 ### Selecting and repeating specific scenarios
 
