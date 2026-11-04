@@ -76,6 +76,7 @@ func newWatchTree(path domain.Path, option domain.WatchOption, watcher *fsnotify
 	}
 	if watcher != nil {
 		t.events, t.errs = pumpEvents(watcher, stop)
+		t.errs = injectWatchErrors(path, t.errs, stop)
 	}
 	return t
 }
@@ -471,6 +472,7 @@ func (t *watchTree) rebuildWatcher() error {
 		return err
 	}
 	nextEvents, nextErrors := pumpEvents(next, t.stop)
+	nextErrors = injectWatchErrors(t.path, nextErrors, t.stop)
 	for dir := range t.watchedDirs {
 		// 사이에 지워진 폴더의 Remove 이벤트는 retireWatcher가 예전 watcher의 이벤트로 돌려준다.
 		if err := next.Add(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {

@@ -17,18 +17,24 @@ import (
 const (
 	watcherPackage = "github.com/seungyeop-lee/directory-watcher/v3"
 	hookrecPackage = watcherPackage + "/e2e/hookrec"
+	// injectTag는 감시 대상 폴더의 표지 파일로 watcher 오류 채널에 오류를 보내는 주입 지점을 넣는 build tag다.
+	// 주입 지점은 internal/app/service/runner_watch_target_tree_inject.go에 있다.
+	injectTag = "dw_e2e_inject"
 )
 
-var watcherBin, hookrecBin string
+var watcherBin, injectWatcherBin, hookrecBin string
 
 // WatcherBin은 Run이 빌드한 directory-watcher 바이너리를 돌려준다.
 func WatcherBin() string { return watcherBin }
+
+// InjectWatcherBin은 Run이 주입 build tag를 붙여 빌드한 directory-watcher 바이너리를 돌려준다.
+func InjectWatcherBin() string { return injectWatcherBin }
 
 // HookrecBin은 Run이 빌드한 hookrec 바이너리를 돌려준다.
 func HookrecBin() string { return hookrecBin }
 
 // Run은 TestMain의 본문이다: 콘솔을 준비하고, 테스트 바이너리 실행 전체에서 쓸
-// watcher와 hookrec 바이너리를 빌드한 뒤, m을 실행하고 바이너리를 지운다. 바이너리를
+// watcher, 주입 tag를 붙인 watcher, hookrec 바이너리를 빌드한 뒤, m을 실행하고 바이너리를 지운다. 바이너리를
 // 지우지 못하면 돌려주는 코드가 1이 된다.
 func Run(m *testing.M) (code int) {
 	if err := prepareConsole(); err != nil {
@@ -47,9 +53,14 @@ func Run(m *testing.M) (code int) {
 		}
 	}()
 	watcherBin = filepath.Join(dir, binName("directory-watcher"))
+	injectWatcherBin = filepath.Join(dir, binName("directory-watcher-inject"))
 	hookrecBin = filepath.Join(dir, binName("hookrec"))
-	for _, build := range []struct{ output, source string }{{watcherBin, watcherPackage}, {hookrecBin, hookrecPackage}} {
-		if out, err := exec.Command("go", "build", "-o", build.output, build.source).CombinedOutput(); err != nil {
+	for _, build := range []struct{ output, source, tags string }{
+		{watcherBin, watcherPackage, ""},
+		{injectWatcherBin, watcherPackage, injectTag},
+		{hookrecBin, hookrecPackage, ""},
+	} {
+		if out, err := exec.Command("go", "build", "-tags="+build.tags, "-o", build.output, build.source).CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "build:", err, string(out))
 			return 1
 		}

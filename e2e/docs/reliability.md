@@ -37,11 +37,11 @@ go test -race ./...
 ## Event-loss notification verification
 
 ```sh
-go test -count=1 -v -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify' ./e2e/scenarios
-go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify'
+go test -count=1 -v -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify|TestInjectedLossNotificationCLI' ./e2e/scenarios
+go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify|TestInjectedLossNotificationCLI'
 ```
 
-- What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) and [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md) documents.
+- What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md), [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md), and [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.md) documents.
 - How notification descendants are cleaned up on macOS, Linux, and Windows is in [Descendant cleanup by platform](scenarios/event-loss-notification-cli.md#descendant-cleanup-by-platform).
 
 - The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./internal/config/yaml` actually runs decoded structured commands and checks that environment variables are passed verbatim, the `dir` working directory, and compatibility with existing configurations.
@@ -50,22 +50,24 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 ## Kinds of loss verification
 
 - Real filesystem load tests allow OS notifications to be duplicated or merged. They do not assume that the number of file operations equals the number of hook runs.
-- Error propagation up to the CLI can be checked separately by injecting an fsnotify loss error with a verification-only source overlay. It confirms, in the four `hookBatch.deliver`·`run.interrupt` combinations, that the first fatal error is preserved, the notification runs once, and new normal hooks of other targets are blocked. The overlay run commands and results are kept in the issue report, and release binaries have no injection option. A successful injection is not evidence of an observed real OS overflow.
+- [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.md) checks how an error that arrives on the watcher error channel reaches the CLI, using a watcher built with the `dw_e2e_inject` build tag. A successful injection is not evidence of an observed real OS overflow.
+  - In the four combinations of `hookBatch.deliver` `last`·`each` and `run.interrupt` `none`·`oldest`, an injected loss error must preserve the first fatal error, run the notification once, exit with code 1, and start no new normal hook after the notification.
+  - An injected fatal error other than loss must exit with code 1 without running the notification.
+  - Release binaries and the make build targets are built without this tag, so they have no injection point.
 - The real Linux overflow experiment pauses fsnotify receiving, creates more files than the current `max_queued_events`, and then observes `ErrEventOverflow`. It does not change host or shared kernel settings.
 - Windows also reports `ErrEventOverflow` when its notification buffer overflows, as shown in the [Windows backend](https://github.com/fsnotify/fsnotify/blob/v1.10.1/backend_windows.go#L580-L584); a real Windows overflow has not been observed in this verification.
 - macOS kqueue does not report this sentinel, so the same guarantee is not claimed there.
 - The basis is fsnotify v1.10.1's [Linux overflow handling](https://github.com/fsnotify/fsnotify/blob/v1.10.1/backend_inotify.go#L397-L401) and [common errors](https://github.com/fsnotify/fsnotify/blob/v1.10.1/fsnotify.go#L262-L270). Detection of every OS-level loss, lossless handling of unbounded input, and automatic recovery are not guaranteed. Arbitrary finish hooks have no separate time limit, and the process tree verification targets helper programs that handle SIGTERM or Windows CTRL+BREAK and wait for their descendants. On Windows, [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) also checks a program that `cmd` starts after the first CTRL+BREAK, and [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) checks `powershell` hooks. The forced termination of processes still running 20 seconds after the first CTRL+BREAK is checked only by the unit test `TestRunCommandEndsProcessTreeAfterGrace` in `internal/process`, with the 20 seconds shortened to 1 second.
 
-### Reproducing the injection smoke test
+### Running the injection verification
 
-- Reproduce the injection smoke test from the issue report with the commands below.
-
-Replace `<issue report directory>` with the path that holds `smoke.sh` and the overlay test file.
+Run the commands below from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
-sh <issue report directory>/smoke.sh macos
-sh <issue report directory>/smoke.sh linux
+go test -count=1 -v -run '^TestInjectedLossNotificationCLI$' ./e2e/scenarios
+go run ./e2e/linux -- -count=1 -run '^TestInjectedLossNotificationCLI$'
+make e2e-windows ARGS="-- -run '^TestInjectedLossNotificationCLI$'"
 ```
 
-- `TestControlledLossNotificationSmoke` checks the four option combinations and that fatal errors other than loss do not trigger the notification.
-- The script uses a Go overlay and temporary constructor injection and does not modify the repository source.
+- The harness builds the watcher with the injection tag itself, so the commands need no separate build.
+- The subtests and the success criteria of each are in the [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.md) document.

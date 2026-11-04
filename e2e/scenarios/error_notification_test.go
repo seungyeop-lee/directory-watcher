@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -314,4 +316,188 @@ watchTargets:
 			}
 		})
 	}
+}
+
+// injectMarker는 주입 tag watcher가 감시 대상 폴더에서 읽는 표지 파일이다. 이름과 내용("loss", "nonloss")은
+// internal/app/service/runner_watch_target_tree_inject.go와 같아야 한다.
+const injectMarker = "dw-e2e-error.inject"
+
+// TestInjectedLossNotificationCLI는 주입 tag watcher의 watcher 오류 채널에 오류를 보내, 유실 오류는 onError 알림 한
+// 번과 종료 코드 1로, 유실이 아닌 치명적 오류는 알림 없이 종료 코드 1로 이어지는지 확인한다. 실제 OS overflow를
+// 관찰한 증거는 아니다.
+func TestInjectedLossNotificationCLI(t *testing.T) {
+	for _, deliver := range []string{"last", "each"} {
+		for _, interrupt := range []string{"none", "oldest"} {
+			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
+				runInjectedNotification(t, deliver, interrupt, "loss")
+			})
+		}
+	}
+	t.Run("non-loss-fatal-does-not-notify", func(t *testing.T) {
+		runInjectedNotification(t, "each", "none", "nonloss")
+	})
+}
+
+// runInjectedNotification은 시작 hook과 변경 hook의 프로세스 트리가 돌고 파일이 계속 생기는 동안 marker 내용의
+// 오류를 주입하고, 종료 코드, 최초 원인, 알림, 종료 hook, 남은 프로세스를 확인한다.
+func runInjectedNotification(t *testing.T, deliver, interrupt, marker string) {
+	t.Helper()
+	// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
+	wait := 30
+	if deliver == "each" {
+		wait = 0
+	}
+	s := harness.NewScenario(t)
+	s.Launch(harness.InjectWatcherBin(), fmt.Sprintf(`global:
+  lifeCycle:
+    onError:
+      - dir: %q
+        cmd: %s
+    onFinishWatch:
+      - %s
+watchTargets:
+  - path: '%s'
+    lifeCycle:
+      onStartWatch:
+        - %s
+      onChange:
+        - %s
+      onFinishWatch:
+        - %s
+    option:
+      watch:
+        fileEvent: C
+        exclude: ['*.probe', '*.swp', '*.inject']
+      hookBatch:
+        waitMillisecond: %d
+        deliver: %s
+      run:
+        interrupt: %s
+`, s.Work, s.Hook("--error-context", "--line=NOTIFY"), s.Hook("--line=GLOBAL:FINISH"),
+		s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), s.Hook("--line=TARGET:FINISH"), wait, deliver, interrupt))
+	s.AssertRunning("startup process", s.AwaitReadyGenerations("startup process tree ready", 1))
+
+	var produced atomic.Int64
+	var paused atomic.Bool
+	producerDone := make(chan error, 1)
+	go func() {
+		for n := 0; ; {
+			select {
+			case <-s.Done():
+				producerDone <- nil
+				return
+			default:
+			}
+			if !paused.Load() {
+				if err := os.WriteFile(filepath.Join(s.Watch, fmt.Sprintf("inflow-%04d.txt", n)), nil, 0644); err != nil {
+					producerDone <- err
+					return
+				}
+				n++
+				produced.Add(1)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	s.Await("thirty files created during the slow hooks", 5*time.Second, func() bool { return produced.Load() >= 30 })
+	// interrupt=oldest에서는 생성을 멈춘 뒤에도 받아 둔 이벤트가 돌고 있는 트리를 취소하므로, 프로세스 기록이 200ms 동안
+	// 바뀌지 않고 취소되지 않은 트리가 돌 때 오류를 주입한다. 그러면 치명적 오류로 멈출 때 다 만들어진 트리만 취소된다.
+	// Windows에서 만드는 도중인 트리를 취소하면 신호 뒤에 시작한 자손은 신호를 받지 못해, watcher가 취소 20초 뒤 강제로
+	// 끝낼 때까지 다음 트리가 시작하지 않는다. 그래서 30초까지 기다린다.
+	paused.Store(true)
+	var running []harness.ProcessRecord
+	recordCount, changed := -1, time.Now()
+	s.Await("a hook process tree running uncanceled with records unchanged for 200ms", 30*time.Second, func() bool {
+		records := s.ProcessRecords()
+		if len(records) != recordCount {
+			recordCount, changed = len(records), time.Now()
+		}
+		running = runningTree(s, records)
+		return len(running) > 0 && time.Since(changed) >= 200*time.Millisecond
+	})
+	// 표지 파일은 내용을 다 쓴 뒤 이름을 바꿔 만들어, watcher가 쓰는 중인 내용을 읽지 않게 한다.
+	pending := filepath.Join(s.Watch, "dw-e2e-error.swp")
+	s.Write(pending, []byte(marker))
+	if err := os.Rename(pending, filepath.Join(s.Watch, injectMarker)); err != nil {
+		t.Fatal(err)
+	}
+	atNotification := produced.Load()
+	if marker == "loss" {
+		s.Await("notification recorded", 10*time.Second, func() bool { return len(errorContexts(t, s.Records)) > 0 })
+		// 알림 뒤에도 이벤트가 들어오게 해, 새 일반 hook이 시작되지 않는지 확인한다.
+		paused.Store(false)
+	}
+	s.Await("injected fatal error exits the CLI", 10*time.Second, s.Exited)
+	if err := <-producerDone; err != nil {
+		t.Fatal(err)
+	}
+
+	cause := "injected 'cause' {{.Path}} $HOME: " + fsnotify.ErrEventOverflow.Error()
+	if marker == "nonloss" {
+		cause = "injected non-loss failure"
+	}
+	assertLossExit(t, s, cause)
+	if strings.Contains(s.Log(), "later injected error") {
+		t.Errorf("second injected error replaced or joined the first: %s", s.Log())
+	}
+	contexts := errorContexts(t, s.Records)
+	if marker == "nonloss" {
+		if len(contexts) != 0 {
+			t.Fatalf("non-loss fatal error ran onError: %v", contexts)
+		}
+	} else {
+		if len(contexts) != 1 {
+			t.Fatalf("notification count = %d, want 1", len(contexts))
+		}
+		assertErrorContext(t, contexts[0], s.Watch, cause, s.Work)
+	}
+	lines := s.Lines()
+	notified := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "ERROR|") {
+			notified = true
+			continue
+		}
+		// 프로세스 트리의 루트 부모는 generation이 자기 PID인 start를 남긴다.
+		fields := strings.Split(line, "|")
+		if notified && len(fields) == 4 && fields[0] == fields[1] && fields[3] == "start" {
+			t.Errorf("new normal hook started after the notification: %s", line)
+		}
+	}
+	for _, finish := range []string{"TARGET:FINISH", "GLOBAL:FINISH"} {
+		if harness.CountRecord(lines, finish) != 1 {
+			t.Errorf("finish hook %s count != 1: %v", finish, lines)
+		}
+	}
+	records := s.ProcessRecords()
+	s.AwaitProcessesGone("all hook descendants gone", records)
+	t.Logf("INJECTED watcher error, not OS overflow evidence: deliver=%s interrupt=%s marker=%s notifications=%d exit=1 created-before-injection=%d created-after-notification=%d running-tree-at-injection=%s", deliver, interrupt, marker, len(contexts), atNotification, produced.Load()-atNotification, running[0].Generation)
+}
+
+// runningTree는 records에서 준비를 마쳤고 종료 신호를 받지 않았으며 루트 부모가 살아 있는 프로세스 트리 하나의 기록을
+// 돌려준다. 그런 트리가 없으면 nil이다.
+func runningTree(s *harness.Scenario, records []harness.ProcessRecord) []harness.ProcessRecord {
+	byGeneration := map[string][]harness.ProcessRecord{}
+	var order []string
+	for _, r := range records {
+		if _, seen := byGeneration[r.Generation]; !seen {
+			order = append(order, r.Generation)
+		}
+		byGeneration[r.Generation] = append(byGeneration[r.Generation], r)
+	}
+	for _, generation := range order {
+		ready, signaled, rootPID := false, false, 0
+		for _, r := range byGeneration[generation] {
+			if strconv.Itoa(r.PID) != r.Generation {
+				continue
+			}
+			rootPID = r.PID
+			ready = ready || r.State == "ready"
+			signaled = signaled || r.State == "signal"
+		}
+		if ready && !signaled && s.Alive(rootPID) {
+			return byGeneration[generation]
+		}
+	}
+	return nil
 }
