@@ -57,14 +57,6 @@ func flushDeletionRuns(t *testing.T, r *watchTargetRunner) []domain.Event {
 	return runs
 }
 
-// setDirRemoveRepeat은 테스트 동안 지운 폴더의 REMOVE가 한 번 더 올 수 있는 운영체제인지를 repeat로 정한다.
-func setDirRemoveRepeat(t *testing.T, repeat bool) {
-	t.Helper()
-	saved := dirRemoveRepeatOS
-	dirRemoveRepeatOS = repeat
-	t.Cleanup(func() { dirRemoveRepeatOS = saved })
-}
-
 func TestDeletedFolderLifecycleAcrossBatches(t *testing.T) {
 	setDirRemoveRepeat(t, true)
 	for _, separated := range []bool{false, true} {
@@ -201,6 +193,8 @@ func TestRemovedFolderRecordsExpire(t *testing.T) {
 			option := hookBatchOption(0, 0, domain.DeliverEach)
 			option.DirBatch = domain.DirBatchOption{}
 			r := deletionRunner(t, root, option)
+			now := time.Now()
+			r.removedDirs.now = func() time.Time { return now }
 			remove := func(i int) {
 				name := fmt.Sprintf("tmp-%04d", i)
 				removeAll(t, filepath.Join(root, name))
@@ -216,15 +210,15 @@ func TestRemovedFolderRecordsExpire(t *testing.T) {
 			if repeat {
 				want = folders - 1
 			}
-			if got := len(r.removedDirs); got != want {
+			if got := len(r.removedDirs.at); got != want {
 				t.Fatalf("records within removedDirTTL = %d, want %d", got, want)
 			}
-			time.Sleep(removedDirTTL + 100*time.Millisecond)
+			now = now.Add(removedDirTTL + 100*time.Millisecond)
 			remove(folders - 1)
 			if repeat {
 				want = 1
 			}
-			if got := len(r.removedDirs); got != want {
+			if got := len(r.removedDirs.at); got != want {
 				t.Fatalf("records after removedDirTTL = %d, want %d", got, want)
 			}
 			runs := flushDeletionRuns(t, r)

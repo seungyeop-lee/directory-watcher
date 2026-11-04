@@ -9,7 +9,6 @@ import (
 	"slices"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
@@ -23,16 +22,6 @@ var kqueueOS = slices.Contains([]string{"darwin", "dragonfly", "freebsd", "netbs
 
 // inotifyOS는 fsnotify가 inotify로 감시하는 운영체제인지 나타낸다.
 var inotifyOS = runtime.GOOS == "linux"
-
-// dirRemoveRepeatOS는 지운 폴더의 REMOVE를 fsnotify가 한 번 더 보낼 수 있는 운영체제인지 나타낸다. 부모 폴더의
-// 감시와 그 폴더 자신의 감시가 각각 REMOVE를 보내는 일이 Windows에서는 대부분, kqueue에서는 가끔 생긴다. inotify는
-// 부모 폴더를 감시하면 폴더 자신의 삭제를 fsnotify가 버리므로 한 번만 보낸다.
-var dirRemoveRepeatOS = !inotifyOS
-
-// removedDirTTL은 removedDirs가 지운 폴더를 기억하는 시간이다. 감시 루프가 처리한 시각으로 잰 원래 REMOVE와
-// 중복 REMOVE·후행 WRITE의 간격은 Windows ARM64에서 가장 길게 6.3ms, macOS에서 0.6ms였다(2026-11-04). 다만 kqueue에서는
-// renamePairer가 그 사이의 이벤트를 renameHoldLimit까지 미룰 수 있으므로 그보다 길게 둔다.
-const removedDirTTL = 2 * time.Second
 
 // FatalError는 종료가 필요한 실패가 일어난 감시 대상과 그 원인을 보존한다.
 type FatalError struct {
@@ -53,9 +42,7 @@ type watchTargetRunner struct {
 	dirBatcher   *dirBatcher
 	hookBatcher  *hookBatcher
 	dispatcher   *dispatcher
-	// removedDirs는 dirRemoveRepeatOS에서 지운 폴더와 지운 때를 removedDirTTL 동안 기억한다. 감시와 항목 기록을
-	// 지운 뒤 오는 중복 REMOVE와 WRITE는 버리고, CREATE나 디스크에서 확인한 새 항목은 별도 수명으로 처리한다.
-	removedDirs map[string]time.Time
+	removedDirs  *removedDirRecords
 
 	logger     helper.Logger
 	initErr    error
@@ -84,6 +71,7 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		path:        commandSet.Path,
 		hookBatcher: newHookBatcher(commandSet.Option),
 		dispatcher:  newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
+		removedDirs: newRemovedDirRecords(),
 		logger:      logger,
 		initErr:     err,
 		stop:        stop,
@@ -221,11 +209,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	var isDir, existed, recreated bool
 	switch {
 	case ev.Op.Has(fsnotify.Create):
-		for path := range r.removedDirs {
-			if domain.Path(ev.Name).Contains(domain.Path(path)) {
-				delete(r.removedDirs, path)
-			}
-		}
+		r.removedDirs.forgetUnder(ev.Name)
 		r.renamePairer.forgetSelfRename(ev.Name)
 		if r.tree.isUnreleasedDir(ev.Name) {
 			// 같은 경로에 새로 생긴 폴더와 풀지 못한 옛 폴더의 감시는 같은 경로로 이벤트를 알리므로, 새 폴더를
@@ -252,14 +236,12 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 기록에 적어 둔 폴더인지로 판단한다.
 		var wasDir bool
 		wasDir, existed = r.tree.recorded(ev.Name)
-		if !existed {
-			if r.isRemovedDir(ev.Name) {
-				return nil
-			}
+		if r.removedDirs.isRepeatedRemove(ev.Name, existed) {
+			return nil
 		}
 		isDir = r.tree.unwatchTree(ev.Name) || wasDir
-		if isDir && dirRemoveRepeatOS {
-			r.addRemovedDir(ev.Name)
+		if isDir {
+			r.removedDirs.add(ev.Name)
 		}
 		if isDir && inotifyOS && ev.Op.Has(fsnotify.Rename) {
 			r.renamePairer.addSelfRename(ev.Name)
@@ -267,13 +249,9 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		// 이름을 바꾸거나 옮긴 파일의 옛 경로는 지운 파일처럼 사라졌으므로 삭제로 알린다.
 		ev.Op = fsnotify.Remove
 	case ev.Op.Has(fsnotify.Write):
-		if r.isRemovedDir(ev.Name) {
-			if _, err := os.Lstat(ev.Name); errors.Is(err, os.ErrNotExist) {
-				return nil
-			} else if err == nil {
-				delete(r.removedDirs, ev.Name)
-				recreated = true
-			}
+		var stale bool
+		if stale, recreated = r.removedDirs.classifyWrite(ev.Name); stale {
+			return nil
 		}
 		// Windows는 폴더 안의 항목이 바뀌면 그 폴더의 Write를 보낸다. 폴더 안의 변경은 그 항목의 이벤트로 알린다.
 		if r.tree.isDir(ev.Name) {
@@ -293,26 +271,6 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		return nil
 	}
 	return r.enqueue(r.dirBatcher.add(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed, recreated: recreated}))
-}
-
-// addRemovedDir은 지운 폴더 path를 removedDirs에 적고, removedDirTTL이 지난 기록은 지운다.
-func (r *watchTargetRunner) addRemovedDir(path string) {
-	now := time.Now()
-	for recorded, at := range r.removedDirs {
-		if now.Sub(at) > removedDirTTL {
-			delete(r.removedDirs, recorded)
-		}
-	}
-	if r.removedDirs == nil {
-		r.removedDirs = make(map[string]time.Time)
-	}
-	r.removedDirs[path] = now
-}
-
-// isRemovedDir은 path가 removedDirTTL 안에 지운 폴더인지 판단한다.
-func (r *watchTargetRunner) isRemovedDir(path string) bool {
-	at, ok := r.removedDirs[path]
-	return ok && time.Since(at) <= removedDirTTL
 }
 
 // enqueue는 dirBatcher가 돌려준 실행 runs를 dispatcher의 대기열에 넣고, dirBatcher가 runs 뒤의 변경을 넘기다 겪은
