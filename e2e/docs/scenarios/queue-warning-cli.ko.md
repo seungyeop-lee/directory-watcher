@@ -20,7 +20,7 @@
 
 ## 설정
 
-- 전역 `onQueueWarning`은 `hookrec --queue-context`입니다. 실행되면 `DW_QUEUE_*` 변수 6개를 담은 `QUEUE|<JSON>`을 기록합니다.
+- 전역 `onQueueWarning`은 `hookrec --queue-context`입니다. 실행되면 이름이 `DW_QUEUE_`로 시작하는 환경 변수를 모두 담은 `QUEUE|<JSON>`을 기록합니다.
 - 대상 `onStartWatch`는 `hookrec --depth=0 --release-file=<작업 폴더>/release-start`입니다. 테스트가 해제 파일을 만들 때까지 실행되므로, 그동안 변경 hook이 실행되지 못하고 실행이 대기열에 남습니다.
 - 대상 `onChange`는 `CHANGE:{{.Path}}`를 기록합니다.
 - 대상 옵션은 `queue.size: 10`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다. 만든 파일 하나가 실행 하나가 됩니다.

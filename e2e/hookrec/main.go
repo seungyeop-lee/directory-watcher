@@ -42,10 +42,7 @@ func main() {
 		}
 	}
 	if *errorContext {
-		context := make(map[string]string)
-		for _, key := range []string{"DW_ERROR_TARGET", "DW_ERROR_KIND", "DW_ERROR_CAUSE", "DW_ERROR_MESSAGE", "DW_ERROR_POSSIBLE_LOSS"} {
-			context[key] = os.Getenv(key)
-		}
+		context := environWithPrefix("DW_ERROR_")
 		context["workdir"], err = os.Getwd()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -59,10 +56,7 @@ func main() {
 		appendLine("ERROR|" + string(data))
 	}
 	if *queueContext {
-		context := make(map[string]string)
-		for _, key := range []string{"DW_QUEUE_TARGET", "DW_QUEUE_LEVEL", "DW_QUEUE_DIRECTION", "DW_QUEUE_LENGTH", "DW_QUEUE_CAPACITY", "DW_QUEUE_TOP_PATHS"} {
-			context[key] = os.Getenv(key)
-		}
+		context := environWithPrefix("DW_QUEUE_")
 		data, err := json.Marshal(context)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -163,4 +157,16 @@ func main() {
 		}
 	}
 	record("complete")
+}
+
+// environWithPrefix는 이름이 prefix로 시작하는 환경 변수를 모두 모은다. 키를 따로 나열하지 않는다: 목록에 없는
+// 키는 빈 값으로 기록되어, watcher에 키가 늘었을 때 e2e 실패의 원인이 이 목록이라는 점이 드러나지 않는다.
+func environWithPrefix(prefix string) map[string]string {
+	values := make(map[string]string)
+	for _, entry := range os.Environ() {
+		if key, value, _ := strings.Cut(entry, "="); strings.HasPrefix(key, prefix) {
+			values[key] = value
+		}
+	}
+	return values
 }

@@ -134,4 +134,4 @@ make e2e-windows ARGS="-- -run '^TestEventLossNotificationCLI$'"
 
 - `e2e/scenarios/error_notification_test.go`: `TestEventLossNotificationCLI`, 모드별 `onError`를 만드는 `notificationConfig`, 알림 기록을 읽는 `errorContexts`, 검사 함수 `assertErrorContext`·`assertLossExit`
 - `e2e/harness`: `NewScenario`, `StartProcess`, `HookrecBin`, `Launch`, `WatcherBin`, `Hook`, `Await`, `DelayedHookBegun`, `CountRecord`, `ReadLinesLenient`, `AwaitReadyGenerations`, `AssertRunning`, `SnapshotProcesses`, `Done`, `Exited`, `ExitErr`, `Log`, `AwaitDelayedHooksGone`, `ProcessRecords`, `ProcessesGone`, `Alive`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
-- `e2e/hookrec`: `--error-context`(오류 환경 변수와 작업 디렉터리를 `ERROR|<JSON>`으로 기록), `--release-file`(해제 파일이 생기면 부모만 종료), `--exit-code`
+- `e2e/hookrec`: `--error-context`(이름이 `DW_ERROR_`로 시작하는 환경 변수 전부와 작업 디렉터리를 `ERROR|<JSON>`으로 기록), `--release-file`(해제 파일이 생기면 부모만 종료), `--exit-code`

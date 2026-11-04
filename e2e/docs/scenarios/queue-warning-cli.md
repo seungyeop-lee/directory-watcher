@@ -20,7 +20,7 @@
 
 ## Configuration
 
-- The global `onQueueWarning` is `hookrec --queue-context`. When it runs, it records `QUEUE|<JSON>` with the six `DW_QUEUE_*` variables.
+- The global `onQueueWarning` is `hookrec --queue-context`. When it runs, it records `QUEUE|<JSON>` with every environment variable whose name starts with `DW_QUEUE_`.
 - The target `onStartWatch` is `hookrec --depth=0 --release-file=<work folder>/release-start`. It keeps running until the test creates the release file, so the change hook cannot run and runs stay in the queue.
 - The target `onChange` records `CHANGE:{{.Path}}`.
 - The target options are `queue.size: 10`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`. Each created file becomes one run.

@@ -19,11 +19,9 @@ func TestErrorContextAndFailureExit(t *testing.T) {
 		"DW_ERROR_CAUSE":         "original 'cause' {{.Path}}",
 		"DW_ERROR_MESSAGE":       "watch target failed: original cause",
 		"DW_ERROR_POSSIBLE_LOSS": "true",
+		"DW_ERROR_NEW_FIELD":     "recorded without a key list",
 	}
-	cmd.Env = os.Environ()
-	for key, value := range values {
-		cmd.Env = append(cmd.Env, key+"="+value)
-	}
+	cmd.Env = hookEnv("DW_ERROR_", values)
 	out, err := cmd.CombinedOutput()
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) || !strings.Contains(string(out), "exit status 7") {
@@ -53,6 +51,9 @@ func TestErrorContextAndFailureExit(t *testing.T) {
 	if context["workdir"] != workdir {
 		t.Errorf("workdir = %q, want %q", context["workdir"], workdir)
 	}
+	if len(context) != len(values)+1 {
+		t.Errorf("error context fields = %v, want %v and workdir", context, values)
+	}
 }
 
 func TestQueueContext(t *testing.T) {
@@ -65,11 +66,9 @@ func TestQueueContext(t *testing.T) {
 		"DW_QUEUE_LENGTH":    "7",
 		"DW_QUEUE_CAPACITY":  "10",
 		"DW_QUEUE_TOP_PATHS": "2 /tmp/a target/a.txt\n1 /tmp/a target/b.txt",
+		"DW_QUEUE_NEW_FIELD": "recorded without a key list",
 	}
-	cmd.Env = os.Environ()
-	for key, value := range values {
-		cmd.Env = append(cmd.Env, key+"="+value)
-	}
+	cmd.Env = hookEnv("DW_QUEUE_", values)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("hookrec failed: %v %s", err, out)
 	}
@@ -93,4 +92,20 @@ func TestQueueContext(t *testing.T) {
 			t.Errorf("%s = %q, want %q", key, context[key], want)
 		}
 	}
+}
+
+// hookEnv는 prefix로 시작하는 환경 변수가 values뿐인 환경을 만들고, prefix 끝의 밑줄 자리만 다른 변수를 하나
+// 더해 기록되지 않아야 할 이름도 넣는다. 테스트를 실행한 셸에서 물려받은 prefix 변수는 기록 필드 수를 바꾸므로 뺀다.
+func hookEnv(prefix string, values map[string]string) []string {
+	var env []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, prefix) {
+			env = append(env, entry)
+		}
+	}
+	env = append(env, strings.TrimSuffix(prefix, "_")+"X_UNRELATED=not recorded")
+	for key, value := range values {
+		env = append(env, key+"="+value)
+	}
+	return env
 }
