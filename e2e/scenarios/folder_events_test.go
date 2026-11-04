@@ -3,8 +3,11 @@ package scenarios
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +16,8 @@ import (
 )
 
 // TestFolderEvents는 사용자 동작마다 hook이 받는 이벤트를 {{.Event}},{{.IsDir}},<감시 폴더 기준 경로>로 확인한다.
-// 폴더가 안의 내용과 함께 생기거나 사라지면 맨 위 폴더의 이벤트 하나만 온다.
+// 폴더가 안의 내용과 함께 생기거나 사라지면 맨 위 폴더의 이벤트 하나만 온다. 감시 중에 생기거나 옮겨 온 폴더
+// 안에서 나중에 만든 파일은 hook을 실행하고, 감시 대상 밖으로 옮긴 폴더 안에서 만든 파일은 실행하지 않는다.
 func TestFolderEvents(t *testing.T) {
 	s := harness.NewScenario(t)
 	outside := filepath.Join(s.Work, "outside")
@@ -43,41 +47,59 @@ func TestFolderEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	steps := []struct {
+	type step struct {
 		name string
 		act  func()
 		want []string
-	}{
-		{"mkdir", func() { mkdirAll(t, watch("src/pkg")) }, []string{"C,true,src/pkg"}},
-		{"mkdir -p", func() { mkdirAll(t, watch("src/a/b/c")) }, []string{"C,true,src/a"}},
-		{"move in a folder with files", func() { move(filepath.Join(outside, "x"), watch("src/x")) }, []string{"C,true,src/x"}},
+		// folder는 act가 파일을 만드는 감시 대상 안의 폴더다. 이 폴더에도 표지 파일을 만든다.
+		folder string
+	}
+	// createLater는 앞 단계에서 폴더 이벤트를 받은 폴더 안에 빈 파일 rel을 만들고, hook이 그 파일의 C를 받기를
+	// 기대하는 단계를 만든다.
+	createLater := func(name, rel string) step {
+		return step{name, func() { createEmpty(t, watch(rel)) }, []string{"C,false," + rel}, path.Dir(rel)}
+	}
+	steps := []step{
+		{"mkdir", func() { mkdirAll(t, watch("src/pkg")) }, []string{"C,true,src/pkg"}, ""},
+		createLater("create a file in a created folder", "src/pkg/after-mkdir.txt"),
+		{"mkdir -p", func() { mkdirAll(t, watch("src/a/b/c")) }, []string{"C,true,src/a"}, ""},
+		createLater("create a file in the deepest folder of mkdir -p", "src/a/b/c/after-mkdir-p.txt"),
+		{"move in a folder with files", func() { move(filepath.Join(outside, "x"), watch("src/x")) }, []string{"C,true,src/x"}, ""},
+		createLater("create a file in a folder moved in", "src/x/after-move-in.txt"),
 		{"mkdir and write a file in it", func() {
 			mkdirAll(t, watch("src/n"))
 			s.Write(watch("src/n/a.txt"), []byte("hi"))
-		}, []string{"C,true,src/n"}},
-		{"move in a folder with 300 files", func() { move(filepath.Join(outside, "big"), watch("src/big")) }, []string{"C,true,src/big"}},
+		}, []string{"C,true,src/n"}, ""},
+		{"move in a folder with 300 files", func() { move(filepath.Join(outside, "big"), watch("src/big")) }, []string{"C,true,src/big"}, ""},
 		{"rm -rf a folder with 300 files", func() {
 			if err := os.RemoveAll(watch("src/big")); err != nil {
 				t.Fatal(err)
 			}
-		}, []string{"D,true,src/big"}},
-		{"move a folder out of the target", func() { move(watch("src/x"), filepath.Join(outside, "x")) }, []string{"D,true,src/x"}},
-		{"rename a folder", func() { move(watch("src/n"), watch("src/m")) }, []string{"D,true,src/n", "C,true,src/m"}},
-		{"move a folder under another folder", func() { move(watch("src/m"), watch("dst/m")) }, []string{"D,true,src/m", "C,true,dst/m"}},
-		{"create a file", func() { createEmpty(t, watch("src/f.txt")) }, []string{"C,false,src/f.txt"}},
-		{"rename a file", func() { move(watch("src/f.txt"), watch("src/g.txt")) }, []string{"D,false,src/f.txt", "C,false,src/g.txt"}},
+		}, []string{"D,true,src/big"}, ""},
+		{"move a folder out of the target", func() { move(watch("src/x"), filepath.Join(outside, "x")) }, []string{"D,true,src/x"}, ""},
+		{"create a file in a folder moved out", func() { createEmpty(t, filepath.Join(outside, "x", "after-move-out.txt")) }, nil, ""},
+		{"rename a folder", func() { move(watch("src/n"), watch("src/m")) }, []string{"D,true,src/n", "C,true,src/m"}, ""},
+		createLater("create a file in a renamed folder", "src/m/after-rename.txt"),
+		{"move a folder under another folder", func() { move(watch("src/m"), watch("dst/m")) }, []string{"D,true,src/m", "C,true,dst/m"}, ""},
+		createLater("create a file in a folder moved under another folder", "dst/m/after-move.txt"),
+		{"create a file", func() { createEmpty(t, watch("src/f.txt")) }, []string{"C,false,src/f.txt"}, ""},
+		{"rename a file", func() { move(watch("src/f.txt"), watch("src/g.txt")) }, []string{"D,false,src/f.txt", "C,false,src/g.txt"}, ""},
 		{"delete a file", func() {
 			if err := os.Remove(watch("src/g.txt")); err != nil {
 				t.Fatal(err)
 			}
-		}, []string{"D,false,src/g.txt"}},
+		}, []string{"D,false,src/g.txt"}, ""},
 	}
 	seen := 0
 	for i, step := range steps {
 		step.act()
 		// Windows는 폴더마다 이벤트를 따로 받으므로, 이벤트가 생기는 폴더마다 표지 파일을 만들어 모두 기다린다.
+		dirs := []string{"", "src", "dst"}
+		if step.folder != "" {
+			dirs = append(dirs, step.folder)
+		}
 		var sentinels []string
-		for _, dir := range []string{"", "src", "dst"} {
+		for _, dir := range dirs {
 			rel := strings.TrimPrefix(fmt.Sprintf("%s/zz-sentinel-%d.txt", dir, i), "/")
 			createEmpty(t, watch(rel))
 			sentinels = append(sentinels, "C,false,"+rel)
@@ -104,6 +126,11 @@ func TestFolderEvents(t *testing.T) {
 			seen = len(lines)
 			return true
 		})
+		// Windows는 폴더를 옮긴 뒤 감시를 다시 만드는 순간에 감시 대상 안에서 생긴 변경을 hook에 두 번 보낼 수 있다.
+		// 사용 안내가 허용하는 동작이므로 폴더 안에 만든 파일의 연이은 같은 기록은 하나로 본다.
+		if step.folder != "" && runtime.GOOS == "windows" {
+			got = slices.Compact(got)
+		}
 		if !reflect.DeepEqual(got, step.want) {
 			t.Errorf("%s: hook received %q, want %q", step.name, got, step.want)
 		}

@@ -43,7 +43,7 @@
 | 시나리오 | 파일 | 검증 내용 | 사용하는 지원 코드 |
 |---|---|---|---|
 | [`TestGoldenPath`](scenarios/golden-path.ko.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 8개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
-| [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나 | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
+| [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나, 감시 중에 생기거나 옮겨 온 폴더 안에 나중에 만든 파일, 밖으로 옮긴 폴더의 hook 미실행 | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md) | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) | `scenarios/process_test.go` | `hookBatch.deliver`·`run.interrupt` 네 조합의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md) | `scenarios/process_test.go` | `run.concurrency: 2`에서 동시에 도는 프로세스 트리 hook 두 개의 종료, 둘 다 완료한 뒤의 종료 hook | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |

@@ -43,7 +43,7 @@
 | Scenario | File | What it verifies | Supporting code used |
 |---|---|---|---|
 | [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | Create, update, delete, hook order, 8 event variables | `Start`, `Hook`, `AwaitLine`, `Stop` |
-| [`TestFolderEvents`](scenarios/folder-events.md) | `scenarios/folder_events_test.go` | Events the hook receives for each folder and file action, one event for the top folder | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
+| [`TestFolderEvents`](scenarios/folder-events.md) | `scenarios/folder_events_test.go` | Events the hook receives for each folder and file action, one event for the top folder, a file created later in a folder created or moved in during watching, and no hook for a folder moved out | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.md) | `scenarios/process_test.go` | Three processes of the start hook, restart after the previous generation completes, finish hook order, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) | `scenarios/process_test.go` | Start hook shutdown and replacement in the four `hookBatch.deliver`·`run.interrupt` combinations | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md) | `scenarios/process_test.go` | Shutdown of two process tree hooks that run at the same time with `run.concurrency: 2`, finish hook after both complete | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
