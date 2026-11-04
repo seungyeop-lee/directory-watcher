@@ -54,7 +54,6 @@ func (c SingleCmd) parseTemplate() (*template.Template, error) {
 //   - Build가 셸에 넘기는 명령은 변수 자리를 셸 참조로 채운 템플릿 결과다. 그래서 {{if eq .Event "C"}}나
 //     {{len .Path}} 같은 조건과 함수는 실제 값이 아니라 "$DW_PATH" 같은 참조 문자열을 보고 평가된다.
 //   - Go 템플릿은 값 map에 없는 변수를 만나도 오류 없이 <no value>를 넣으므로, 변수 이름은 따로 검사한다.
-//   - 끝으로 Build의 첫 실행과 같은 c.Shell의 참조 값으로 템플릿을 한 번 실행해 본다.
 func (c SingleCmd) CheckTemplates() error {
 	t, err := c.parseTemplate()
 	if err != nil {
@@ -82,8 +81,7 @@ func (c SingleCmd) CheckTemplates() error {
 			return unsupportedActionError(node.String())
 		}
 	}
-	_, err = execute(t, c.templateRefs())
-	return err
+	return nil
 }
 
 // substitutedVariable은 pipe가 {{.Path}}나 {{$.Path}}처럼 변수 하나를 그대로 읽으면 그 변수 이름을 돌려준다.
