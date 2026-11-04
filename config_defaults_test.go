@@ -52,22 +52,12 @@ func schemaProperty(node map[string]any, name string) map[string]any {
 // 포인터로 받는 키는 적지 않은 것과 적은 것을 구별해 적지 않으면 기본값을 쓰므로, 스키마에도 default가 있어야 한다.
 func optionKeysWithCodeDefault() []string {
 	var keys []string
-	for group := range reflect.TypeFor[yamlconfig.WatchTargetsOptionConfig]().Fields() {
-		if group.Type.Kind() != reflect.Struct || group.Type == reflect.TypeFor[yaml.Node]() {
-			continue
+	eachYAMLField(&yamlconfig.WatchTargetsOptionConfig{}, func(key string, field reflect.Value) {
+		if field.Kind() == reflect.Pointer {
+			keys = append(keys, key)
 		}
-		for field := range group.Type.Fields() {
-			if field.Type.Kind() == reflect.Pointer {
-				keys = append(keys, joinKey(yamlKey(group), yamlKey(field)))
-			}
-		}
-	}
+	})
 	return keys
-}
-
-func yamlKey(field reflect.StructField) string {
-	name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
-	return name
 }
 
 // optionWith는 option 아래 키 경로 key 하나에 value를 적은 설정으로 옵션을 만든다.
@@ -117,8 +107,6 @@ func TestSchemaOptionDefaultsMatchCodeDefaults(t *testing.T) {
 		}
 	}
 }
-
-const exampleConfigFile = "config.example.yml"
 
 // documentedOptionDefaults는 doc의 option 아래 키 줄에서 phrase가 뽑은 기본값을 option 아래 키 경로별로 모은다.
 // config.example.yml처럼 감시 대상이 여럿이면 같은 키의 기본값이 여러 개일 수 있다.

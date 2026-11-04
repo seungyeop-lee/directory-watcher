@@ -1,10 +1,8 @@
 package main
 
 import (
-	"os"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
@@ -18,50 +16,6 @@ import (
 // 실패하면 USAGE.md와 USAGE.ko.md의 해당 표와 예시를 코드 목록에 맞춰 함께 고친다.
 // 없앤 키의 오류가 인용하는 USAGE 절 제목은 반대로 코드(internal/config/yaml/config.go)에 손으로 적혀 있으므로, 그 검사가 실패하면 코드의 제목을 USAGE.md의 절 제목에 맞춘다.
 
-var usageFiles = []string{"USAGE.md", "USAGE.ko.md"}
-
-// readDoc은 저장소 루트의 문서 file을 읽는다.
-// Windows의 git은 줄 끝을 CRLF로 바꿔 받을 수 있으므로, 줄 단위로 맞추는 검사가 OS와 관계없이 같도록 줄 끝을 LF로 바꾼다.
-func readDoc(t *testing.T, file string) string {
-	t.Helper()
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return strings.ReplaceAll(string(data), "\r\n", "\n")
-}
-
-// markdownTable은 문서의 표 하나다. 칸의 앞뒤 공백은 뺀다.
-type markdownTable struct {
-	header []string
-	rows   [][]string
-}
-
-// markdownTables는 문서에서 구분 행(|---|) 바로 위의 행을 머리 행으로 하는 표를 모두 찾는다.
-func markdownTables(doc string) []markdownTable {
-	var tables []markdownTable
-	lines := strings.Split(doc, "\n")
-	for i := 1; i < len(lines); i++ {
-		if !strings.HasPrefix(lines[i], "|-") {
-			continue
-		}
-		table := markdownTable{header: tableCells(lines[i-1])}
-		for i++; i < len(lines) && strings.HasPrefix(lines[i], "|"); i++ {
-			table.rows = append(table.rows, tableCells(lines[i]))
-		}
-		tables = append(tables, table)
-	}
-	return tables
-}
-
-func tableCells(line string) []string {
-	cells := strings.Split(strings.Trim(line, "|"), "|")
-	for i := range cells {
-		cells[i] = strings.TrimSpace(cells[i])
-	}
-	return cells
-}
-
 // matchingRows는 모든 표에서 첫 칸이 pattern에 맞는 행마다, 첫 칸에서 pattern의 첫 묶음을 뽑고 나머지 칸과 함께 돌려준다.
 func matchingRows(doc string, pattern *regexp.Regexp) (keys []string, rest [][]string) {
 	for _, table := range markdownTables(doc) {
@@ -73,13 +27,6 @@ func matchingRows(doc string, pattern *regexp.Regexp) (keys []string, rest [][]s
 		}
 	}
 	return keys, rest
-}
-
-func sameSet(got, want []string) bool {
-	got, want = slices.Clone(got), slices.Clone(want)
-	slices.Sort(got)
-	slices.Sort(want)
-	return slices.Equal(got, want)
 }
 
 func TestUsageListsSameHookVariablesAsCode(t *testing.T) {
@@ -130,33 +77,13 @@ func TestUsageListsSameQueueWarningVariablesAsCode(t *testing.T) {
 }
 
 // eachRemovedKeyNode는 c 안에 있는 yaml.Node 필드마다 키 경로와 필드를 visit에 넘긴다.
-// yaml.Node 필드는 v3에서 없앤 키를 받아 오류로 알리려고 둔 것이다. 목록 안의 키는 목록 키 바로 아래 키로 센다(watchTargets.option.excludeDir).
+// yaml.Node 필드는 v3에서 없앤 키를 받아 오류로 알리려고 둔 것이다.
 func eachRemovedKeyNode(c *yamlconfig.Config, visit func(key string, node *yaml.Node)) {
-	var walk func(v reflect.Value, parent string)
-	walk = func(v reflect.Value, parent string) {
-		for i := range v.NumField() {
-			name, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("yaml"), ",")
-			if name == "" {
-				continue
-			}
-			key, field := joinKey(parent, name), v.Field(i)
-			if node, ok := field.Addr().Interface().(*yaml.Node); ok {
-				visit(key, node)
-				continue
-			}
-			switch field.Kind() {
-			case reflect.Struct:
-				walk(field, key)
-			case reflect.Slice:
-				for j := range field.Len() {
-					if field.Index(j).Kind() == reflect.Struct {
-						walk(field.Index(j), key)
-					}
-				}
-			}
+	eachYAMLField(c, func(key string, field reflect.Value) {
+		if node, ok := field.Addr().Interface().(*yaml.Node); ok {
+			visit(key, node)
 		}
-	}
-	walk(reflect.ValueOf(c).Elem(), "")
+	})
 }
 
 func TestRemovedKeyErrorsCiteExistingUsageSections(t *testing.T) {
