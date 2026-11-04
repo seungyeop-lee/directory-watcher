@@ -24,35 +24,42 @@ import (
 const breakSignalExit = 3
 
 // TestBreakSignalProcess는 hook 대신 실행되는 Go 프로그램이다. CTRL+BREAK를 받으면 breakSignalExit로 끝난다.
-// DW_BREAK_SIGNAL_RECORD가 있으면 그 파일에 시작과 신호 수신을 pid와 함께 한 줄씩 덧붙이고,
-// DW_BREAK_SIGNAL_IGNORE=1이면 신호를 받아도 끝나지 않는다.
+// DW_BREAK_SIGNAL_RECORD가 있으면 그 파일에 시작과 신호 수신을 pid와 함께 한 줄씩 덧붙이고, 시작에는 프로세스 생성 시각도
+// 덧붙인다. DW_BREAK_SIGNAL_IGNORE=1이면 신호를 받아도 끝나지 않는다.
 // DW_BREAK_SIGNAL_CHILD=1이면 minRunBeforeBreak가 지난 뒤 자기 사본을 자식으로 시작하고 나서 ready를 쓴다.
+// DW_BREAK_SIGNAL_LATE_CHILD=1이면 ready를 쓴 뒤 표준 입력에서 1바이트를 읽고 나서 자기 사본을 자식으로 하나 더 시작한다.
 func TestBreakSignalProcess(t *testing.T) {
 	if os.Getenv("DW_BREAK_SIGNAL_HELPER") != "1" {
 		return
 	}
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
-	record := func(event string) {
+	record := func(event string, fields ...any) {
 		if file := os.Getenv("DW_BREAK_SIGNAL_RECORD"); file != "" {
 			f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				os.Exit(2)
 			}
-			fmt.Fprintf(f, "%s %d\n", event, os.Getpid())
+			fmt.Fprintln(f, append([]any{event, os.Getpid()}, fields...)...)
 			f.Close()
 		}
 	}
-	record("start")
+	var created, exited, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(windows.CurrentProcess(), &created, &exited, &kernel, &user); err != nil {
+		os.Exit(2)
+	}
+	record("start", created.Nanoseconds())
 	if os.Getenv("DW_BREAK_SIGNAL_CHILD") == "1" {
 		time.Sleep(minRunBeforeBreak)
-		child := exec.Command(os.Args[0], "-test.run=^TestBreakSignalProcess$")
-		child.Env = append(os.Environ(), "DW_BREAK_SIGNAL_CHILD=")
-		if err := child.Start(); err != nil {
-			os.Exit(2)
-		}
+		startBreakSignalChild()
 	}
 	os.Stdout.WriteString("ready\n")
+	if os.Getenv("DW_BREAK_SIGNAL_LATE_CHILD") == "1" {
+		if _, err := os.Stdin.Read(make([]byte, 1)); err != nil {
+			os.Exit(2)
+		}
+		startBreakSignalChild()
+	}
 	timeout := time.After(30 * time.Second)
 	for {
 		select {
@@ -64,6 +71,15 @@ func TestBreakSignalProcess(t *testing.T) {
 		case <-timeout:
 			os.Exit(0)
 		}
+	}
+}
+
+// startBreakSignalChild는 TestBreakSignalProcess의 사본을 자식을 만들지 않는 자식으로 시작한다.
+func startBreakSignalChild() {
+	child := exec.Command(os.Args[0], "-test.run=^TestBreakSignalProcess$")
+	child.Env = append(os.Environ(), "DW_BREAK_SIGNAL_CHILD=", "DW_BREAK_SIGNAL_LATE_CHILD=")
+	if err := child.Start(); err != nil {
+		os.Exit(2)
 	}
 }
 
@@ -222,6 +238,55 @@ func TestRunCommandDelaysBreakRightAfterDescendantStart(t *testing.T) {
 	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
 }
 
+// 취소된 hook이 첫 CTRL+BREAK를 기다리는 동안 시작한 자손도, 시작 후 minRunBeforeBreak가 지난 뒤에 CTRL+BREAK를 받고
+// 끝나야 한다.
+func TestRunCommandDelaysBreakForDescendantStartedWhileWaiting(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "record")
+	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
+	t.Setenv("DW_BREAK_SIGNAL_CHILD", "1")
+	t.Setenv("DW_BREAK_SIGNAL_LATE_CHILD", "1")
+	ctx := NewWatcherContext("").NewRun()
+	cmd, sentAt := breakSignalHook(t, ctx)
+	stdin, startChild, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	defer startChild.Close()
+	cmd.Stdin = stdin
+	done := runUntilReady(t, ctx, cmd)
+	canceled := time.Now()
+	ctx.Cancel()
+	// hook이 잠들었다가 자식을 시작하게 하면 VM에서는 hook이 늦게 깨어나 첫 신호 뒤에야 자식을 시작하는 일이 잦으므로,
+	// 자식을 시작할 때는 테스트가 정한다.
+	time.Sleep(minRunBeforeBreak / 4)
+	if _, err := startChild.Write([]byte{0}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(breakGrace / 2):
+		t.Fatal("canceled hook and the programs it started did not end on CTRL+BREAK")
+	}
+
+	// VM에서는 프로그램이 늦게 시작해 다른 프로그램이 신호를 받은 뒤에 시작을 기록하기도 하므로 기록 순서는 보지 않는다.
+	events := recordedEvents(t, record)
+	slices.Sort(events)
+	if !slices.Equal(events, []string{"signal", "signal", "signal", "start", "start", "start"}) {
+		t.Fatalf("recorded %v, want all three programs to start and get CTRL+BREAK once", events)
+	}
+	// VM이 잠시 멈추면 자식이 첫 신호 뒤에 시작하기도 하므로, 신호마다 그 전에 만들어진 프로그램만 확인한다.
+	created := recordedCreations(t, record)
+	for _, sent := range sentAt() {
+		for _, c := range created {
+			if c.Before(sent) && sent.Sub(c) < minRunBeforeBreak {
+				t.Fatalf("CTRL+BREAK sent %s after a program started, want at least %s", sent.Sub(c), minRunBeforeBreak)
+			}
+		}
+	}
+	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
+}
+
 // CTRL+BREAK로 끝나지 않는 명령은 breakGrace가 지나면 셸과 자손이 함께 끝나야 한다.
 func TestRunCommandEndsProcessTreeAfterGrace(t *testing.T) {
 	grace := breakGrace
@@ -294,6 +359,25 @@ func recordedEvents(t *testing.T, record string) []string {
 		events = append(events, event)
 	}
 	return events
+}
+
+// recordedCreations는 TestBreakSignalProcess가 기록한 프로세스 생성 시각들을 돌려준다.
+func recordedCreations(t *testing.T, record string) []time.Time {
+	t.Helper()
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created []time.Time
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var event string
+		var pid uint32
+		var nanoseconds int64
+		if n, _ := fmt.Sscan(line, &event, &pid, &nanoseconds); n == 3 && event == "start" {
+			created = append(created, time.Unix(0, nanoseconds))
+		}
+	}
+	return created
 }
 
 // recordedPID는 TestBreakSignalProcess가 처음 기록한 pid를 돌려준다.

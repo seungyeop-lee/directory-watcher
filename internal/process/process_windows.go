@@ -21,6 +21,11 @@ import (
 // 닿지 않고 사라지기도 했다. 100ms 이후에 보낸 370번에서는 둘 다 나오지 않았다.
 const minRunBeforeBreak = 100 * time.Millisecond
 
+// maxFirstBreakDelay는 stopJob이 첫 CTRL+BREAK를 늦추는 최대 시간이다. 취소된 명령이 자손을 계속 만들어도 이 시간이 지나면
+// 막 만들어진 프로세스가 있더라도 첫 신호를 보낸다. 빌드 도구처럼 짧은 프로세스를 잇달아 띄우는 hook의 교체가 오래 늦어지지
+// 않도록 breakGrace보다 훨씬 짧게 잡았다.
+const maxFirstBreakDelay = time.Second
+
 // breakGrace는 취소된 명령에 첫 CTRL+BREAK를 보낸 뒤 job의 프로세스를 강제로 끝내기까지 기다리는 시간이다.
 // 테스트만 바꾼다.
 var breakGrace = shutdownGrace
@@ -117,25 +122,19 @@ func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(job windows.Handle)) {
 }
 
 // stopJob은 send로 CTRL+BREAK를 보내고 job의 프로세스가 모두 끝날 때까지 기다린 뒤, 첫 send의 오류를 돌려준다.
-// 만들어진 지 minRunBeforeBreak가 지나지 않은 프로세스는 CTRL+BREAK를 받지 못하거나 0xC0000005로 끝나기도 하므로,
-// 첫 신호는 job에서 가장 늦게 만들어진 프로세스가 minRunBeforeBreak만큼 실행된 뒤에 보낸다. CTRL+BREAK는 보낸 순간
-// 프로세스 그룹에 있던 프로세스에만 가므로, cmd.exe가 명령 목록의 다음 프로그램을 시작하는 것처럼 첫 신호를 기다리는
-// 동안이나 보낸 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다. 들어온 프로세스가 minRunBeforeBreak만큼 실행된 뒤에
-// 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상 종료하는 프로그램에는 두 번째 신호가 가지 않는다.
+// 첫 신호는 첫 신호를 기다리는 동안 들어온 프로세스까지 job의 프로세스가 모두 minRunBeforeBreak만큼 실행된 뒤에 보내되,
+// maxFirstBreakDelay보다 늦추지는 않는다(waitBeforeFirstBreak). CTRL+BREAK는 보낸 순간 프로세스 그룹에 있던 프로세스에만
+// 가므로, cmd.exe가 명령 목록의 다음 프로그램을 시작하는 것처럼 첫 신호 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다.
+// 들어온 프로세스가 minRunBeforeBreak만큼 실행된 뒤에 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상
+// 종료하는 프로그램에는 두 번째 신호가 가지 않는다.
 // 첫 신호 뒤 breakGrace가 지나도 남은 프로세스는 job과 함께 끝낸다. 신호를 받지 못한 프로세스와 PowerShell처럼
 // 신호로 끝나지 않는 프로세스가 여기서 끝난다. Windows PowerShell은 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지
 // 않고 디버거로 들어가며, 표준 입력이 콘솔이면 거기서 입력을 기다린다.
 func stopJob(job windows.Handle, send func() error) error {
-	accounting, err := queryJob(job)
-	var lastCreated time.Time
-	if err == nil {
-		lastCreated, err = lastProcessCreation(job)
-	}
+	signaled, err := waitBeforeFirstBreak(job)
 	if err != nil {
 		return errors.Join(send(), err)
 	}
-	signaled := accounting.totalProcesses
-	time.Sleep(time.Until(lastCreated.Add(minRunBeforeBreak)))
 	sendErr := send()
 	deadline := time.Now().Add(breakGrace)
 	joined, lastJoin := signaled, time.Time{}
@@ -160,6 +159,31 @@ func stopJob(job windows.Handle, send func() error) error {
 		}
 		time.Sleep(jobPollInterval)
 	}
+}
+
+// waitBeforeFirstBreak은 job에서 가장 늦게 만들어진 프로세스가 minRunBeforeBreak만큼 실행될 때까지 기다리고, 기다림을
+// 마칠 때까지 job에 들어온 프로세스 수를 돌려준다. 만들어진 지 minRunBeforeBreak가 지나지 않은 프로세스는 CTRL+BREAK를
+// 받지 못하거나 0xC0000005로 끝나기도 한다. 기다리는 동안 들어온 프로세스가 있으면 그 프로세스를 기준으로 다시 기다리되,
+// 처음부터 maxFirstBreakDelay가 지나면 더 기다리지 않는다.
+func waitBeforeFirstBreak(job windows.Handle) (uint32, error) {
+	limit := time.Now().Add(maxFirstBreakDelay)
+	accounting, err := queryJob(job)
+	for err == nil {
+		joined := accounting.totalProcesses
+		var lastCreated time.Time
+		if lastCreated, err = lastProcessCreation(job); err != nil {
+			break
+		}
+		wake := lastCreated.Add(minRunBeforeBreak)
+		if wake.After(limit) {
+			wake = limit
+		}
+		time.Sleep(time.Until(wake))
+		if accounting, err = queryJob(job); err == nil && (accounting.totalProcesses == joined || !time.Now().Before(limit)) {
+			return accounting.totalProcesses, nil
+		}
+	}
+	return 0, err
 }
 
 // jobProcessIDList는 JOBOBJECT_BASIC_PROCESS_ID_LIST다. 목록 크기는 hook 하나가 동시에 실행하는 프로세스 수보다
