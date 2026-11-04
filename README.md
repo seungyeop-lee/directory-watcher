@@ -103,7 +103,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 ## Installation
 
 > [!NOTE]
-> The Homebrew cask needs Homebrew 5.1.14 or later. For updating Homebrew and moving from the version 2.x formula, see [Installing with Homebrew](docs/guide/installation.md#installing-with-homebrew).
+> The Homebrew cask needs Homebrew 5.1.14 or later. For updating Homebrew, see [Installing with Homebrew](docs/guide/installation.md#installing-with-homebrew).
 
 Use a package manager:
 

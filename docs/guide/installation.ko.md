@@ -20,15 +20,6 @@ brew update
 brew install --cask seungyeop-lee/tap/directory-watcher
 ```
 
-- 2.x 버전을 `brew install seungyeop-lee/tap/directory-watcher`로 설치했다면 Homebrew formula로 설치된 것이고, formula는 더 이상 새 버전을 받지 않습니다.
-
-formula를 지운 뒤 cask로 설치합니다.
-
-```shell
-brew uninstall --formula directory-watcher
-brew install --cask seungyeop-lee/tap/directory-watcher
-```
-
 ## 명령줄 옵션
 
 ```shell

@@ -103,7 +103,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 ## 설치
 
 > [!NOTE]
-> Homebrew cask를 설치하려면 Homebrew 5.1.14 이상이 필요합니다. Homebrew 업데이트와 2.x 버전 formula에서 옮겨 오는 방법은 [Homebrew로 설치하기](docs/guide/installation.ko.md#homebrew로-설치하기)에 있습니다.
+> Homebrew cask를 설치하려면 Homebrew 5.1.14 이상이 필요합니다. Homebrew를 업데이트하는 방법은 [Homebrew로 설치하기](docs/guide/installation.ko.md#homebrew로-설치하기)에 있습니다.
 
 패키지 관리자로 설치합니다.
 

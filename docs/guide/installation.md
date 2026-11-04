@@ -20,15 +20,6 @@ Then install the cask:
 brew install --cask seungyeop-lee/tap/directory-watcher
 ```
 
-- If you installed version 2.x with `brew install seungyeop-lee/tap/directory-watcher`, you have the Homebrew formula, which no longer gets new versions.
-
-Uninstall the formula, then install the cask:
-
-```shell
-brew uninstall --formula directory-watcher
-brew install --cask seungyeop-lee/tap/directory-watcher
-```
-
 ## Command-line options
 
 ```shell
