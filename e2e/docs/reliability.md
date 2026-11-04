@@ -5,17 +5,18 @@
 ## Race and overload verification
 
 ```sh
-go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt'
+go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
 go test -race ./...
 ```
 
 - What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), and [`TestRunInterrupt`](scenarios/run-interrupt.md) documents.
+- The repeated scenarios also include [`TestQueueWarningCLI`](scenarios/queue-warning-cli.md) and [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md).
 
 ### Scope of the internal tests
 
 - Controlled internal tests check, independently of the number of OS notifications, the exact order under `hookBatch.deliver: each`, the last valid path under `deliver: last`, separate runs for waits that end while a hook runs, excluded events, no replacement before cancellation completes, no runs after shutdown, and preservation of the first fatal error.
-- The per-target pending limit is `queue.size` runs (2048 by default), with one running generation and one `hookBatch` wait at a time. The tests that fill the queue set a small `queue.size` instead of relying on the default.
+- The per-target pending limit is `queue.size` runs (2048 by default), with at most `run.concurrency` runs at a time (1 by default) and one `hookBatch` wait at a time. The tests that fill the queue set a small `queue.size` instead of relying on the default.
 - When the queue is full, the watcher exits with a loss error instead of growing the buffer or waiting for room, including for runs made from events collected for folder events.
 - Shutdown cancels and cleans up the queue rather than draining it.
 
@@ -49,8 +50,10 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 
 - Real filesystem load tests allow OS notifications to be duplicated or merged. They do not assume that the number of file operations equals the number of hook runs.
 - Error propagation up to the CLI can be checked separately by injecting an fsnotify loss error with a verification-only source overlay. It confirms, in the four `hookBatch.deliver`·`run.interrupt` combinations, that the first fatal error is preserved, the notification runs once, and new normal hooks of other targets are blocked. The overlay run commands and results are kept in the issue report, and release binaries have no injection option. A successful injection is not evidence of an observed real OS overflow.
-- The real Linux overflow experiment pauses fsnotify receiving, creates more files than the current `max_queued_events`, and then observes `ErrEventOverflow`. It does not change host or shared kernel settings. macOS kqueue does not report this sentinel, so the same guarantee is not claimed there.
-- The basis is fsnotify v1.7.0's [event and error contract](https://github.com/fsnotify/fsnotify/blob/v1.7.0/backend_inotify.go) and [common errors](https://github.com/fsnotify/fsnotify/blob/v1.7.0/fsnotify.go). Detection of every OS-level loss, lossless handling of unbounded input, and automatic recovery are not guaranteed. Arbitrary finish hooks have no separate time limit, and the process tree verification targets helper programs that handle SIGTERM or Windows CTRL+BREAK and wait for their descendants. On Windows, [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) also checks a program that `cmd` starts after the first CTRL+BREAK, and [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) checks `powershell` hooks. The forced termination of processes still running 20 seconds after the first CTRL+BREAK is checked only by the unit test `TestRunCommandEndsProcessTreeAfterGrace` in `internal/process`, with the 20 seconds shortened to 1 second.
+- The real Linux overflow experiment pauses fsnotify receiving, creates more files than the current `max_queued_events`, and then observes `ErrEventOverflow`. It does not change host or shared kernel settings.
+- Windows also reports `ErrEventOverflow` when its notification buffer overflows, as shown in the [Windows backend](https://github.com/fsnotify/fsnotify/blob/v1.10.1/backend_windows.go#L580-L584); a real Windows overflow has not been observed in this verification.
+- macOS kqueue does not report this sentinel, so the same guarantee is not claimed there.
+- The basis is fsnotify v1.10.1's [Linux overflow handling](https://github.com/fsnotify/fsnotify/blob/v1.10.1/backend_inotify.go#L397-L401) and [common errors](https://github.com/fsnotify/fsnotify/blob/v1.10.1/fsnotify.go#L262-L270). Detection of every OS-level loss, lossless handling of unbounded input, and automatic recovery are not guaranteed. Arbitrary finish hooks have no separate time limit, and the process tree verification targets helper programs that handle SIGTERM or Windows CTRL+BREAK and wait for their descendants. On Windows, [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) also checks a program that `cmd` starts after the first CTRL+BREAK, and [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) checks `powershell` hooks. The forced termination of processes still running 20 seconds after the first CTRL+BREAK is checked only by the unit test `TestRunCommandEndsProcessTreeAfterGrace` in `internal/process`, with the 20 seconds shortened to 1 second.
 
 ### Reproducing the injection smoke test
 

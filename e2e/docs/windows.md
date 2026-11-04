@@ -20,7 +20,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 - If the test process has no console, it allocates one with `AllocConsole` and runs the watcher and each hook in a separate process group.
 - A graceful shutdown request sends `CTRL_BREAK_EVENT` only to that group on the same console.
-- [Go delivers CTRL+BREAK as `os.Interrupt`](https://github.com/golang/go/blob/go1.23.0/src/os/signal/doc.go), so the existing SIGINT handling of the CLI is used.
+- [Go delivers CTRL+BREAK as `os.Interrupt`](https://github.com/golang/go/blob/go1.27.0/src/os/signal/doc.go#L213-L220), so the existing SIGINT handling of the CLI is used.
 - Neither a group-targeted `CTRL_C_EVENT` nor `TASKKILL /F` is used as evidence of graceful shutdown.
 - Helper processes inherit the console and group, handle the signal, and wait for their descendants to exit.
 - The same graceful shutdown guarantee does not apply to arbitrary external programs that create a new console or ignore the signal.
@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 The Windows E2E runs the watcher without Git Bash and checks that the watcher stops canceled hooks.
 
-- For `run.interrupt: oldest` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-03).
+- For `run.interrupt: oldest` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-04).
 - On shutdown, the parent, child, and grandchild processes of two hooks that run at the same time with `run.concurrency: 2` all end on the signal before the finish hook runs: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md) (2026-11-04).
 - The next program of a canceled `cmd` command list ends: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) (2026-11-04).
 - A `powershell` hook canceled 0–1000 ms after it starts does not run its program to completion: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) (2026-11-04).
@@ -56,7 +56,7 @@ The Windows E2E runs the watcher without Git Bash and checks that the watcher st
 ## Checking CI results
 
 - In GitHub Actions, open `ci` → `test (windows-latest)` for **the commit SHA you are verifying**.
-- Check that the four combinations of `TestFastInflowSlowHook`, `TestTargetsRunIndependently`, `TestBoundedOverloadCLI`, the four subtests of `TestRunInterrupt`, the three separators of `TestCanceledCommandListStopsNextProgram`, and the eleven cancel points of `TestCanceledPowershellHookStops` in the `go test -count=1 -race ./...` step, the six modes in the notification verification step, and the three tests and four option combinations in the repeat step show `PASS` and no `SKIP`, and that the intentional failure verification step succeeded.
+- Check that the four combinations of `TestFastInflowSlowHook`, `TestTargetsRunIndependently`, `TestBoundedOverloadCLI`, `TestQueueWarningCLI`, `TestConcurrentRunsShutdown`, the four subtests of `TestRunInterrupt`, the three separators of `TestCanceledCommandListStopsNextProgram`, and the eleven cancel points of `TestCanceledPowershellHookStops` in the `go test -count=1 -race ./...` step, the six modes in the notification verification step, and the three tests and four option combinations in the repeat step show `PASS` and no `SKIP`, and that the intentional failure verification step succeeded.
 - From the `e2e-diagnostics-windows-latest` artifact, download the records from before and after notification cleanup and `notification.log`, `failure.log`, and `timeout.log`.
 - A past success on a different SHA, a cross-compilation, or a Linux Docker result is not evidence of a Windows run for that commit.
 - If there is no Windows run result for that commit, leave the Windows item as `Not verified`.

@@ -55,6 +55,7 @@ sequenceDiagram
 ## Running
 
 - Run from the repository root.
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 

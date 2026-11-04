@@ -20,7 +20,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 - 테스트 프로세스에 콘솔이 없으면 `AllocConsole`로 할당하고, watcher와 각 hook을 별도 프로세스 그룹으로 실행합니다.
 - 정상 종료 요청은 같은 콘솔의 해당 그룹에만 `CTRL_BREAK_EVENT`를 보냅니다.
-- [Go는 CTRL+BREAK를 `os.Interrupt`로 전달](https://github.com/golang/go/blob/go1.23.0/src/os/signal/doc.go)하므로 기존 CLI의 SIGINT 수신을 사용합니다.
+- [Go는 CTRL+BREAK를 `os.Interrupt`로 전달](https://github.com/golang/go/blob/go1.27.0/src/os/signal/doc.go#L213-L220)하므로 기존 CLI의 SIGINT 수신을 사용합니다.
 - `CTRL_C_EVENT`의 그룹 지정이나 `TASKKILL /F`를 정상 종료 증거로 사용하지 않습니다.
 - 보조 프로세스는 콘솔·그룹을 상속하고 신호를 처리하며 자손 종료를 기다립니다.
 - 새 콘솔을 만들거나 신호를 무시하는 임의의 외부 프로그램에 같은 정상 종료 보장을 적용하지 않습니다.
@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 
 Windows E2E는 Git Bash 없이 watcher를 실행해, watcher가 취소된 hook을 멈추는지 확인합니다.
 
-- `run.interrupt: oldest`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 신호를 받고 끝납니다: [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) (2026-11-03).
+- `run.interrupt: oldest`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 신호를 받고 끝납니다: [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) (2026-11-04).
 - 종료할 때 `run.concurrency: 2`로 동시에 도는 hook 두 개의 부모·자식·손자 프로세스가 모두 신호를 받고 끝난 뒤 종료 hook이 실행됩니다: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md) (2026-11-04).
 - 취소된 `cmd` 명령 목록의 다음 프로그램이 끝납니다: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md) (2026-11-04).
 - 시작 후 0–1000ms에 취소한 `powershell` hook은 프로그램을 끝까지 실행하지 않습니다: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md) (2026-11-04).
@@ -56,7 +56,7 @@ Windows E2E는 Git Bash 없이 watcher를 실행해, watcher가 취소된 hook�
 ## CI 결과 확인
 
 - GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다.
-- `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`·`TestRunInterrupt`의 네 하위 테스트·`TestCanceledCommandListStopsNextProgram`의 세 구분자·`TestCanceledPowershellHookStops`의 열한 시점, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다.
+- `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestTargetsRunIndependently`·`TestBoundedOverloadCLI`·`TestQueueWarningCLI`·`TestConcurrentRunsShutdown`·`TestRunInterrupt`의 네 하위 테스트·`TestCanceledCommandListStopsNextProgram`의 세 구분자·`TestCanceledPowershellHookStops`의 열한 시점, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 네 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다.
 - `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다.
 - 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다.
 - 해당 커밋의 Windows 실행 결과가 없으면 Windows 항목은 `Not verified`로 남깁니다.

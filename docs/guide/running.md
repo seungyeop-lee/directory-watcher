@@ -152,6 +152,6 @@ Error context is passed as environment variables, never interpolated into comman
 - On Windows, a hook canceled less than 100 ms after it starts gets CTRL+BREAK only when 100 ms have passed since its start, so replacement and shutdown right after a hook starts take up to 100 ms longer.
 - On Windows, processes started by a hook that finishes without being canceled keep running.
 - What the Windows E2E checks about stopping canceled hooks is listed in [Windows E2E](../../e2e/docs/windows.md#hook-cancellation-checks).
-- Filesystem actions do not map one-to-one to notifications. Linux reports an OS event overflow, which stops processing like a full dispatch queue; macOS does not report one. Application bounds do not guarantee detection of every OS-level loss. See [E2E scenarios and limits](../../e2e/docs/reliability.md#race-and-overload-verification).
+- Filesystem actions do not map one-to-one to notifications. Linux and Windows report an OS event overflow, which stops processing like a full dispatch queue; macOS does not report one. Application bounds do not guarantee detection of every OS-level loss. See [E2E scenarios and limits](../../e2e/docs/reliability.md#race-and-overload-verification), which distinguishes the observed Linux overflow from the Windows backend contract.
 
 - The order of these steps is drawn in [How it works](how-it-works.md).

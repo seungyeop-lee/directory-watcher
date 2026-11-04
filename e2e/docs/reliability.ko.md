@@ -5,17 +5,18 @@
 ## 경합과 과부하 검증
 
 ```sh
-go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt'
+go test -count=3 -v -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
 go test -race ./...
 ```
 
 - 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.ko.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) 문서에 있습니다.
+- 반복 대상에는 [`TestQueueWarningCLI`](scenarios/queue-warning-cli.ko.md)와 [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md)도 포함됩니다.
 
 ### 내부 테스트의 검증 범위
 
 - 제어된 내부 테스트는 OS 알림 개수와 무관하게 `hookBatch.deliver: each`의 정확한 순서, `deliver: last`의 마지막 유효 경로, hook이 도는 동안 끝난 기다림마다 따로 만든 실행, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다.
-- 대상별 대기 실행 상한은 `queue.size`(기본 2048)개이며, 실행은 한 세대이고 `hookBatch` 기다림은 한 번에 하나입니다. 대기열을 채우는 테스트는 기본값에 기대지 않고 작은 `queue.size`를 지정합니다.
+- 대상별 대기 실행 상한은 `queue.size`(기본 2048)개이며, 실행은 한 번에 최대 `run.concurrency`개(기본 1)이고 `hookBatch` 기다림은 한 번에 하나입니다. 대기열을 채우는 테스트는 기본값에 기대지 않고 작은 `queue.size`를 지정합니다.
 - 대기열이 가득 차면 버퍼를 늘리거나 자리가 나기를 기다리지 않고 유실 오류로 종료하며, 폴더 이벤트용으로 모은 이벤트에서 만든 실행도 같습니다.
 - 종료는 대기열을 처리 완료하는 동작이 아니라 취소·정리하는 동작입니다.
 
@@ -49,8 +50,10 @@ go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChan
 
 - 실제 파일시스템 부하 테스트는 OS 알림의 중복·병합을 허용합니다. 파일 조작 횟수와 hook 횟수를 같다고 단정하지 않습니다.
 - CLI까지의 오류 전달은 검증 전용 소스 overlay로 fsnotify 유실 오류를 주입해 별도 검사할 수 있습니다. `hookBatch.deliver`·`run.interrupt` 네 조합에서 최초 치명적 오류 보존, 알림 한 번 실행, 다른 대상의 새 일반 hook 차단을 확인합니다. overlay 실행 명령과 결과는 이슈 보고서에 남기며 배포 바이너리에는 주입 옵션이 없습니다. 주입 성공은 실제 OS overflow 관찰 증거가 아닙니다.
-- 실제 Linux overflow 실험은 fsnotify 수신을 잠시 멈추고 현재 `max_queued_events`보다 많은 파일을 생성한 뒤 `ErrEventOverflow`를 관찰합니다. 호스트·공유 커널 설정은 변경하지 않습니다. macOS kqueue는 이 sentinel을 보고하지 않으므로 같은 보장을 주장하지 않습니다.
-- fsnotify v1.7.0의 [이벤트·오류 계약](https://github.com/fsnotify/fsnotify/blob/v1.7.0/backend_inotify.go)과 [공통 오류](https://github.com/fsnotify/fsnotify/blob/v1.7.0/fsnotify.go)를 기준으로 합니다. 모든 OS 유실의 감지, 무제한 입력의 무손실 처리, 자동 복구는 보장하지 않습니다. 임의의 종료 hook에는 별도 제한 시간이 없으며, 프로세스 트리 검증은 SIGTERM 또는 Windows CTRL+BREAK를 처리하고 자손을 기다리는 보조 프로그램을 대상으로 합니다. Windows에서는 [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md)이 `cmd`가 첫 CTRL+BREAK 뒤에 시작한 프로그램을, [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md)가 `powershell` hook을 함께 확인합니다. 첫 CTRL+BREAK 뒤 20초가 지나도 남은 프로세스를 강제로 끝내는 동작은 `internal/process`의 단위 테스트 `TestRunCommandEndsProcessTreeAfterGrace`가 20초를 1초로 줄여서만 확인합니다.
+- 실제 Linux overflow 실험은 fsnotify 수신을 잠시 멈추고 현재 `max_queued_events`보다 많은 파일을 생성한 뒤 `ErrEventOverflow`를 관찰합니다. 호스트·공유 커널 설정은 변경하지 않습니다.
+- Windows도 알림 버퍼가 넘치면 `ErrEventOverflow`를 보고합니다([Windows 백엔드](https://github.com/fsnotify/fsnotify/blob/v1.10.1/backend_windows.go#L580-L584)). 이 검증에서 실제 Windows overflow는 관찰하지 않았습니다.
+- macOS kqueue는 이 sentinel을 보고하지 않으므로 같은 보장을 주장하지 않습니다.
+- fsnotify v1.10.1의 [Linux overflow 처리](https://github.com/fsnotify/fsnotify/blob/v1.10.1/backend_inotify.go#L397-L401)와 [공통 오류](https://github.com/fsnotify/fsnotify/blob/v1.10.1/fsnotify.go#L262-L270)를 기준으로 합니다. 모든 OS 유실의 감지, 무제한 입력의 무손실 처리, 자동 복구는 보장하지 않습니다. 임의의 종료 hook에는 별도 제한 시간이 없으며, 프로세스 트리 검증은 SIGTERM 또는 Windows CTRL+BREAK를 처리하고 자손을 기다리는 보조 프로그램을 대상으로 합니다. Windows에서는 [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md)이 `cmd`가 첫 CTRL+BREAK 뒤에 시작한 프로그램을, [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md)가 `powershell` hook을 함께 확인합니다. 첫 CTRL+BREAK 뒤 20초가 지나도 남은 프로세스를 강제로 끝내는 동작은 `internal/process`의 단위 테스트 `TestRunCommandEndsProcessTreeAfterGrace`가 20초를 1초로 줄여서만 확인합니다.
 
 ### 주입 스모크 재현
 

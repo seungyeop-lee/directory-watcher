@@ -51,6 +51,7 @@ sequenceDiagram
 ## 실행
 
 - 저장소 루트에서 실행합니다.
+- 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
