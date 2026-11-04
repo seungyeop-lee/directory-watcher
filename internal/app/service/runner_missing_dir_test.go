@@ -11,14 +11,14 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 func TestTargetThatFailedToStartSkipsFinishHook(t *testing.T) {
 	set := testCommandSet(filepath.Join(t.TempDir(), "missing-dir"), t.TempDir())
 	var missingFinished, startedFinished, globalFinished atomic.Int32
 	counter := func(calls *atomic.Int32) domain.Cmd {
-		return runnerCommand(func(*helper.WatcherContext, *domain.Event) error { calls.Add(1); return nil })
+		return runnerCommand(func(*process.WatcherContext, *domain.Event) error { calls.Add(1); return nil })
 	}
 	set.WatchTargets[0].LifeCycle.OnFinishWatch = counter(&missingFinished)
 	set.WatchTargets[1].LifeCycle.OnFinishWatch = counter(&startedFinished)

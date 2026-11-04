@@ -7,10 +7,11 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 type globalRunner struct {
-	watchCtx *helper.WatcherContext
+	watchCtx *process.WatcherContext
 
 	onStartWatch  domain.Cmd
 	onFinishWatch domain.Cmd
@@ -21,7 +22,7 @@ type globalRunner struct {
 
 func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger) *globalRunner {
 	return &globalRunner{
-		watchCtx:      helper.NewWatcherContext("[GLOBAL]"),
+		watchCtx:      process.NewWatcherContext("[GLOBAL]"),
 		onStartWatch:  commandSet.LifeCycle.OnStartWatch,
 		onFinishWatch: commandSet.LifeCycle.OnFinishWatch,
 		logger:        logger,
@@ -79,7 +80,7 @@ func (g *globalRunner) CallOnError(err error) {
 	if !errors.As(err, &fatal) {
 		return
 	}
-	base := helper.NewWatcherContext("[ERROR HOOK]")
+	base := process.NewWatcherContext("[ERROR HOOK]")
 	defer base.Cancel()
 	var env []string
 	for _, v := range errorVariables {

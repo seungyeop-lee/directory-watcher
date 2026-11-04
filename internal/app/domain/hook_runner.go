@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // Interrupt는 새 실행을 시작하기 전에 돌고 있는 어떤 실행을 취소할지 정한다.
@@ -53,7 +54,7 @@ type HookFuncBuilder func(path Path) *HookFunc
 
 // hookRun은 돌고 있는 실행 하나다. start이면 onStartWatch이고, 아니면 path를 처리하는 변경 실행이다.
 type hookRun struct {
-	ctx   *helper.WatcherContext
+	ctx   *process.WatcherContext
 	path  Path
 	start bool
 }
@@ -63,7 +64,7 @@ type hookRunner struct {
 	alias  string
 	target Path
 	logger helper.Logger
-	base   *helper.WatcherContext
+	base   *process.WatcherContext
 
 	mu sync.Mutex
 	// ended는 실행이 끝나거나 Cancel을 부를 때 기다리는 쪽을 깨운다.
@@ -75,7 +76,7 @@ type hookRunner struct {
 
 func (p RunPolicy) BuildHookFuncBuilder(alias string, info HookInfo, logger helper.Logger) HookFuncBuilder {
 	return func(path Path) *HookFunc {
-		r := &hookRunner{policy: p, alias: alias, target: path, logger: logger, base: helper.NewWatcherContext(alias)}
+		r := &hookRunner{policy: p, alias: alias, target: path, logger: logger, base: process.NewWatcherContext(alias)}
 		r.ended = sync.NewCond(&r.mu)
 		startCommands := []Cmd{info.OnStartWatch}
 		changeCommands := []Cmd{info.OnBeforeChange, info.OnChange, info.OnAfterChange}
@@ -182,7 +183,7 @@ func (r *hookRunner) cancel() {
 	r.ended.Broadcast()
 }
 
-func (r *hookRunner) runCommand(ctx *helper.WatcherContext, command Cmd, event *Event) error {
+func (r *hookRunner) runCommand(ctx *process.WatcherContext, command Cmd, event *Event) error {
 	err := command.Run(ctx, r.target, event)
 	// 새 변경이나 감시 종료로 실행을 취소하면 명령도 오류로 끝나는데, 이는 실패가 아니므로 기록하지 않는다.
 	if err != nil && ctx.Context().Err() == nil {

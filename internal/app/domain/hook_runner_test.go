@@ -8,14 +8,15 @@ import (
 	"time"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
-type hookCommand func(*helper.WatcherContext, *Event) error
+type hookCommand func(*process.WatcherContext, *Event) error
 
-func (f hookCommand) Run(ctx *helper.WatcherContext, _ Path, event *Event) error {
+func (f hookCommand) Run(ctx *process.WatcherContext, _ Path, event *Event) error {
 	return f(ctx, event)
 }
-func emptyHook(*helper.WatcherContext, *Event) error { return nil }
+func emptyHook(*process.WatcherContext, *Event) error { return nil }
 
 func testLogger() helper.Logger {
 	return helper.NewBasicLogger(helper.LogLevelString("ERROR").GetLogLevel())
@@ -25,7 +26,7 @@ func TestReplacementWaitsForCanceledGeneration(t *testing.T) {
 	helper.GlobalLogger = helper.NewBasicLogger(helper.LogLevelString("ERROR").GetLogLevel())
 	started, canceled, release, completed := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	command := hookCommand(func(ctx *helper.WatcherContext, _ *Event) error {
+	command := hookCommand(func(ctx *process.WatcherContext, _ *Event) error {
 		if calls.Add(1) != 1 {
 			return nil
 		}
@@ -66,7 +67,7 @@ func TestShutdownDuringReplacementPreventsNewGeneration(t *testing.T) {
 	helper.GlobalLogger = helper.NewBasicLogger(helper.LogLevelString("ERROR").GetLogLevel())
 	started, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	command := hookCommand(func(ctx *helper.WatcherContext, _ *Event) error {
+	command := hookCommand(func(ctx *process.WatcherContext, _ *Event) error {
 		if calls.Add(1) > 1 {
 			return nil
 		}
@@ -124,7 +125,7 @@ func (p *runProbe) releaseOf(path string) chan struct{} {
 // release는 경로 path의 실행을 끝낸다. 그 뒤에 시작하는 path의 실행은 바로 끝난다.
 func (p *runProbe) release(path string) { close(p.releaseOf(path)) }
 
-func (p *runProbe) Run(ctx *helper.WatcherContext, _ Path, event *Event) error {
+func (p *runProbe) Run(ctx *process.WatcherContext, _ Path, event *Event) error {
 	path := "watch"
 	if event != nil {
 		path = event.Path.String()
@@ -149,7 +150,7 @@ func (p *runProbe) Run(ctx *helper.WatcherContext, _ Path, event *Event) error {
 
 // record는 실행마다 "before a"처럼 name과 경로를 probe에 알리는 명령이다.
 func (p *runProbe) record(name string) Cmd {
-	return hookCommand(func(_ *helper.WatcherContext, event *Event) error {
+	return hookCommand(func(_ *process.WatcherContext, event *Event) error {
 		path := "watch"
 		if event != nil {
 			path = event.Path.String()

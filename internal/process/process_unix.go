@@ -1,6 +1,6 @@
 //go:build !windows
 
-package helper
+package process
 
 import (
 	"errors"
@@ -9,23 +9,17 @@ import (
 	"time"
 )
 
+// terminateProcess는 cmd와 자식 프로세스에 SIGTERM을 보낸다. cmd의 프로세스 그룹을 찾지 못하면 cmd에만 보낸다.
 func terminateProcess(cmd *exec.Cmd) error {
-	// 프로세스와 자식 프로세스에 SIGTERM 신호를 보냅니다.
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err == nil {
-		//-cmd.Process.Pid를 사용하여 프로세스 그룹 전체에 SIGTERM 신호 발송 (음수 PID 사용)
-		err := syscall.Kill(-pgid, syscall.SIGTERM)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := cmd.Process.Signal(syscall.SIGTERM)
-		if err != nil {
-			return err
-		}
+	if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil {
+		return signalGroup(pgid, syscall.SIGTERM)
 	}
+	return cmd.Process.Signal(syscall.SIGTERM)
+}
 
-	return nil
+// signalGroup은 프로세스 그룹 pgid에 속한 프로세스 모두에 sig를 보낸다. kill에 음수 pid를 넘기면 그 그룹 전체가 신호를 받는다.
+func signalGroup(pgid int, sig syscall.Signal) error {
+	return syscall.Kill(-pgid, sig)
 }
 
 type processTree struct{}
@@ -39,17 +33,17 @@ func startProcessTree(cmd *exec.Cmd, _ bool) (processTree, error) {
 func releaseProcessTree(processTree) {}
 
 func cleanupProcessTree(cmd *exec.Cmd, _ processTree, deadline time.Time) error {
-	// SetupForOs가 명령에 프로세스 그룹을 만들어 주며, 이 그룹은 그룹 리더가 끝난 뒤에도 남는다.
-	pgid := -cmd.Process.Pid
-	if err := syscall.Kill(pgid, syscall.SIGTERM); err != nil {
+	// SetupForOs가 명령의 pid를 id로 쓰는 프로세스 그룹을 만들어 주며, 이 그룹은 그룹 리더가 끝난 뒤에도 남는다.
+	pgid := cmd.Process.Pid
+	if err := signalGroup(pgid, syscall.SIGTERM); err != nil {
 		return nil
 	}
 	for {
-		if errors.Is(syscall.Kill(pgid, 0), syscall.ESRCH) {
+		if errors.Is(signalGroup(pgid, 0), syscall.ESRCH) {
 			return nil
 		}
 		if !time.Now().Before(deadline) {
-			_ = syscall.Kill(pgid, syscall.SIGKILL)
+			_ = signalGroup(pgid, syscall.SIGKILL)
 			return nil
 		}
 		time.Sleep(10 * time.Millisecond)

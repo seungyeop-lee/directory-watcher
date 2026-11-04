@@ -13,7 +13,7 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 type errorLog struct {
@@ -34,11 +34,13 @@ func (l *errorLog) String() string {
 	return strings.Join(l.messages, "\n")
 }
 
-type fakeCmd func(*helper.WatcherContext) error
+type fakeCmd func(*process.WatcherContext) error
 
-func (f fakeCmd) Run(ctx *helper.WatcherContext, _ domain.Path, _ *domain.Event) error { return f(ctx) }
+func (f fakeCmd) Run(ctx *process.WatcherContext, _ domain.Path, _ *domain.Event) error {
+	return f(ctx)
+}
 
-func succeed(*helper.WatcherContext) error { return nil }
+func succeed(*process.WatcherContext) error { return nil }
 
 // testBinaryCommand는 이 테스트 바이너리를 flags로 다시 실행하는 hook 명령이다. 인자를 큰따옴표로 감싸
 // 기본 셸(sh, cmd)이 경로의 공백이나 -test.run의 ^, $를 해석하지 않게 한다.
@@ -69,7 +71,7 @@ func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			logger := &errorLog{}
 			var afterRuns atomic.Int32
-			after := fakeCmd(func(*helper.WatcherContext) error { afterRuns.Add(1); return nil })
+			after := fakeCmd(func(*process.WatcherContext) error { afterRuns.Add(1); return nil })
 			info := domain.HookInfo{OnStartWatch: fakeCmd(succeed), OnBeforeChange: fakeCmd(succeed), OnChange: tc.failing, OnAfterChange: after, OnFinishWatch: fakeCmd(succeed)}
 			hooks := domain.RunPolicy{Concurrency: 1}.BuildHookFuncBuilder("[target-alias]", info, logger)(".")
 			hooks.RunChangeHook(domain.Event{})
@@ -103,7 +105,7 @@ func TestInterruptedRunIsNotLoggedAsFailure(t *testing.T) {
 	logger := &errorLog{}
 	started := make(chan struct{}, 2)
 	var calls atomic.Int32
-	interrupted := fakeCmd(func(ctx *helper.WatcherContext) error {
+	interrupted := fakeCmd(func(ctx *process.WatcherContext) error {
 		started <- struct{}{}
 		if calls.Add(1) > 1 {
 			return nil

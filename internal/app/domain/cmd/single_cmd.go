@@ -13,7 +13,7 @@ import (
 	"github.com/moby/term"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // SingleCmd는 설정 파일에 적힌 hook 명령 문자열 하나를 Shell로 실행한다.
@@ -56,7 +56,7 @@ func EventVariableNames() (templates, envs []string) {
 
 func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.Event) ([]Command, error) {
 	if c.Cmd == "" {
-		return nil, helper.NewEmptyCmdError()
+		return nil, newEmptyCmdError()
 	}
 
 	script, filled, err := c.replaceTemplates(event)
@@ -71,7 +71,7 @@ func (c SingleCmd) Build(ctx context.Context, runDir domain.Path, event *domain.
 	cmd.Dir = runDir.String()
 	cmd.Stdin, _, _ = term.StdStreams()
 
-	helper.SetupForOs(cmd)
+	process.SetupForOs(cmd)
 
 	return []Command{{Cmd: cmd, Filled: filled}}, nil
 }

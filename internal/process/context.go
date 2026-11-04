@@ -1,4 +1,4 @@
-package helper
+package process
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/moby/term"
+
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 type WatcherContext struct {
@@ -18,7 +20,7 @@ type WatcherContext struct {
 
 func NewWatcherContext(prefix string) *WatcherContext {
 	_, out, _ := term.StdStreams()
-	base := context.WithValue(context.Background(), FormatterKey, NewFormatter(prefix, NextColor(), out))
+	base := context.WithValue(context.Background(), helper.FormatterKey, helper.NewFormatter(prefix, helper.NextColor(), out))
 	ctx, cancel := context.WithCancel(base)
 	return &WatcherContext{ctx: ctx, cancel: cancel}
 }

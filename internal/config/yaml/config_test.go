@@ -12,7 +12,7 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	configyaml "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 func TestDecodedOnErrorRunsStructuredCommand(t *testing.T) {
@@ -31,7 +31,7 @@ watchTargets: []
 	if hook == nil {
 		t.Fatal("decoded onError did not build a command")
 	}
-	ctx := helper.NewWatcherContext("config-test")
+	ctx := process.NewWatcherContext("config-test")
 	defer ctx.Cancel()
 	if err := hook.Run(ctx, domain.Path(t.TempDir()), nil); err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func sameDir(t *testing.T, a, b string) bool {
 
 func TestDecodedLegacyConfigBuildsWithoutOnError(t *testing.T) {
 	commands := buildCommandSet(t, "global:\n  lifeCycle: {}\nwatchTargets: []\n")
-	ctx := helper.NewWatcherContext("config-test")
+	ctx := process.NewWatcherContext("config-test")
 	defer ctx.Cancel()
 	if err := commands.Global.LifeCycle.OnStartWatch.Run(ctx, domain.Path(t.TempDir()), nil); err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestDecodedLegacyConfigBuildsWithoutOnError(t *testing.T) {
 
 func TestDecodedAbsentOnErrorRunsWithoutNotification(t *testing.T) {
 	commands := buildCommandSet(t, "watchTargets: []\n")
-	ctx := helper.NewWatcherContext("config-test")
+	ctx := process.NewWatcherContext("config-test")
 	defer ctx.Cancel()
 	if err := commands.Global.LifeCycle.OnError.Run(ctx, domain.Path(t.TempDir()), nil); err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestOmittedShellUsesOSDefault(t *testing.T) {
 	dir := t.TempDir()
 	// sh는 $0을 sh로, cmd는 %OS%를 Windows_NT로 펼치고 다른 쪽 문법은 그대로 둔다.
 	commands := buildCommandSet(t, fmt.Sprintf("global:\n  lifeCycle:\n    onStartWatch: [{dir: %q, cmd: 'echo \"$0\" %%OS%%>shell.txt'}]\nwatchTargets: []\n", dir))
-	ctx := helper.NewWatcherContext("config-test")
+	ctx := process.NewWatcherContext("config-test")
 	defer ctx.Cancel()
 	if err := commands.Global.LifeCycle.OnStartWatch.Run(ctx, "", nil); err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ watchTargets:
 		{global.OnStartWatch, nil}, {global.OnBeforeChange, event}, {global.OnAfterChange, event}, {global.OnFinishWatch, nil}, {global.OnError, nil}, {global.OnQueueWarning, nil},
 		{target.OnStartWatch, nil}, {target.OnChange, event}, {target.OnFinishWatch, nil},
 	}
-	ctx := helper.NewWatcherContext("config-test")
+	ctx := process.NewWatcherContext("config-test")
 	defer ctx.Cancel()
 	for _, run := range runs {
 		if err := run.hook.Run(ctx, domain.Path(dir), run.event); err != nil {
@@ -489,7 +489,7 @@ watchTargets:
       onFinishWatch: [{dir: %q, cmd: 'echo {{.FilePath}}> targetFinish.txt'}]
 `, dir, dir, dir, dir, dir, dir, dir))
 	global, target := commands.Global.LifeCycle, commands.WatchTargets[0].LifeCycle
-	ctx := helper.NewWatcherContext("config-test")
+	ctx := process.NewWatcherContext("config-test")
 	defer ctx.Cancel()
 	for name, run := range map[string]struct {
 		hook domain.Cmd

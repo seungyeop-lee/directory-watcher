@@ -10,6 +10,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // queueLevel은 대기열이 찬 정도의 단계다. 경고 단계의 값은 그 단계에 들어서는 백분율이다.
@@ -226,7 +227,7 @@ func (qw *queueWarner) run(w queueWarning) {
 
 // runHook은 onError처럼 정해진 시간 안에 hook을 실행하고, 실패하면 기록한다.
 func (qw *queueWarner) runHook(w queueWarning) {
-	base := helper.NewWatcherContext("[QUEUE WARNING HOOK]")
+	base := process.NewWatcherContext("[QUEUE WARNING HOOK]")
 	defer base.Cancel()
 	var env []string
 	for _, v := range queueWarningVariables {

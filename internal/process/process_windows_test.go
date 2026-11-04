@@ -1,6 +1,6 @@
 //go:build windows
 
-package helper
+package process
 
 import (
 	"bufio"
@@ -80,9 +80,7 @@ func breakSignalShellHook(t *testing.T, ctx *WatcherContext, programs int) (*exe
 func recordBreaks(t *testing.T, ctx *WatcherContext, cmd *exec.Cmd) func() []time.Time {
 	t.Helper()
 	cmd.Env = append(os.Environ(), "DW_BREAK_SIGNAL_HELPER=1")
-	if err := SetupForOs(cmd); err != nil {
-		t.Fatal(err)
-	}
+	SetupForOs(cmd)
 	ctx.ApplyGracefulShutdown(cmd)
 	var mu sync.Mutex
 	var sent []time.Time

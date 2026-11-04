@@ -15,6 +15,7 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 type ExecCmdBuilder interface {
@@ -48,7 +49,7 @@ func NewManager(builder ExecCmdBuilder) *Manager {
 
 var _ domain.Cmd = (*Manager)(nil)
 
-func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *domain.Event) error {
+func (c *Manager) Run(ctx *process.WatcherContext, runDir domain.Path, event *domain.Event) error {
 	cmds, err := c.builder.Build(ctx.Context(), runDir, event)
 	if err != nil {
 		return err
@@ -68,7 +69,7 @@ func (c *Manager) Run(ctx *helper.WatcherContext, runDir domain.Path, event *dom
 	return nil
 }
 
-// checkWorkingDir는 명령을 실행하기 전에 작업 폴더가 있는지 확인한다. hook 명령은 SetupForOs가
+// checkWorkingDir는 명령을 실행하기 전에 작업 폴더가 있는지 확인한다. hook 명령은 process.SetupForOs가
 // SysProcAttr를 설정하므로 os.StartProcess가 작업 폴더를 미리 확인하지 않고, 폴더가 없으면
 // "fork/exec <실행 파일>: no such file or directory"처럼 실행 파일이 없다고 읽히는 오류를 낸다.
 // 앞 명령이 만든 폴더에서 다음 명령을 실행할 수 있도록, 명령마다 실행 직전에 확인한다.
@@ -101,7 +102,7 @@ const leftoverOutputWait = time.Second
 // 명령이 취소되어도 파이프가 닫힐 때까지 출력을 계속 읽는다. 명령이 남긴 프로세스가
 // 파이프를 계속 열어 두면, 명령이 끝난 뒤 leftoverOutputWait만큼만 기다리고 파이프를 닫는다.
 // 그 뒤에 남은 프로세스가 쓰는 출력은 버린다.
-func runPrintingOutput(ctx *helper.WatcherContext, cmd *exec.Cmd, out io.Writer) error {
+func runPrintingOutput(ctx *process.WatcherContext, cmd *exec.Cmd, out io.Writer) error {
 	r, w, err := os.Pipe()
 	if err != nil {
 		return err

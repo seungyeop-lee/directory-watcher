@@ -13,7 +13,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // queueRecorder는 대기열이 알린 단계 변화를 "70 up 70"처럼 단계, 방향, 기다리는 수로 모은다.
@@ -104,7 +104,7 @@ func TestQueueWarningListsMostQueuedPaths(t *testing.T) {
 }
 
 // hookEnvironment는 ctx로 명령을 실행할 때 명령에 더하는 환경 변수를 돌려준다.
-func hookEnvironment(ctx *helper.WatcherContext) map[string]string {
+func hookEnvironment(ctx *process.WatcherContext) map[string]string {
 	cmd := exec.Command("hook")
 	cmd.Env = []string{}
 	ctx.ApplyGracefulShutdown(cmd)
@@ -123,7 +123,7 @@ func TestSlowQueueWarningKeepsOnlyLatestAndDoesNotBlockWatching(t *testing.T) {
 	warned, releaseWarning := make(chan struct{}, 8), make(chan struct{})
 	var mu sync.Mutex
 	var warnings []string
-	global := domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnQueueWarning: runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {
+	global := domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnQueueWarning: runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
 		env := hookEnvironment(ctx)
 		mu.Lock()
 		warnings = append(warnings, env["DW_QUEUE_LEVEL"]+" "+env["DW_QUEUE_DIRECTION"])
@@ -213,7 +213,7 @@ func TestQueueSizeOverflowStopsWatchingAndNotifies(t *testing.T) {
 			set.WatchTargets[0].Option.Queue.Size = 4
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once sync.Once
-			set.WatchTargets[0].LifeCycle.OnChange = runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {
+			set.WatchTargets[0].LifeCycle.OnChange = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
 				once.Do(func() { close(entered) })
 				select {
 				case <-release:
@@ -222,7 +222,7 @@ func TestQueueSizeOverflowStopsWatchingAndNotifies(t *testing.T) {
 				return nil
 			})
 			notified := make(chan error, 2)
-			set.Global.LifeCycle.OnError = runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {
+			set.Global.LifeCycle.OnError = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
 				notified <- errors.New(hookEnvironment(ctx)["DW_ERROR_CAUSE"])
 				return nil
 			})

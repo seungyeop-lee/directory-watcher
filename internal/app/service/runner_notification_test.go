@@ -15,7 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 type notificationLog struct {
@@ -41,7 +41,7 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 	started, cancelled := make(chan struct{}, 2), make(chan struct{}, 2)
 	var changes, notifications atomic.Int32
 	for n := range set.WatchTargets {
-		set.WatchTargets[n].LifeCycle.OnChange = runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {
+		set.WatchTargets[n].LifeCycle.OnChange = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
 			changes.Add(1)
 			started <- struct{}{}
 			<-ctx.Context().Done()
@@ -50,7 +50,7 @@ func TestFatalLossCancelsEveryTargetBeforeNotificationCompletes(t *testing.T) {
 		})
 	}
 	notifying, release := make(chan struct{}), make(chan struct{})
-	set.Global.LifeCycle.OnError = runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {
+	set.Global.LifeCycle.OnError = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
 		notifications.Add(1)
 		if ctx.Context().Err() != nil {
 			t.Error("notification inherited cancelled normal context")
@@ -174,7 +174,7 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 			logger := &notificationLog{}
 			var calls atomic.Int32
 			if mode != "absent" {
-				set.Global.LifeCycle.OnError = runnerCommand(func(ctx *helper.WatcherContext, _ *domain.Event) error {
+				set.Global.LifeCycle.OnError = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
 					calls.Add(1)
 					if mode == "timeout" {
 						<-ctx.Context().Done()

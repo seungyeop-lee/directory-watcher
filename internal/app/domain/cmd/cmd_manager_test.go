@@ -16,7 +16,7 @@ import (
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	command "github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain/cmd"
-	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 // 훅 출력 테스트가 출력을 내는 실제 프로세스로 쓰려고 이 테스트 바이너리를 다시 실행한다.
@@ -86,14 +86,14 @@ func outputCommand(t *testing.T, mode string, count int) command.SingleCmd {
 }
 
 // capturedContext는 훅 출력이 가는 표준 출력을 파일로 바꾼 뒤 만든 실행 context와, 그 파일의 내용을 읽는 함수를 돌려준다.
-func capturedContext(t *testing.T) (*helper.WatcherContext, func() string) {
+func capturedContext(t *testing.T) (*process.WatcherContext, func() string) {
 	t.Helper()
 	base, output := capturedBase(t)
 	return base.NewRun(), output
 }
 
 // capturedBase는 capturedContext와 같지만, NewRun이나 NewTimeoutRun으로 실행 context를 직접 만들 수 있게 바탕 context를 돌려준다.
-func capturedBase(t *testing.T) (*helper.WatcherContext, func() string) {
+func capturedBase(t *testing.T) (*process.WatcherContext, func() string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stdout")
 	file, err := os.Create(path)
@@ -102,7 +102,7 @@ func capturedBase(t *testing.T) (*helper.WatcherContext, func() string) {
 	}
 	original := os.Stdout
 	os.Stdout = file
-	base := helper.NewWatcherContext("[test]")
+	base := process.NewWatcherContext("[test]")
 	os.Stdout = original
 	t.Cleanup(func() {
 		base.Cancel()

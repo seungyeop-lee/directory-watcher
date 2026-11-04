@@ -15,6 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
 func TestStopDiscardsPendingEvents(t *testing.T) {
@@ -87,13 +88,13 @@ func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
 	r.Stop(&wg)
 }
 
-type runnerCommand func(*helper.WatcherContext, *domain.Event) error
+type runnerCommand func(*process.WatcherContext, *domain.Event) error
 
-func (f runnerCommand) Run(ctx *helper.WatcherContext, _ domain.Path, event *domain.Event) error {
+func (f runnerCommand) Run(ctx *process.WatcherContext, _ domain.Path, event *domain.Event) error {
 	return f(ctx, event)
 }
 func emptyCommand() domain.Cmd {
-	return runnerCommand(func(*helper.WatcherContext, *domain.Event) error { return nil })
+	return runnerCommand(func(*process.WatcherContext, *domain.Event) error { return nil })
 }
 
 func testCommandSet(paths ...string) domain.CommandSet {
@@ -207,7 +208,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 				active, peak := 0, 0
 				changed := make(chan struct{}, 64)
 				began := make(chan struct{}, 64)
-				command := runnerCommand(func(ctx *helper.WatcherContext, event *domain.Event) error {
+				command := runnerCommand(func(ctx *process.WatcherContext, event *domain.Event) error {
 					mu.Lock()
 					active++
 					if active > peak {
