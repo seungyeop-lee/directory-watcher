@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// 이 파일의 테스트는 스키마의 watchTargets.option 아래에 손으로 적은 default가 코드의 기본값과 같은지 확인한다.
+// 이 파일의 테스트는 스키마의 watchTargets.option 아래에 손으로 적은 default가 코드의 기본값과 같은지,
+// USAGE 두 판의 config.yml 블록과 config.example.yml의 주석에 적은 기본값이 스키마의 default와 같은지 확인한다.
 // 키 하나에 스키마의 default를 적은 설정이 아무 키도 적지 않은 설정과 같은 옵션을 만들면 두 값이 같다고 본다.
 // 실패하면 directory-watcher.schema.json의 default를 코드의 기본값에 맞추고, 같은 기본값을 적은 USAGE 두 판과
 // config.example.yml의 주석도 함께 고친다.
@@ -111,6 +115,66 @@ func TestSchemaOptionDefaultsMatchCodeDefaults(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, codeDefaults) {
 			t.Errorf("%s: default %v of option.%s differs from the code default\nwith the default: %+v\nwith nothing set: %+v", schemaFile, value, key, got, codeDefaults)
+		}
+	}
+}
+
+const exampleConfigFile = "config.example.yml"
+
+// documentedOptionDefaults는 doc의 option 아래 키 줄에서 phrase가 뽑은 기본값을 option 아래 키 경로별로 모은다.
+// config.example.yml처럼 감시 대상이 여럿이면 같은 키의 기본값이 여러 개일 수 있다.
+func documentedOptionDefaults(doc string, phrase *regexp.Regexp) map[string][]string {
+	defaults := map[string][]string{}
+	eachYAMLKey(doc, func(_, key, line string) {
+		key, found := strings.CutPrefix(key, "watchTargets.option.")
+		if m := phrase.FindStringSubmatch(line); found && m != nil {
+			defaults[key] = append(defaults[key], m[1])
+		}
+	})
+	return defaults
+}
+
+func TestDocumentedOptionDefaultsMatchSchema(t *testing.T) {
+	example, err := os.ReadFile(exampleConfigFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 기본값 문구는 값으로 시작하고, maxWaitMillisecond처럼 규칙으로 정하는 기본값은 값 뒤에 규칙이 붙으므로
+	// 문구의 첫 낱말만 스키마의 default와 비교한다. 정규식의 \w는 ASCII만 받아서 "1000이고"에서도 1000을 뽑는다.
+	docs := []struct {
+		location string
+		text     string
+		phrase   *regexp.Regexp
+		// all이면 스키마에 default가 있는 키마다 기본값 문구가 있어야 한다.
+		// config.example.yml은 예시에 쓴 키에만 주석을 달기 때문에 all이 아니다.
+		all bool
+	}{
+		{"USAGE.md config.yml block", usageConfigBlock(t, "USAGE.md"), regexp.MustCompile(`default is "?(\w+)`), true},
+		{"USAGE.ko.md config.yml block", usageConfigBlock(t, "USAGE.ko.md"), regexp.MustCompile(`default는 "?(\w+)`), true},
+		{exampleConfigFile + " comments", string(example), regexp.MustCompile(`# default (\w+)`), false},
+	}
+	schemaDefaults := schemaOptionDefaults(t)
+	for _, doc := range docs {
+		documented := documentedOptionDefaults(doc.text, doc.phrase)
+		if len(documented) == 0 {
+			t.Errorf("%s: found no option default", doc.location)
+		}
+		for key, value := range schemaDefaults {
+			if _, ok := documented[key]; !ok && doc.all {
+				t.Errorf("%s: option.%s has no default, schema default is %v", doc.location, key, value)
+			}
+		}
+		for key, values := range documented {
+			value, ok := schemaDefaults[key]
+			if !ok {
+				t.Errorf("%s: option.%s has default %q, which the schema does not have", doc.location, key, values)
+				continue
+			}
+			for _, got := range values {
+				if want := fmt.Sprint(value); got != want {
+					t.Errorf("%s: option.%s default is %s, schema default is %s", doc.location, key, got, want)
+				}
+			}
 		}
 	}
 }

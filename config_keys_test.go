@@ -98,9 +98,20 @@ func schemaKeys(t *testing.T, parents map[string]bool) []string {
 
 var yamlKeyLine = regexp.MustCompile(`^( *)(- )?(\w+):`)
 
-// usageConfigKeys는 USAGE의 "## config.yml" 절에 있는 첫 yaml 블록에서 parents에 든 키 아래의 키를 키 경로로 모은다.
-// 키의 위 키는 줄의 들여쓰기로 정하고, "- "로 시작하는 목록 항목의 키는 "- " 뒤의 열에 있는 것으로 본다.
+// usageConfigKeys는 USAGE의 config.yml 블록에서 parents에 든 키 아래의 키를 키 경로로 모은다.
 func usageConfigKeys(t *testing.T, file string, parents map[string]bool) []string {
+	t.Helper()
+	var keys []string
+	eachYAMLKey(usageConfigBlock(t, file), func(parent, key, _ string) {
+		if parents[parent] {
+			keys = append(keys, key)
+		}
+	})
+	return keys
+}
+
+// usageConfigBlock은 USAGE의 "## config.yml" 절에 있는 첫 yaml 블록을 돌려준다.
+func usageConfigBlock(t *testing.T, file string) string {
 	t.Helper()
 	_, section, found := strings.Cut(readUsage(t, file), "\n## config.yml\n")
 	_, block, _ := strings.Cut(section, "```yaml\n")
@@ -108,13 +119,18 @@ func usageConfigKeys(t *testing.T, file string, parents map[string]bool) []strin
 	if !found || !closed {
 		t.Fatalf("%s has no yaml block in the config.yml section", file)
 	}
+	return block
+}
+
+// eachYAMLKey는 yaml 문서에서 키를 적은 줄마다 위 키의 경로, 키 경로, 줄을 visit에 넘긴다.
+// 키의 위 키는 줄의 들여쓰기로 정하고, "- "로 시작하는 목록 항목의 키는 "- " 뒤의 열에 있는 것으로 본다.
+func eachYAMLKey(doc string, visit func(parent, key, line string)) {
 	type openKey struct {
 		column int
 		path   string
 	}
-	var keys []string
 	var open []openKey
-	for _, line := range strings.Split(block, "\n") {
+	for _, line := range strings.Split(doc, "\n") {
 		m := yamlKeyLine.FindStringSubmatch(line)
 		if m == nil {
 			continue
@@ -128,12 +144,9 @@ func usageConfigKeys(t *testing.T, file string, parents map[string]bool) []strin
 			parent = open[len(open)-1].path
 		}
 		key := joinKey(parent, m[3])
-		if parents[parent] {
-			keys = append(keys, key)
-		}
+		visit(parent, key, line)
 		open = append(open, openKey{column, key})
 	}
-	return keys
 }
 
 // checkSameKeys는 got이 want와 다르면, want에만 있는 키와 got에만 있는 키를 location과 함께 알린다.
