@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft/2019-09/schema#",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Directory Watcher Configuration Schema",
   "description": "JSON schema for the configuration file of Directory Watcher.",
   "type": "object",
