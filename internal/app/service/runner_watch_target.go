@@ -57,20 +57,15 @@ type watchTargetRunner struct {
 	unreleasedDirs map[string]struct{}
 	// leakCheck는 releaseLeakedWatches를 실행할 때를 알린다. 실행할 일이 없으면 nil이다.
 	leakCheck <-chan time.Time
-	// batch는 폴더 이벤트를 모으는 동안 받은 이벤트이고, 모으지 않을 때는 nil이다. batchDue는 batch를 내보낼
-	// 때를 알린다. collect를 본다.
-	batch    *eventBatch
-	batchDue <-chan time.Time
 	// retiring은 rebuildWatcher가 갈아 끼운 뒤 아직 닫지 않은 예전 watcher다. retireWatcher를 본다.
 	retiring *retiredWatcher
 
+	dirBatcher  *dirBatcher
 	hookBatcher *hookBatcher
 	dispatcher  *dispatcher
 
-	subDir          bool
-	exclude         domain.ExcludePatterns
-	dirBatchWait    time.Duration
-	dirBatchMaxWait time.Duration
+	subDir  bool
+	exclude domain.ExcludePatterns
 
 	logger      helper.Logger
 	watcher     *fsnotify.Watcher
@@ -99,23 +94,22 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 	stop := make(chan struct{})
 
 	result := &watchTargetRunner{
-		path:            commandSet.Path,
-		hookBatcher:     newHookBatcher(commandSet.Option),
-		dispatcher:      newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
-		subDir:          commandSet.Option.Watch.SubDir,
-		exclude:         commandSet.Option.Watch.Exclude,
-		dirBatchWait:    commandSet.Option.DirBatch.WaitMillisecond.Duration(),
-		dirBatchMaxWait: commandSet.Option.DirBatch.MaxWaitMillisecond.Duration(),
-		logger:          logger,
-		watcher:         watcher,
-		watchedDirs:     map[string]map[string]entryInfo{},
-		entryPaths:      map[fileID]string{},
-		selfRenames:     map[string]time.Time{},
-		unreleasedDirs:  map[string]struct{}{},
-		initErr:         err,
-		stop:            stop,
-		done:            make(chan struct{}),
+		path:           commandSet.Path,
+		hookBatcher:    newHookBatcher(commandSet.Option),
+		dispatcher:     newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
+		subDir:         commandSet.Option.Watch.SubDir,
+		exclude:        commandSet.Option.Watch.Exclude,
+		logger:         logger,
+		watcher:        watcher,
+		watchedDirs:    map[string]map[string]entryInfo{},
+		entryPaths:     map[fileID]string{},
+		selfRenames:    map[string]time.Time{},
+		unreleasedDirs: map[string]struct{}{},
+		initErr:        err,
+		stop:           stop,
+		done:           make(chan struct{}),
 	}
+	result.dirBatcher = newDirBatcher(commandSet.Option.DirBatch, result.hookBatcher, result.reAddUnder)
 	if watcher != nil {
 		result.watchEvents, result.watchErrors = pumpEvents(watcher, result.stop)
 	}
@@ -159,8 +153,8 @@ func (r *watchTargetRunner) Run() error {
 			if err := r.releaseLeakedWatches(); err != nil {
 				return r.exitError(err)
 			}
-		case <-r.batchDue:
-			if err := r.flushBatch(); err != nil {
+		case <-r.dirBatcher.Due():
+			if err := r.enqueue(r.dirBatcher.flush()); err != nil {
 				return r.exitError(err)
 			}
 		case <-r.hookBatcher.Due():
@@ -206,7 +200,7 @@ func (r *watchTargetRunner) exitError(err error) error {
 }
 
 // handleEvent는 fsnotify 이벤트 ev를 감시 목록과 기록에 반영하고, 제외되지 않은 파일과 폴더의 생성, 수정,
-// 삭제이면 collect로 넘긴다. 넘기는 이벤트에는 반영하기 전에 경로가 기록에 있었는지를 함께 적는다.
+// 삭제이면 dirBatcher로 넘긴다. 넘기는 이벤트에는 반영하기 전에 경로가 기록에 있었는지를 함께 적는다.
 func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	r.printEventLog(ev)
 	// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
@@ -274,7 +268,16 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	if r.isExcluded(ev.Name) {
 		return nil
 	}
-	return r.collect(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed})
+	return r.enqueue(r.dirBatcher.add(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed}))
+}
+
+// enqueue는 dirBatcher가 돌려준 실행 runs를 dispatcher의 대기열에 넣고, dirBatcher가 runs 뒤의 변경을 넘기다 겪은
+// 오류 err를 돌려준다.
+func (r *watchTargetRunner) enqueue(runs []domain.Event, err error) error {
+	if enqueueErr := r.dispatcher.enqueue(runs); enqueueErr != nil {
+		return enqueueErr
+	}
+	return err
 }
 
 func (r *watchTargetRunner) addDir() error {
@@ -284,6 +287,7 @@ func (r *watchTargetRunner) addDir() error {
 	if err := r.resolveLinkedPath(); err != nil {
 		return err
 	}
+	r.dirBatcher.root = r.watchRoot
 
 	// subDir가 false이면 하위 폴더를 감시하지 않는다.
 	if !r.subDir {
@@ -392,6 +396,17 @@ func (r *watchTargetRunner) reAdd(dirs []string) error {
 		}
 	}
 	return nil
+}
+
+// reAddUnder는 감시 목록에 넣은 폴더 가운데 dir과 그 아래에 있는 폴더를 다시 넣는다.
+func (r *watchTargetRunner) reAddUnder(dir domain.Path) error {
+	var dirs []string
+	for watched := range r.watchedDirs {
+		if dir.Contains(domain.Path(watched)) {
+			dirs = append(dirs, watched)
+		}
+	}
+	return r.reAdd(dirs)
 }
 
 // isExcluded는 감시 대상 안의 경로 name이 기본 제외 규칙이나 option.exclude에 따라 감시와 hook 실행에서

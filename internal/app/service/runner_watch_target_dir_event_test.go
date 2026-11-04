@@ -2,8 +2,7 @@ package service
 
 import (
 	"errors"
-	"fmt"
-	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,260 +12,284 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
-// 폴더가 안의 내용과 함께 생기거나 사라지면 hook이 맨 위 폴더의 이벤트 하나만 받는지 확인한다. 폴더 안의
-// 파일 300개를 옮겨 오거나 지워도 그 파일들의 이벤트는 대기열에 들어가지 않는다.
-func TestFolderChangeNotifiesTopFolderOnce(t *testing.T) {
+// dirBatchFixture는 감시 대상 root와, root의 변경을 받는 dirBatcher를 둔다. dirBatcher가 넘긴 변경은 기다리지 않고
+// 변경마다 실행을 만드는 hookBatcher가 받는다. 감시 루프 없이 handleEvent가 넘기는 변경을 add로 직접 넣는다.
+type dirBatchFixture struct {
+	t    *testing.T
+	root string
+	b    *dirBatcher
+	// reAdded는 dirBatcher가 감시 목록에 다시 넣으라고 한 폴더의 상대 경로다. 그 폴더가 reAddFails이면
+	// errReAdd로 실패한다.
+	reAdded    []string
+	reAddFails string
+}
+
+var errReAdd = errors.New("re-add failed")
+
+func newDirBatchFixture(t *testing.T, option domain.DirBatchOption) *dirBatchFixture {
+	f := &dirBatchFixture{t: t, root: t.TempDir()}
+	hookBatcher := newHookBatcher(watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}}))
+	f.b = newDirBatcher(option, hookBatcher, func(dir domain.Path) error {
+		rel := f.rel(dir)
+		f.reAdded = append(f.reAdded, rel)
+		if rel == f.reAddFails {
+			return errReAdd
+		}
+		return nil
+	})
+	f.b.root = f.root
+	return f
+}
+
+func (f *dirBatchFixture) rel(path domain.Path) string {
+	f.t.Helper()
+	rel, err := filepath.Rel(f.root, path.String())
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return filepath.ToSlash(rel)
+}
+
+// add는 감시 대상 기준 상대 경로 rel의 변경 op를 dirBatcher에 넣고, 곧바로 나온 실행을 describeRun의 꼴로 돌려준다.
+// rel이 /로 끝나면 폴더의 변경이다.
+func (f *dirBatchFixture) add(op fsnotify.Op, rel string) []string {
+	f.t.Helper()
+	runs, err := f.b.add(dirBatchChange(f.root, op, rel))
+	if err != nil {
+		f.t.Fatalf("add(%v %s) failed: %v", op, rel, err)
+	}
+	return f.describe(runs)
+}
+
+// describe는 실행 runs를 describeRun의 꼴로 돌려준다.
+func (f *dirBatchFixture) describe(runs []domain.Event) []string {
+	f.t.Helper()
+	got := []string{}
+	for _, run := range runs {
+		got = append(got, describeRun(f.t, f.root, run))
+	}
+	return got
+}
+
+// awaitDue는 묶음을 넘길 때라고 Due가 알릴 때까지 기다린다.
+func (f *dirBatchFixture) awaitDue() {
+	f.t.Helper()
+	select {
+	case <-f.b.Due():
+	case <-time.After(5 * time.Second):
+		f.t.Fatal("dir batch did not become due")
+	}
+}
+
+// dirBatchChange는 root 기준 상대 경로 rel의 변경 op를 만든다. rel이 /로 끝나면 폴더의 변경이다.
+func dirBatchChange(root string, op fsnotify.Op, rel string) change {
+	path := filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(rel, "/")))
+	return change{Event: domain.Event{Path: domain.Path(path), Operation: domain.Operation(op), IsDir: strings.HasSuffix(rel, "/")}}
+}
+
+// 폴더 이벤트를 모으는 동안 받은 변경 가운데 폴더 이벤트에 흡수되는 변경을 빼는지 확인한다. 폴더를 통째로 지우면
+// 폴더 안의 항목을 지운 이벤트가 먼저 와도 폴더의 D 하나만 남는다.
+func TestEventBatchAbsorbsEventsUnderFolderEvent(t *testing.T) {
 	cases := []struct {
-		name  string
-		setup func(f *renameFixture)
-		act   func(f *renameFixture)
-		want  []string
+		name string
+		ops  []fsnotify.Op
+		rels []string
+		want []string
 	}{
-		{name: "mkdir", act: func(f *renameFixture) { f.mkdirAll("src/pkg") }, want: []string{"C src/pkg/"}},
-		{name: "mkdir -p", act: func(f *renameFixture) { f.mkdirAll("src/a/b/c") }, want: []string{"C src/a/"}},
-		{
-			name:  "move in a folder with files",
-			setup: func(f *renameFixture) { f.fill("../outside/x", 3); f.write("../outside/x/sub/g.txt") },
-			act:   func(f *renameFixture) { f.move("../outside/x", "src/x") },
-			want:  []string{"C src/x/"},
-		},
-		{
-			name:  "move in a folder with 300 files",
-			setup: func(f *renameFixture) { f.fill("../outside/x", 300) },
-			act:   func(f *renameFixture) { f.move("../outside/x", "src/x") },
-			want:  []string{"C src/x/"},
-		},
-		{
-			name: "mkdir and write a file in it",
-			act: func(f *renameFixture) {
-				f.mkdirAll("src/n")
-				f.write("src/n/a.txt")
-			},
-			want: []string{"C src/n/"},
-		},
-		{
-			name:  "rm -rf a folder with 300 files",
-			setup: func(f *renameFixture) { f.fill("src/pkg", 300) },
-			act:   func(f *renameFixture) { f.removeAll("src/pkg") },
-			want:  []string{"D src/pkg/"},
-		},
 		{
 			name: "rm -rf nested folders",
-			setup: func(f *renameFixture) {
-				f.fill("src/pkg", 5)
-				f.fill("src/pkg/sub", 5)
-				f.write("src/pkg/sub/deep/g.txt")
-			},
-			act:  func(f *renameFixture) { f.removeAll("src/pkg") },
-			want: []string{"D src/pkg/"},
+			ops:  []fsnotify.Op{fsnotify.Remove, fsnotify.Remove, fsnotify.Remove, fsnotify.Remove},
+			rels: []string{"pkg/f.txt", "pkg/sub/g.txt", "pkg/sub/", "pkg/"},
+			want: []string{"D pkg/"},
 		},
 		{
-			name:  "move out of the target",
-			setup: func(f *renameFixture) { f.fill("src/pkg", 3) },
-			act:   func(f *renameFixture) { f.move("src/pkg", "../outside/pkg") },
-			want:  []string{"D src/pkg/"},
+			name: "mkdir -p and write a file in it",
+			ops:  []fsnotify.Op{fsnotify.Create, fsnotify.Create, fsnotify.Create},
+			rels: []string{"a/", "a/b/", "a/b/c.txt"},
+			want: []string{"C a/"},
 		},
 		{
-			name:  "rename",
-			setup: func(f *renameFixture) { f.fill("src/d", 3) },
-			act:   func(f *renameFixture) { f.move("src/d", "src/e") },
-			want:  []string{"D src/d/", "C src/e/"},
+			name: "remove and write repeated for a removed folder",
+			ops:  []fsnotify.Op{fsnotify.Remove, fsnotify.Remove, fsnotify.Write},
+			rels: []string{"d/", "d", "d"},
+			want: []string{"D d/"},
 		},
 		{
-			name:  "move under another folder",
-			setup: func(f *renameFixture) { f.fill("src/d", 3) },
-			act:   func(f *renameFixture) { f.move("src/d", "dst/d") },
-			want:  []string{"D src/d/", "C dst/d/"},
+			name: "rm -rf and mkdir again",
+			ops:  []fsnotify.Op{fsnotify.Remove, fsnotify.Create},
+			rels: []string{"d/", "d/"},
+			want: []string{"D d/", "C d/"},
 		},
 		{
-			name:  "rm -rf and mkdir again",
-			setup: func(f *renameFixture) { f.fill("src/d", 3) },
-			act: func(f *renameFixture) {
-				f.removeAll("src/d")
-				f.mkdirAll("src/d")
-			},
-			want: []string{"D src/d/", "C src/d/"},
+			name: "rename",
+			ops:  []fsnotify.Op{fsnotify.Remove, fsnotify.Create},
+			rels: []string{"d/", "e/"},
+			want: []string{"D d/", "C e/"},
+		},
+		{
+			name: "file next to the folder",
+			ops:  []fsnotify.Op{fsnotify.Create, fsnotify.Create, fsnotify.Write},
+			rels: []string{"n/", "n/in.txt", "nx.txt"},
+			want: []string{"C n/", "U nx.txt"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := newRenameFixture(t)
-			if tc.setup != nil {
-				tc.setup(f)
+			root := t.TempDir()
+			var batch eventBatch
+			for i, rel := range tc.rels {
+				batch.add(dirBatchChange(root, tc.ops[i], rel))
 			}
-			f.start(nil)
-			tc.act(f)
-			if got := f.changes(); !slices.Equal(got, tc.want) {
-				t.Fatalf("hook events = %v, want %v", got, tc.want)
+			got := []string{}
+			for _, c := range batch.events {
+				got = append(got, describeRun(t, root, c.Event))
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("batch = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
-// deliver: each에서 폴더 이벤트를 모으는 동안 생긴 다른 파일의 이벤트는 폴더 이벤트와 생긴 순서대로 hook에
-// 가는지 확인한다.
-func TestFolderEventKeepsOrderWithFileEvents(t *testing.T) {
-	f := newRenameFixture(t)
-	f.start(nil)
-	f.write("first.txt")
-	f.mkdirAll("src/n")
-	f.write("src/n/in.txt")
-	f.write("last.txt")
-	var order []string
-	for _, ev := range f.changes() {
-		// 파일을 쓰면 운영체제에 따라 C 다음에 U가 오기도 하므로 경로마다 처음 받은 이벤트만 본다.
-		if path := ev[2:]; !slices.Contains(order, path) {
-			order = append(order, path)
-		}
+// isUnder가 dir과 같은 경로와, 이름이 dir로 시작하는 옆 경로를 dir 아래로 보지 않는지 확인한다.
+func TestIsUnder(t *testing.T) {
+	root := t.TempDir()
+	dir := domain.Path(filepath.Join(root, "d"))
+	cases := []struct {
+		rel  string
+		want bool
+	}{
+		{"d", false},
+		{"d/a.txt", true},
+		{"d/sub/a.txt", true},
+		{"dx/a.txt", false},
+		{"a.txt", false},
 	}
-	if want := []string{"first.txt", "src/n/", "last.txt"}; !slices.Equal(order, want) {
-		t.Fatalf("hook received paths in order %v, want %v", order, want)
+	for _, tc := range cases {
+		if got := isUnder(domain.Path(filepath.Join(root, filepath.FromSlash(tc.rel))), dir); got != tc.want {
+			t.Errorf("isUnder(%s, d) = %v, want %v", tc.rel, got, tc.want)
+		}
 	}
 }
 
-// 새 폴더에 파일을 계속 써서 폴더 이벤트를 모으는 시간이 끝나지 않아도, dirEventMaxWait 안에 폴더 C가 나가고
-// 그 뒤의 쓰기는 따로 hook에 가는지 확인한다.
+// 폴더의 생성과 삭제, 감시 대상 바로 아래가 아닌 파일의 삭제로만 폴더 이벤트를 모으기 시작하는지 확인한다. 모으기를
+// 시작하지 않는 변경은 곧바로 실행이 된다.
+func TestDirBatchStartsOnFolderEventOrNestedRemove(t *testing.T) {
+	cases := []struct {
+		op    fsnotify.Op
+		rel   string
+		opens bool
+	}{
+		{fsnotify.Create, "d/", true},
+		{fsnotify.Remove, "d/", true},
+		{fsnotify.Remove, "d/a.txt", true},
+		{fsnotify.Remove, "a.txt", false},
+		{fsnotify.Create, "d/a.txt", false},
+		{fsnotify.Write, "d/a.txt", false},
+	}
+	for _, tc := range cases {
+		f := newDirBatchFixture(t, domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000})
+		got := f.add(tc.op, tc.rel)
+		if opens := len(got) == 0 && f.b.Due() != nil; opens != tc.opens {
+			t.Errorf("%v %s: started batch = %v, want %v (runs %v)", tc.op, tc.rel, opens, tc.opens, got)
+		}
+	}
+}
+
+// wait가 0이면 폴더 이벤트를 모으지 않고 받은 변경을 곧바로 실행으로 돌려주는지 확인한다.
+func TestDirBatchWithZeroWaitPassesChangesOn(t *testing.T) {
+	f := newDirBatchFixture(t, domain.DirBatchOption{MaxWaitMillisecond: 1000})
+	if got, want := f.add(fsnotify.Create, "d/"), []string{"C d/"}; !slices.Equal(got, want) {
+		t.Fatalf("runs = %v, want %v", got, want)
+	}
+	if got, want := f.add(fsnotify.Create, "d/a.txt"), []string{"C d/a.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("runs = %v, want %v", got, want)
+	}
+	if f.b.Due() != nil {
+		t.Fatal("Due is set although wait is 0")
+	}
+}
+
+// deliver: each에서 폴더 이벤트를 모으는 동안 생긴 다른 파일의 이벤트는 폴더 이벤트와 생긴 순서대로 실행이 되는지
+// 확인한다.
+func TestFolderEventKeepsOrderWithFileEvents(t *testing.T) {
+	f := newDirBatchFixture(t, domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000})
+	got := f.add(fsnotify.Create, "first.txt")
+	for _, rel := range []string{"src/n/", "src/n/in.txt", "last.txt"} {
+		if runs := f.add(fsnotify.Create, rel); len(runs) != 0 {
+			t.Fatalf("add(%s) returned runs %v while collecting", rel, runs)
+		}
+	}
+	f.awaitDue()
+	runs, err := f.b.flush()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, f.describe(runs)...)
+	if want := []string{"C first.txt", "C src/n/", "C last.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("runs = %v, want %v", got, want)
+	}
+}
+
+// 새 폴더에 파일을 계속 써서 폴더 이벤트를 모으는 시간이 끝나지 않아도, dirBatch.maxWaitMillisecond 안에 폴더 C가
+// 나가고 그 뒤의 쓰기는 따로 실행이 되는지 확인한다.
 func TestFolderEventIsSentWithinMaxWaitDuringContinuousWrites(t *testing.T) {
 	const maxWait = 500 * time.Millisecond
-	f := newRenameFixture(t)
-	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}})
-	option.DirBatch.MaxWaitMillisecond = domain.Millisecond(maxWait / time.Millisecond)
-	f.startWith(option)
-	stop, writing := make(chan struct{}), make(chan struct{})
-	defer func() { close(stop); <-writing }()
+	f := newDirBatchFixture(t, domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: domain.Millisecond(maxWait / time.Millisecond)})
 	start := time.Now()
-	f.mkdirAll("src/n")
-	go func() {
-		defer close(writing)
-		for n := 0; ; n++ {
-			select {
-			case <-stop:
-				return
-			case <-time.After(50 * time.Millisecond):
-			}
-			_ = os.WriteFile(f.path("src/n/a.txt"), []byte(fmt.Sprint(n)), 0600)
-		}
-	}()
-	await := func(want func(domain.Event) bool, label string) time.Duration {
-		t.Helper()
-		for {
-			select {
-			case ev := <-f.changed:
-				if want(ev) {
-					return time.Since(start)
-				}
-			case err := <-f.result:
-				t.Fatalf("run stopped: %v", err)
-			case <-time.After(5 * time.Second):
-				t.Fatalf("%s did not reach the hook", label)
-			}
+	f.add(fsnotify.Create, "src/n/")
+	deadline := time.After(5 * time.Second)
+	for due := false; !due; {
+		select {
+		case <-f.b.Due():
+			due = true
+		case <-time.After(50 * time.Millisecond):
+			f.add(fsnotify.Write, "src/n/a.txt")
+		case <-deadline:
+			t.Fatal("dir batch did not become due while writes kept coming")
 		}
 	}
-	folder := await(func(ev domain.Event) bool { return ev.IsDir && ev.Path.String() == f.path("src/n") }, "C of src/n")
-	// 감시 루프가 이벤트를 받기까지의 지연을 생각해 여유를 둔다.
-	if folder > maxWait+300*time.Millisecond {
-		t.Errorf("C of src/n reached the hook after %v, want within %v", folder, maxWait)
+	// 느린 환경에서 타이머가 늦게 알리는 만큼 여유를 둔다.
+	if elapsed := time.Since(start); elapsed > maxWait+300*time.Millisecond {
+		t.Errorf("C of src/n was passed on after %v, want within %v", elapsed, maxWait)
 	}
-	await(func(ev domain.Event) bool { return ev.Path.String() == f.path("src/n/a.txt") }, "write in src/n after the folder event")
-	f.write("other.txt")
-	await(func(ev domain.Event) bool { return ev.Path.String() == f.path("other.txt") }, "write of other.txt")
-}
-
-// dirEvent가 none이면 폴더 이벤트도, 폴더 이벤트에 흡수된 파일 이벤트도 hook에 가지 않는지 확인한다.
-func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
-	f := newRenameFixture(t)
-	f.fill("src/pkg", 5)
-	f.fill("../outside/x", 3)
-	f.startWith(watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}))
-	f.mkdirAll("src/a/b")
-	f.write("src/a/b/c.txt")
-	f.move("../outside/x", "src/x")
-	f.removeAll("src/pkg")
-	if got := f.changes(); len(got) != 0 {
-		t.Fatalf("hook events = %v, want none", got)
+	runs, err := f.b.flush()
+	if err != nil {
+		t.Fatal(err)
 	}
-	f.write("src/a/b/later.txt")
-	if got := f.changes(); !slices.Contains(got, "C src/a/b/later.txt") {
-		t.Fatalf("creation in the new folder did not reach the hook (got %v)", got)
+	if got, want := f.describe(runs), []string{"C src/n/"}; !slices.Equal(got, want) {
+		t.Fatalf("runs = %v, want %v", got, want)
+	}
+	if got, want := f.add(fsnotify.Write, "src/n/a.txt"), []string{"U src/n/a.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("runs after the folder event = %v, want %v", got, want)
+	}
+	if got, want := f.add(fsnotify.Write, "other.txt"), []string{"U other.txt"}; !slices.Equal(got, want) {
+		t.Fatalf("runs after the folder event = %v, want %v", got, want)
 	}
 }
 
-// subDir가 false이면 감시하지 않는 대상 바로 아래 폴더도 만들거나 지우면 폴더 이벤트로 알리는지 확인한다.
-func TestFolderEventWithoutSubDir(t *testing.T) {
-	f := newRenameFixture(t)
-	f.sentinelDirs = []string{""}
-	f.fill("src", 3)
-	f.startWith(watchTargetOption(domain.WatchOption{FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}}))
-	f.removeAll("src")
-	if got, want := f.changes(), []string{"D src/"}; !slices.Equal(got, want) {
-		t.Fatalf("hook events after removing an existing folder = %v, want %v", got, want)
+// kqueue에서는 생긴 폴더의 변경을 넘기기 전에 그 폴더 아래의 감시 폴더를 다시 넣게 하고, 다시 넣지 못하면 그 앞의
+// 변경으로 만든 실행과 오류를 돌려주는지 확인한다. 다른 운영체제에서는 다시 넣지 않는다.
+func TestCreatedFolderIsReAddedBeforePassingOn(t *testing.T) {
+	f := newDirBatchFixture(t, domain.DirBatchOption{WaitMillisecond: 100, MaxWaitMillisecond: 1000})
+	f.reAddFails = "b"
+	f.add(fsnotify.Create, "a/")
+	f.add(fsnotify.Remove, "d/")
+	f.add(fsnotify.Create, "b/")
+	f.add(fsnotify.Create, "c/")
+	f.awaitDue()
+	runs, err := f.b.flush()
+	wantReAdded, wantRuns, wantErr := []string{}, []string{"C a/", "D d/", "C b/", "C c/"}, error(nil)
+	if kqueueOS {
+		wantReAdded, wantRuns, wantErr = []string{"a", "b"}, []string{"C a/", "D d/"}, errReAdd
 	}
-	f.mkdirAll("new")
-	f.fill("new", 3)
-	if got, want := f.changes(), []string{"C new/"}; !slices.Equal(got, want) {
-		t.Fatalf("hook events after making a folder = %v, want %v", got, want)
+	if got := append([]string{}, f.reAdded...); !slices.Equal(got, wantReAdded) {
+		t.Errorf("re-added folders = %v, want %v", got, wantReAdded)
 	}
-	f.removeAll("new")
-	if got, want := f.changes(), []string{"D new/"}; !slices.Equal(got, want) {
-		t.Fatalf("hook events after removing a new folder = %v, want %v", got, want)
+	if got := f.describe(runs); !slices.Equal(got, wantRuns) {
+		t.Errorf("runs = %v, want %v", got, wantRuns)
 	}
-}
-
-// 폴더를 만들고 곧바로 그 안에 파일을 써도 hook이 폴더 C를 받고, 그 뒤 그 폴더 안에 만든 파일의 이벤트도 받는지
-// 확인한다. macOS에서는 fsnotify가 새 폴더의 감시 등록을 덮어써 그 폴더 안의 이벤트를 놓치기도 했다. 덮어쓴
-// 등록은 다음 이벤트를 받을 때 되돌리므로, 폴더 C를 받기 전에는 다른 이벤트를 만들지 않는다.
-func TestFolderCreatedWithFileIsWatchedAfterFolderEvent(t *testing.T) {
-	f := newRenameFixture(t)
-	f.start(nil)
-	f.mkdirAll("src/n")
-	f.write("src/n/a.txt")
-	if got, want := f.next(), "C src/n/"; got != want {
-		t.Fatalf("hook event = %q, want %q", got, want)
-	}
-	f.write("src/n/b.txt")
-	if got := f.changes(); !slices.Contains(got, "C src/n/b.txt") {
-		t.Fatalf("creation in the new folder did not reach the hook (got %v)", got)
-	}
-}
-
-// 폴더 이벤트를 모으는 동안 쌓인 이벤트로 만든 실행이 대기열 용량보다 많으면, 감시 루프는 대기열에 자리가 나기를
-// 기다리지 않고 dispatch queue full로 멈춘다. 폴더 안의 파일만 지우면 폴더 이벤트가 없어 파일 이벤트가 모두 실행이 된다.
-func TestBatchLargerThanQueueOverflows(t *testing.T) {
-	const queueSize, files = 50, 150
-	f := newRenameFixture(t)
-	f.fill("src", files)
-	release := make(chan struct{})
-	option := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}})
-	option.Queue.Size = queueSize
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger())
-	f.changed, f.result = startRunner(t, r, func(domain.Event) { <-release })
-	t.Cleanup(func() { close(release) })
-	for i := 0; i < files; i++ {
-		if err := os.Remove(f.path(fmt.Sprintf("src/f%d.txt", i))); err != nil {
-			t.Fatal(err)
-		}
-	}
-	select {
-	case err := <-f.result:
-		if !errors.Is(err, fsnotify.ErrEventOverflow) || !strings.Contains(err.Error(), "dispatch queue full (capacity 50)") {
-			t.Fatalf("run stopped with %v, want dispatch queue full (capacity 50)", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("watch loop waited for room in the queue instead of stopping")
-	}
-}
-
-// 폴더 이벤트는 exclude에 맞는 폴더에는 오지 않는다. dist/**는 dist 폴더 자신도 빼고, dist/*는 dist 안의 항목만 뺀다.
-func TestExcludedFolderSendsNoFolderEvent(t *testing.T) {
-	f := newRenameFixture(t)
-	f.start(domain.ExcludePatterns{"src/dist/**", "dst/out/*"})
-	f.mkdirAll("src/dist/sub")
-	f.mkdirAll("dst/out/sub")
-	got := f.changes()
-	if slices.ContainsFunc(got, func(ev string) bool { return strings.Contains(ev, "src/dist") }) {
-		t.Errorf("excluded folder src/dist reached the hook (got %v)", got)
-	}
-	if want := []string{"C dst/out/"}; !slices.Equal(got, want) {
-		t.Errorf("hook events = %v, want %v", got, want)
+	if !errors.Is(err, wantErr) {
+		t.Errorf("flush error = %v, want %v", err, wantErr)
 	}
 }

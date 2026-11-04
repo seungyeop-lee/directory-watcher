@@ -1,7 +1,6 @@
 package service
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -10,16 +9,94 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
 )
 
-// isDir은 감시 대상 안의 경로 name이 폴더인지 판단한다. 기록이나 감시 목록에 폴더로 적혀 있지 않으면 디스크를 본다.
-func (r *watchTargetRunner) isDir(name string) bool {
-	if isDir, _ := r.recorded(name); isDir {
+// dirBatcher는 폴더 이벤트를 모으는 동안 감시 대상에서 받은 변경을 받은 순서대로 모으고, 모으기를 마친 변경을
+// hookBatcher에 넘긴다. 감시 루프의 고루틴에서만 부른다.
+//
+// 모으는 동안에는 폴더 이벤트가 아닌 변경도 묶음에 넣어, 감시 대상의 변경이 생긴 순서대로 hook에 가게 한다. 묶음은
+// 마지막 변경 뒤 wait 동안 변경이 없거나 첫 변경부터 maxWait가 지나면 Due가 알린다. 감시 루프는 그때 flush를
+// 부른다. 대기열에 넣기 전에 모으므로, 큰 폴더를 지워도 대기열에는 폴더 이벤트 하나만 들어간다. wait가 0이면
+// 폴더 이벤트를 모으지 않는다.
+type dirBatcher struct {
+	wait    time.Duration
+	maxWait time.Duration
+	// root는 감시 목록에 넣는 감시 대상 폴더의 경로다. runner가 감시를 시작할 때 링크를 푼 경로로 정한다.
+	root        string
+	hookBatcher *hookBatcher
+	// reAddUnder는 감시 목록에 넣은 폴더 가운데 dir과 그 아래에 있는 폴더를 감시 목록에 다시 넣는다.
+	reAddUnder func(dir domain.Path) error
+	// batch는 폴더 이벤트를 모으는 동안 받은 변경이고, 모으지 않을 때는 nil이다. due는 batch를 넘길 때를 알린다.
+	batch *eventBatch
+	due   <-chan time.Time
+}
+
+func newDirBatcher(option domain.DirBatchOption, hookBatcher *hookBatcher, reAddUnder func(dir domain.Path) error) *dirBatcher {
+	return &dirBatcher{
+		wait:        option.WaitMillisecond.Duration(),
+		maxWait:     option.MaxWaitMillisecond.Duration(),
+		hookBatcher: hookBatcher,
+		reAddUnder:  reAddUnder,
+	}
+}
+
+// add는 변경 c를 받는다. 폴더 이벤트를 모으지 않으면 c를 곧바로 hookBatcher에 넘기고, hookBatcher가 곧바로
+// 돌려준 실행을 돌려준다. 모으는 동안에는 c를 묶음에 넣고 nil을 돌려준다.
+func (b *dirBatcher) add(c change) ([]domain.Event, error) {
+	now := time.Now()
+	if b.batch == nil {
+		if b.wait == 0 || !b.opensBatch(c.Event) {
+			return b.passOn(c)
+		}
+		b.batch = &eventBatch{start: now}
+	}
+	b.batch.add(c)
+	b.due = time.After(min(b.wait, b.batch.start.Add(b.maxWait).Sub(now)))
+	return nil, nil
+}
+
+// Due는 flush를 부를 때를 알리는 채널을 돌려준다. 모은 변경이 없으면 nil 채널이라 알리지 않는다.
+func (b *dirBatcher) Due() <-chan time.Time {
+	return b.due
+}
+
+// flush는 모은 변경을 받은 순서대로 hookBatcher에 넘기고, hookBatcher가 곧바로 돌려준 실행을 돌려준다. 넘기다
+// 오류가 나면 그 앞의 변경으로 만든 실행과 오류를 돌려준다.
+func (b *dirBatcher) flush() ([]domain.Event, error) {
+	batch := b.batch
+	b.batch, b.due = nil, nil
+	var runs []domain.Event
+	for _, c := range batch.events {
+		next, err := b.passOn(c)
+		if err != nil {
+			return runs, err
+		}
+		runs = append(runs, next...)
+	}
+	return runs, nil
+}
+
+// passOn은 폴더 이벤트 모으기를 마친 c를 hookBatcher에 넘기고, hookBatcher가 곧바로 돌려준 실행을 돌려준다.
+//
+// fsnotify의 kqueue 구현은 새 폴더의 감시 등록을 내부 재등록으로 덮어쓸 수 있다(reAddDirs 참고). 그래서 생긴
+// 폴더의 변경을 넘기기 전에 그 아래의 감시 폴더를 다시 감시 목록에 넣어, hook이 폴더 생성을 받은 뒤 그 안에서
+// 생기는 변경을 놓치지 않게 한다. 그 전에 폴더 안에 생긴 항목은 폴더 생성 이벤트를 받은 hook이 직접 읽는다.
+func (b *dirBatcher) passOn(c change) ([]domain.Event, error) {
+	if kqueueOS && c.IsDir && fsnotify.Op(c.Operation) == fsnotify.Create {
+		if err := b.reAddUnder(c.Path); err != nil {
+			return nil, err
+		}
+	}
+	return b.hookBatcher.add(c), nil
+}
+
+// opensBatch는 e를 받으면 폴더 이벤트를 모으기 시작해야 하는지 판단한다.
+//
+// 폴더의 생성과 삭제 말고도, 감시 대상 바로 아래가 아닌 파일의 삭제로 시작한다. 폴더를 통째로 지우면 폴더 안의
+// 파일을 지운 이벤트가 폴더를 지운 이벤트보다 먼저 오므로, 그 파일 이벤트부터 모아야 폴더 이벤트에 흡수할 수 있다.
+func (b *dirBatcher) opensBatch(e domain.Event) bool {
+	if e.IsDir {
 		return true
 	}
-	if _, ok := r.watchedDirs[name]; ok {
-		return true
-	}
-	info, err := os.Lstat(name)
-	return err == nil && info.IsDir()
+	return fsnotify.Op(e.Operation) == fsnotify.Remove && filepath.Dir(e.Path.String()) != b.root
 }
 
 // eventBatch는 폴더 이벤트를 모으는 동안 감시 대상에서 받은 이벤트를 받은 순서대로 모은다. 묶음 안의 폴더
@@ -58,72 +135,4 @@ func absorbs(dir, e domain.Event) bool {
 // isUnder는 path가 dir 아래에 있는지 판단한다. path와 dir이 같으면 false다.
 func isUnder(path, dir domain.Path) bool {
 	return path != dir && dir.Contains(path)
-}
-
-// opensBatch는 e를 받으면 폴더 이벤트를 모으기 시작해야 하는지 판단한다.
-//
-// 폴더의 생성과 삭제 말고도, 감시 대상 바로 아래가 아닌 파일의 삭제로 시작한다. 폴더를 통째로 지우면 폴더 안의
-// 파일을 지운 이벤트가 폴더를 지운 이벤트보다 먼저 오므로, 그 파일 이벤트부터 모아야 폴더 이벤트에 흡수할 수 있다.
-func (r *watchTargetRunner) opensBatch(e domain.Event) bool {
-	if e.IsDir {
-		return true
-	}
-	return fsnotify.Op(e.Operation) == fsnotify.Remove && filepath.Dir(e.Path.String()) != r.watchRoot
-}
-
-// collect는 e를 passOn으로 넘긴다. 폴더 이벤트를 모으는 동안에는 e도 묶음에 넣어, 감시 대상의 이벤트가
-// 생긴 순서대로 hook에 가게 한다. dirBatchWait가 0이면 폴더 이벤트를 모으지 않는다.
-//
-// 묶음은 마지막 이벤트 뒤 dirBatchWait 동안 이벤트가 없거나, 첫 이벤트부터 dirBatchMaxWait가 지나면 flushBatch가
-// 내보낸다. 폴더 이벤트를 대기열에 넣기 전에 모으므로, 큰 폴더를 지워도 대기열에는 폴더 이벤트 하나만 들어간다.
-func (r *watchTargetRunner) collect(e change) error {
-	now := time.Now()
-	if r.batch == nil {
-		if r.dirBatchWait == 0 || !r.opensBatch(e.Event) {
-			return r.passOn(e)
-		}
-		r.batch = &eventBatch{start: now}
-	}
-	r.batch.add(e)
-	wait := min(r.dirBatchWait, r.batch.start.Add(r.dirBatchMaxWait).Sub(now))
-	r.batchDue = time.After(wait)
-	return nil
-}
-
-// flushBatch는 모은 이벤트를 받은 순서대로 passOn으로 넘긴다.
-func (r *watchTargetRunner) flushBatch() error {
-	batch := r.batch
-	r.batch, r.batchDue = nil, nil
-	for _, e := range batch.events {
-		if err := r.passOn(e); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// passOn은 폴더 이벤트 모으기를 마친 e를 hookBatcher에 넘기고, hookBatcher가 곧바로 돌려준 실행을 dispatcher의
-// 대기열에 넣는다.
-//
-// fsnotify의 kqueue 구현은 새 폴더의 감시 등록을 내부 재등록으로 덮어쓸 수 있다(reAddDirs 참고). 그래서 생긴
-// 폴더의 이벤트를 넘기기 전에 그 아래의 감시 폴더를 다시 감시 목록에 넣어, hook이 폴더 생성을 받은 뒤 그 안에서
-// 생기는 변경을 놓치지 않게 한다. 그 전에 폴더 안에 생긴 항목은 폴더 생성 이벤트를 받은 hook이 직접 읽는다.
-func (r *watchTargetRunner) passOn(e change) error {
-	if kqueueOS && e.IsDir && fsnotify.Op(e.Operation) == fsnotify.Create {
-		if err := r.reAdd(r.watchedDirsUnder(e.Path)); err != nil {
-			return err
-		}
-	}
-	return r.dispatcher.enqueue(r.hookBatcher.add(e))
-}
-
-// watchedDirsUnder는 감시 목록에 넣은 폴더 가운데 dir과 그 아래에 있는 폴더를 돌려준다.
-func (r *watchTargetRunner) watchedDirsUnder(dir domain.Path) []string {
-	var dirs []string
-	for watched := range r.watchedDirs {
-		if dir.Contains(domain.Path(watched)) {
-			dirs = append(dirs, watched)
-		}
-	}
-	return dirs
 }

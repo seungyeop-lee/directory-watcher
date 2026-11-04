@@ -33,6 +33,18 @@ func (r *watchTargetRunner) recorded(path string) (isDir, ok bool) {
 	return e.dir, true
 }
 
+// isDir은 감시 대상 안의 경로 name이 폴더인지 판단한다. 기록이나 감시 목록에 폴더로 적혀 있지 않으면 디스크를 본다.
+func (r *watchTargetRunner) isDir(name string) bool {
+	if isDir, _ := r.recorded(name); isDir {
+		return true
+	}
+	if _, ok := r.watchedDirs[name]; ok {
+		return true
+	}
+	info, err := os.Lstat(name)
+	return err == nil && info.IsDir()
+}
+
 // markWatched는 감시 목록에 넣은 폴더 dir을 watchedDirs에 적는다. dir 안의 항목은 addEntry가 적는다.
 func (r *watchTargetRunner) markWatched(dir string) {
 	if _, ok := r.watchedDirs[dir]; !ok {
