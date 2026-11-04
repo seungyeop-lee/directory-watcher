@@ -140,11 +140,9 @@ func (r *watchTargetRunner) Run() error {
 			if ev.Name == "" || !domain.Path(r.watchRoot).Contains(domain.Path(ev.Name)) {
 				continue
 			}
+			excluded := r.isDefaultExcluded(ev.Name)
 			if ev.Op.Has(fsnotify.Create) {
-				if domain.Path(ev.Name).IsDefaultExcludeFile() {
-					continue
-				}
-				if r.watchSubDir {
+				if !excluded && r.watchSubDir {
 					if err := r.addDirTree(ev.Name); err != nil {
 						return &FatalError{Path: r.path, Cause: err}
 					}
@@ -152,7 +150,7 @@ func (r *watchTargetRunner) Run() error {
 			} else if ev.Op.Has(fsnotify.Remove) {
 				_ = r.watcher.Remove(ev.Name)
 			}
-			if !r.watchEvent.IsListening(ev) || r.excludeSuffix.Contain(domain.Path(ev.Name)) {
+			if excluded || !r.watchEvent.IsListening(ev) || r.excludeSuffix.Contain(domain.Path(ev.Name)) {
 				continue
 			}
 			select {
@@ -234,11 +232,10 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 		if !d.IsDir() {
 			return nil
 		}
-		path := domain.Path(p)
-		// 감시 대상 경로는 사용자가 직접 지정했으므로 이름으로 제외하지 않는다.
-		if p != r.watchRoot && path.IsDefaultExcludeFile() {
+		if r.isDefaultExcluded(p) {
 			return filepath.SkipDir
 		}
+		path := domain.Path(p)
 		if r.excludeDir.Equal(path) || r.excludeDir.IsSubFolder(path) {
 			return filepath.SkipDir
 		}
@@ -246,6 +243,12 @@ func (r *watchTargetRunner) addDirTree(root string) error {
 		r.logger.Debug(fmt.Sprint("add path:", p))
 		return r.watcher.Add(p)
 	})
+}
+
+// isDefaultExcluded는 name이 기본 제외 규칙에 따라 감시와 hook 실행에서 빠지는지 판단한다.
+// 감시 대상 경로는 사용자가 직접 지정했으므로 이름으로 제외하지 않는다.
+func (r *watchTargetRunner) isDefaultExcluded(name string) bool {
+	return name != r.watchRoot && domain.Path(name).IsDefaultExcludeFile()
 }
 
 func (r *watchTargetRunner) selectEventHandler() func(chan domain.Event) {
