@@ -81,5 +81,5 @@ make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 ## Related code
 
 - `e2e/scenarios/golden_path_test.go` defines `TestGoldenPath`.
-- `e2e/scenarios/helpers_test.go`: `goldenConfig` builds the configuration, and `changeValues` and `expectedSequence` build the expected records.
+- `e2e/scenarios/helpers_test.go`: `goldenFileName` is the test file name, `goldenConfig` builds the configuration, and `changeValues` and `expectedSequence` build the expected records.
 - `e2e/harness`: `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
