@@ -10,7 +10,7 @@ import (
 
 // dirRemoveRepeatOS는 지운 폴더의 REMOVE를 fsnotify가 한 번 더 보낼 수 있는 운영체제인지 나타낸다. 부모 폴더의
 // 감시와 그 폴더 자신의 감시가 각각 REMOVE를 보내는 일이 Windows에서는 대부분, kqueue에서는 가끔 생긴다. inotify는
-// 부모 폴더를 감시하면 폴더 자신의 삭제를 fsnotify가 버리므로 한 번만 보낸다.
+// 부모 폴더를 감시하면 폴더 자신의 삭제를 fsnotify가 버리므로 한 번만 보내고, 지운 폴더의 후행 WRITE도 보내지 않는다.
 var dirRemoveRepeatOS = !inotifyOS
 
 // removedDirTTL은 removedDirRecords가 지운 폴더를 기억하는 시간이다. 감시 루프가 처리한 시각으로 잰 원래 REMOVE와

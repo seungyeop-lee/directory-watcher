@@ -132,8 +132,10 @@ func absorbs(dir, e domain.Event) bool {
 		return false
 	}
 	if dir.Path == e.Path {
-		// 같은 삭제 수명의 후행 REMOVE와 WRITE만 흡수하고, 재생성 CREATE는 흡수하지 않는다.
-		return dir.Operation == e.Operation || (fsnotify.Op(dir.Operation) == fsnotify.Remove && fsnotify.Op(e.Operation) == fsnotify.Write)
+		// 같은 삭제 수명의 후행 REMOVE와 WRITE만 흡수하고, 재생성 CREATE는 흡수하지 않는다. 지운 폴더의 후행 WRITE는
+		// dirRemoveRepeatOS에서만 오므로, 그 밖의 운영체제에서 같은 경로의 WRITE는 CREATE를 놓친 새 항목의 것이다.
+		return dir.Operation == e.Operation ||
+			(dirRemoveRepeatOS && fsnotify.Op(dir.Operation) == fsnotify.Remove && fsnotify.Op(e.Operation) == fsnotify.Write)
 	}
 	return isUnder(e.Path, dir.Path)
 }

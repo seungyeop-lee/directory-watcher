@@ -229,41 +229,46 @@ func TestRemovedFolderRecordsExpire(t *testing.T) {
 	}
 }
 
+// 폴더를 지운 경로에 파일이나 폴더가 다시 생겼다가 지워지면, 지운 폴더의 중복 알림이 오는 운영체제인지와 관계없이
+// 새 항목의 변경과 삭제가 앞선 폴더 삭제에 흡수되지 않는지 확인한다.
 func TestDeletionRecreationWithinDirBatch(t *testing.T) {
-	for _, replacement := range []string{"file", "folder", "file without create"} {
-		for _, deliver := range []domain.Deliver{domain.DeliverLast, domain.DeliverLastPerPath, domain.DeliverEach} {
-			t.Run(fmt.Sprintf("%s/deliver=%v", replacement, deliver), func(t *testing.T) {
-				root := t.TempDir()
-				path := filepath.Join(root, "pkg.v2")
-				mkdir(t, path)
-				r := deletionRunner(t, root, hookBatchOption(1000, 10000, deliver))
-				removeAll(t, path)
-				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
-				suffix := ""
-				if replacement == "folder" {
+	for _, repeat := range []bool{false, true} {
+		for _, replacement := range []string{"file", "folder", "file without create"} {
+			for _, deliver := range []domain.Deliver{domain.DeliverLast, domain.DeliverLastPerPath, domain.DeliverEach} {
+				t.Run(fmt.Sprintf("repeat=%v/%s/deliver=%v", repeat, replacement, deliver), func(t *testing.T) {
+					setDirRemoveRepeat(t, repeat)
+					root := t.TempDir()
+					path := filepath.Join(root, "pkg.v2")
 					mkdir(t, path)
-					suffix = "/"
-				} else {
-					writeFile(t, path)
-				}
-				op, symbol := fsnotify.Create, "C"
-				if replacement == "file without create" {
-					op, symbol = fsnotify.Write, "U"
-				}
-				sendDeletionEvent(t, r, op, "pkg.v2")
-				removeAll(t, path)
-				sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
-				got, want := []string{}, []string{"D pkg.v2" + suffix}
-				if deliver == domain.DeliverEach {
-					want = []string{"D pkg.v2/", symbol + " pkg.v2" + suffix, "D pkg.v2" + suffix}
-				}
-				for _, run := range flushDeletionRuns(t, r) {
-					got = append(got, describeRun(t, root, run))
-				}
-				if !slices.Equal(got, want) {
-					t.Fatalf("runs = %v, want %v", got, want)
-				}
-			})
+					r := deletionRunner(t, root, hookBatchOption(1000, 10000, deliver))
+					removeAll(t, path)
+					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+					suffix := ""
+					if replacement == "folder" {
+						mkdir(t, path)
+						suffix = "/"
+					} else {
+						writeFile(t, path)
+					}
+					op, symbol := fsnotify.Create, "C"
+					if replacement == "file without create" {
+						op, symbol = fsnotify.Write, "U"
+					}
+					sendDeletionEvent(t, r, op, "pkg.v2")
+					removeAll(t, path)
+					sendDeletionEvent(t, r, fsnotify.Remove, "pkg.v2")
+					got, want := []string{}, []string{"D pkg.v2" + suffix}
+					if deliver == domain.DeliverEach {
+						want = []string{"D pkg.v2/", symbol + " pkg.v2" + suffix, "D pkg.v2" + suffix}
+					}
+					for _, run := range flushDeletionRuns(t, r) {
+						got = append(got, describeRun(t, root, run))
+					}
+					if !slices.Equal(got, want) {
+						t.Fatalf("runs = %v, want %v", got, want)
+					}
+				})
+			}
 		}
 	}
 }

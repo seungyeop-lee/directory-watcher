@@ -88,13 +88,14 @@ func dirBatchChange(root string, op fsnotify.Op, rel string) change {
 }
 
 // 폴더 이벤트를 모으는 동안 받은 변경 가운데 폴더 이벤트에 흡수되는 변경을 빼는지 확인한다. 폴더를 통째로 지우면
-// 폴더 안의 항목을 지운 이벤트가 먼저 와도 폴더의 D 하나만 남는다.
+// 폴더 안의 항목을 지운 이벤트가 먼저 와도 폴더의 D 하나만 남는다. repeat는 dirRemoveRepeatOS의 값이다.
 func TestEventBatchAbsorbsEventsUnderFolderEvent(t *testing.T) {
 	cases := []struct {
-		name string
-		ops  []fsnotify.Op
-		rels []string
-		want []string
+		name   string
+		repeat bool
+		ops    []fsnotify.Op
+		rels   []string
+		want   []string
 	}{
 		{
 			name: "rm -rf nested folders",
@@ -109,10 +110,17 @@ func TestEventBatchAbsorbsEventsUnderFolderEvent(t *testing.T) {
 			want: []string{"C a/"},
 		},
 		{
-			name: "remove and write repeated for a removed folder",
-			ops:  []fsnotify.Op{fsnotify.Remove, fsnotify.Remove, fsnotify.Write},
-			rels: []string{"d/", "d", "d"},
-			want: []string{"D d/"},
+			name:   "remove and write repeated for a removed folder",
+			repeat: true,
+			ops:    []fsnotify.Op{fsnotify.Remove, fsnotify.Remove, fsnotify.Write},
+			rels:   []string{"d/", "d", "d"},
+			want:   []string{"D d/"},
+		},
+		{
+			name: "write at a removed folder where no late write comes",
+			ops:  []fsnotify.Op{fsnotify.Remove, fsnotify.Write},
+			rels: []string{"d/", "d"},
+			want: []string{"D d/", "U d"},
 		},
 		{
 			name: "rm -rf and mkdir again",
@@ -135,6 +143,7 @@ func TestEventBatchAbsorbsEventsUnderFolderEvent(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			setDirRemoveRepeat(t, tc.repeat)
 			root := t.TempDir()
 			var batch eventBatch
 			for i, rel := range tc.rels {
