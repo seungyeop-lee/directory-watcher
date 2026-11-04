@@ -89,5 +89,6 @@ make e2e-windows ARGS="-- -run '^TestFolderEvents$'"
 
 ## 관련 코드
 
-- `e2e/scenarios/folder_events_test.go`: `TestFolderEvents`, 폴더 이벤트를 받은 폴더 안에 파일을 만드는 행을 만드는 `createLater`, 기록을 감시 폴더 기준 경로로 바꾸는 `relativeChange`
+- `e2e/scenarios/folder_events_test.go`: `TestFolderEvents`와 폴더 이벤트를 받은 폴더 안에 파일을 만드는 행을 만드는 `createLater`입니다.
+- `e2e/scenarios/helpers_test.go`: `changeSteps`는 동작마다 표지까지 기록을 읽고, `relativeChange`는 기록을 감시 폴더 기준 경로로 바꿉니다. `mkdirAll`과 `createEmpty`는 폴더와 빈 파일을 만듭니다.
 - `e2e/harness`: `Start`, `Hook`, `Await`, `Lines`, `Stop`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

@@ -89,5 +89,6 @@ make e2e-windows ARGS="-- -run '^TestFolderEvents$'"
 
 ## Related code
 
-- `e2e/scenarios/folder_events_test.go`: `TestFolderEvents`, its `createLater`, which makes the rows that create a file in a folder after its folder event, and `relativeChange`, which turns a record into a path relative to the watch folder
+- `e2e/scenarios/folder_events_test.go`: `TestFolderEvents` and its `createLater`, which makes the rows that create a file in a folder after its folder event.
+- `e2e/scenarios/helpers_test.go`: `changeSteps` reads each action through its sentinels; `relativeChange` turns a record into a path relative to the watch folder. `mkdirAll` and `createEmpty` create folders and empty files.
 - `e2e/harness`: `Start`, `Hook`, `Await`, `Lines`, `Stop`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

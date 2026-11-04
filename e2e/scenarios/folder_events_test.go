@@ -8,9 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
@@ -90,42 +88,15 @@ func TestFolderEvents(t *testing.T) {
 			}
 		}, []string{"D,false,src/g.txt"}, ""},
 	}
-	seen := 0
-	for i, step := range steps {
+	changes := &changeSteps{t: t, s: s, root: s.Watch}
+	for _, step := range steps {
 		step.act()
 		// Windows는 폴더마다 이벤트를 따로 받으므로, 이벤트가 생기는 폴더마다 표지 파일을 만들어 모두 기다린다.
 		dirs := []string{"", "src", "dst"}
 		if step.folder != "" {
 			dirs = append(dirs, step.folder)
 		}
-		var sentinels []string
-		for _, dir := range dirs {
-			rel := strings.TrimPrefix(fmt.Sprintf("%s/zz-sentinel-%d.txt", dir, i), "/")
-			createEmpty(t, watch(rel))
-			sentinels = append(sentinels, "C,false,"+rel)
-		}
-		var got []string
-		s.Await(step.name+" sentinels", 10*time.Second, func() bool {
-			got = nil
-			waiting := map[string]bool{}
-			for _, sentinel := range sentinels {
-				waiting[sentinel] = true
-			}
-			lines := s.Lines()
-			for _, line := range lines[seen:] {
-				event := relativeChange(t, s.Watch, line)
-				if waiting[event] {
-					delete(waiting, event)
-				} else if !strings.Contains(event, "zz-sentinel-") {
-					got = append(got, event)
-				}
-			}
-			if len(waiting) > 0 {
-				return false
-			}
-			seen = len(lines)
-			return true
-		})
+		got := changes.next(step.name, nil, dirs...)
 		// Windows는 폴더를 옮긴 뒤 감시를 다시 만드는 순간에 감시 대상 안에서 생긴 변경을 hook에 두 번 보낼 수 있다.
 		// 사용 안내가 허용하는 동작이므로 폴더 안에 만든 파일의 연이은 같은 기록은 하나로 본다.
 		if step.folder != "" && runtime.GOOS == "windows" {
@@ -138,27 +109,6 @@ func TestFolderEvents(t *testing.T) {
 	s.Stop()
 }
 
-// relativeChange는 CHANGE:<Event>,<IsDir>,<절대 경로> 기록을 <Event>,<IsDir>,<감시 폴더 기준 경로>로 바꾼다.
-func relativeChange(t *testing.T, watch, line string) string {
-	t.Helper()
-	parts := strings.SplitN(strings.TrimPrefix(line, "CHANGE:"), ",", 3)
-	if len(parts) != 3 {
-		t.Fatalf("unexpected record %q", line)
-	}
-	rel, err := filepath.Rel(watch, parts[2])
-	if err != nil {
-		t.Fatal(err)
-	}
-	return parts[0] + "," + parts[1] + "," + filepath.ToSlash(rel)
-}
-
-func mkdirAll(t *testing.T, dir string) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // fill은 dir 안에 파일 n개를 만든다.
 func fill(t *testing.T, dir string, n int) {
 	t.Helper()
@@ -167,17 +117,5 @@ func fill(t *testing.T, dir string, n int) {
 		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0644); err != nil {
 			t.Fatal(err)
 		}
-	}
-}
-
-// createEmpty는 내용 없는 파일을 만든다. 내용을 쓰지 않으므로 운영체제와 관계없이 생성 이벤트만 생긴다.
-func createEmpty(t *testing.T, path string) {
-	t.Helper()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY|os.O_EXCL, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
 	}
 }
