@@ -2,7 +2,7 @@
 
 🇺🇸 [English](README.md) | 🇰🇷 한국어
 
-- Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·삭제되면 미리 정해 둔 명령을 실행하는 프로그램입니다.
+- Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·삭제되거나 폴더가 생성·삭제되면 미리 정해 둔 명령을 실행하는 프로그램입니다.
 - 코드를 고칠 때마다 빌드나 테스트를 다시 실행하거나, 소스가 바뀌면 개발 서버를 재시작하거나, 파일이 바뀔 때 백업을 만드는 작업을 자동화할 수 있습니다.
 
 ## 기능
@@ -10,8 +10,9 @@
 ### 파일이 바뀌면 명령 실행하기
 
 - 여러 디렉터리를 한 번에 감시합니다. 감시 대상마다 `onChange` 명령을 따로 정하고, 전역 `onBeforeChange`와 `onAfterChange` 명령은 모든 대상의 `onChange` 앞뒤에 실행됩니다.
-- 반응할 이벤트(생성, 수정, 삭제)를 고르고, 경로 패턴으로 파일과 폴더를 감시에서 빼거나 하위 디렉터리를 감시하지 않게 할 수 있습니다.
-- 바뀐 파일의 경로, 이름, 확장자, 디렉터리, 이벤트 종류를 [템플릿 변수](USAGE.ko.md#실행-명령에서-쓸-수-있는-변수)로 명령에 넘깁니다.
+- 반응할 파일 이벤트(생성, 수정, 삭제)와 폴더 이벤트(생성, 삭제)를 고르고, 경로 패턴으로 파일과 폴더를 감시에서 빼거나 하위 디렉터리를 감시하지 않게 할 수 있습니다.
+- 바뀐 파일이나 폴더의 경로, 이름, 확장자, 디렉터리, 이벤트 종류, 폴더인지 여부를 [템플릿 변수](USAGE.ko.md#실행-명령에서-쓸-수-있는-변수)로 명령에 넘깁니다.
+- `mkdir -p`, 폴더 옮겨 오기, `rm -rf`처럼 폴더가 안의 내용과 함께 생기거나 사라지면, hook은 파일마다 이벤트를 받지 않고 맨 위 폴더의 이벤트 하나를 받습니다. 자세한 내용은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)를 확인하세요.
 - 감시 대상의 경로가 겹치면, 겹치는 폴더의 변경 하나에 대상마다 hook이 실행됩니다. 자세한 내용은 [감시 대상의 경로가 겹칠 때](USAGE.ko.md#감시-대상의-경로가-겹칠-때)를 확인하세요.
 
 ### 몰려드는 변경 다루기
@@ -138,7 +139,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 - **hook의 결과 파일:** hook이 `path` 안에 쓴 파일도 변경이므로, hook이 다시 실행되며 끝없이 반복됩니다. 그 파일을 감시 대상의 `exclude`에 적습니다. 예를 들어 `onChange`가 `src/build.log`에 쓰면 `option` 아래에 `exclude: ['build.log']`를 적습니다. 자세한 내용은 [hook이 자기 결과로 다시 실행되지 않게 하기](USAGE.ko.md#hook이-자기-결과로-다시-실행되지-않게-하기)를 확인하세요.
 - **멈추기:** Ctrl+C를 누르거나 SIGTERM을 보냅니다. watcher는 실행 중인 명령을 취소하고 종료 명령을 실행한 뒤 끝납니다.
-- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 경로 제외, 겹치는 감시 경로, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
+- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 폴더 이벤트, 경로 제외, 겹치는 감시 경로, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
 
 ## 동작 다이어그램
 
@@ -153,7 +154,10 @@ flowchart TD
         watchDirs["대상 디렉터리 감시 시작"]
         targetStart["대상 onStartWatch"]
         receiveEvent(("이벤트 수신"))
-        filterEvent{"감시하는 이벤트 종류이고<br>제외된 경로가 아닌가?"}
+        excludeCheck{"제외된 경로인가?"}
+        collectChoice{"폴더 생성·삭제이거나<br>하위 폴더 안의 파일 삭제인가?"}
+        collectFolder["대상의 이벤트를 모으고<br>폴더 안의 이벤트는 흡수"]
+        kindFilter{"watchFileEvent나 watchDirEvent에서<br>고른 이벤트 종류인가?"}
         queueEvent{"대상의 256개 대기열에<br>자리가 있는가?"}
         modeChoice{"noWait?"}
         debounceWait["마지막 이벤트 뒤 waitMillisecond 대기<br>그 이벤트만 남김"]
@@ -167,9 +171,14 @@ flowchart TD
     globalStart --> watchDirs
     watchDirs --> targetStart
     targetStart --> receiveEvent
-    receiveEvent -->|"제외되지 않은 새 디렉터리는<br>감시 목록에 추가"| filterEvent
-    filterEvent -->|"아니오: 무시"| receiveEvent
-    filterEvent -->|"예"| queueEvent
+    receiveEvent -->|"제외되지 않은 새 디렉터리는<br>감시 목록에 추가"| excludeCheck
+    excludeCheck -->|"예: 무시"| receiveEvent
+    excludeCheck -->|"아니오"| collectChoice
+    collectChoice -->|"예, 또는 이미 모으는 중"| collectFolder
+    collectChoice -->|"아니오"| kindFilter
+    collectFolder -->|"dirEventWaitMillisecond 동안 이벤트 없음,<br>또는 dirEventMaxWaitMillisecond 지남"| kindFilter
+    kindFilter -->|"아니오: 무시"| receiveEvent
+    kindFilter -->|"예"| queueEvent
     queueEvent -->|"아니오"| fatalStop
     queueEvent -->|"예"| modeChoice
     modeChoice -->|"false"| debounceWait
@@ -182,6 +191,7 @@ flowchart TD
     runChange -->|"다음 이벤트"| receiveEvent
 ```
 
+- 모은 이벤트는 watcher를 멈추지 않고 대기열에 자리가 날 때까지 기다립니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
 - `interruptible: false`에서는 대상 `onStartWatch`나 변경 명령이 실행되는 동안 들어온 이벤트가 그 명령이 끝날 때까지 대기열에서 기다립니다. `interruptible: true`에서는 실행 중인 대상 `onStartWatch`도 다음 변경이 취소합니다.
 - 한 번의 실행에 속한 명령은 차례대로 실행되며, 실패한 명령이 나오면 그 실행을 멈춥니다. 이 실패는 `[ERROR]` 로그로 남습니다. 자세한 내용은 사용 안내의 [`config.yml`](USAGE.ko.md#configyml)을 확인하세요.
 

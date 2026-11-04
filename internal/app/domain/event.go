@@ -4,16 +4,12 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// Event는 hook에 넘기는 이벤트다. Operation은 fsnotify.Create, fsnotify.Write, fsnotify.Remove 중 하나다.
 type Event struct {
 	Path
 	Operation
-}
-
-func NewEventByFsnotify(input fsnotify.Event) Event {
-	return Event{
-		Path:      Path(input.Name),
-		Operation: Operation(input.Op),
-	}
+	// IsDir은 Path가 폴더인지를 나타낸다. 폴더 이벤트의 Operation은 Create와 Remove뿐이다.
+	IsDir bool
 }
 
 type Operation fsnotify.Op

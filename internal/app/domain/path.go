@@ -2,7 +2,6 @@ package domain
 
 import (
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -30,14 +29,6 @@ func (p Path) RelOf(input Path) (string, bool) {
 		return "", false
 	}
 	return rel, true
-}
-
-func (p Path) IsDir() bool {
-	stat, err := os.Stat(string(p))
-	if err != nil {
-		return false
-	}
-	return stat.IsDir()
 }
 
 func (p Path) Abs() string {

@@ -79,7 +79,10 @@ watchTargets:
         - [ 감시하지 않을 파일과 폴더의 경로 패턴, path 기준 ]
       waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
       watchSubDir: [ 하위 디렉토리 감시 여부, default는 true ]
-      watchEvent: [ 감시 이벤트 (C: 생성, U: 수정, D: 삭제 또는 옮겨 나감), default는 "CUD" ]
+      watchFileEvent: [ hook을 실행할 파일 이벤트 (C: 생성 또는 옮겨 옴, U: 수정, D: 삭제 또는 옮겨 나감) 또는 none, default는 "CUD" ]
+      watchDirEvent: [ hook을 실행할 폴더 이벤트 (C: 생성 또는 옮겨 옴, D: 삭제 또는 옮겨 나감) 또는 none, default는 "CD" ]
+      dirEventWaitMillisecond: [ 모은 폴더 이벤트를 보내기 전에 마지막 이벤트 뒤로 기다리는 시간, default는 100 ]
+      dirEventMaxWaitMillisecond: [ 폴더 이벤트를 모으는 가장 긴 시간, default는 1000 ]
       noWait: [ 이벤트 발생 후 대기시간 없이 바로 hook을 실행할지 여부, default는 false ]
       interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
 ```
@@ -166,15 +169,16 @@ working directory <작업 폴더>: <원인>
 
 ### 실행 명령에서 쓸 수 있는 변수
 
-| 변수                 | 환경 변수                | 설명                              | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
-|--------------------|----------------------|---------------------------------|--------------------------------------------------|
-| {{.Path}}          | `DW_PATH`            | 이벤트가 일어난 파일의 상대 경로              | test/dir2/b.txt                                  |
-| {{.AbsPath}}       | `DW_ABS_PATH`        | 이벤트가 일어난 파일의 절대 경로              | /Users/example/directory-watcher/test/dir2/b.txt |
-| {{.Name}}          | `DW_NAME`            | 이벤트가 일어난 파일 이름                  | b.txt                                            |
-| {{.ExtName}}       | `DW_EXT_NAME`        | 이벤트가 일어난 파일의 확장자                | .txt                                             |
-| {{.ParentPath}}    | `DW_PARENT_PATH`     | 이벤트가 일어난 파일이 들어 있는 폴더의 상대 경로    | test/dir2                                        |
-| {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | 이벤트가 일어난 파일이 들어 있는 폴더의 절대 경로    | /Users/example/directory-watcher/test/dir2       |
-| {{.Event}}         | `DW_EVENT`           | 이벤트 종류 (C: 생성, U: 수정, D: 삭제 또는 옮겨 나감) | C                                                |
+| 변수                 | 환경 변수                | 설명                                       | 예시 (`test/dir2`을 감시 대상 폴더로 설정했을 경우)              |
+|--------------------|----------------------|------------------------------------------|--------------------------------------------------|
+| {{.Path}}          | `DW_PATH`            | 이벤트가 일어난 파일이나 폴더의 상대 경로                  | test/dir2/b.txt                                  |
+| {{.AbsPath}}       | `DW_ABS_PATH`        | 이벤트가 일어난 파일이나 폴더의 절대 경로                  | /Users/example/directory-watcher/test/dir2/b.txt |
+| {{.Name}}          | `DW_NAME`            | 이벤트가 일어난 파일이나 폴더의 이름                     | b.txt                                            |
+| {{.ExtName}}       | `DW_EXT_NAME`        | 이벤트가 일어난 파일의 확장자. 폴더이면 빈 값               | .txt                                             |
+| {{.ParentPath}}    | `DW_PARENT_PATH`     | 이벤트가 일어난 파일이나 폴더가 들어 있는 폴더의 상대 경로        | test/dir2                                        |
+| {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | 이벤트가 일어난 파일이나 폴더가 들어 있는 폴더의 절대 경로        | /Users/example/directory-watcher/test/dir2       |
+| {{.Event}}         | `DW_EVENT`           | 이벤트 종류 (C: 생성 또는 옮겨 옴, U: 수정, D: 삭제 또는 옮겨 나감) | C                                                |
+| {{.IsDir}}         | `DW_IS_DIR`          | [폴더 이벤트](#폴더-이벤트)이면 `true`, 파일 이벤트이면 `false`  | false                                            |
 
 - 이 변수는 변경이 생겼을 때 실행하는 hook, 곧 감시 대상의 `onChange`와 전역 `onBeforeChange`, `onAfterChange`에서만 씁니다.
 - 다른 hook은 명령을 적힌 그대로 실행하므로, 그 명령에 쓴 `{{.Path}}`는 글자 그대로 남습니다.
@@ -184,7 +188,7 @@ working directory <작업 폴더>: <원인>
 명령에 표에 없는 변수가 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
 ```text
-Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event
+Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event, IsDir
 ```
 
 - 쌍점 앞의 위치는 설정에서 문제가 된 명령을 가리킵니다.
@@ -248,7 +252,7 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 - `noWait: false`이면 `waitMillisecond` 안의 마지막 이벤트만 hook을 실행하므로, 이름 바꾸기와 감시 대상 안의 옮기기는 새 경로의 `C`로 hook을 한 번 실행합니다.
 - 옛 경로가 `exclude`나 [기본 제외 규칙](#기본-제외-규칙)에 맞으면 hook은 그 `D`를 받지 않습니다.
 - macOS는 새 경로를 옛 경로보다 먼저 알리기도 합니다. 그러면 watcher는 옛 경로의 `D`가 올 때까지 `C`와 그 뒤의 이벤트를 최대 1초 동안 미뤄 둡니다.
-- 폴더의 이름 바꾸기와 옮기기는 [폴더 이벤트 감지에 대한 제약사항](#폴더-이벤트-감지에-대한-제약사항)에 있습니다.
+- 폴더의 이름 바꾸기와 옮기기는 [폴더 이벤트](#폴더-이벤트)에 있습니다.
 
 ### 버전 2의 이름 바꾸기 이벤트에서 옮기기
 
@@ -298,6 +302,7 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 ## 과부하와 종료
 
 - 대상마다 대기 이벤트는 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외된 경로는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
+- [폴더 이벤트](#폴더-이벤트)를 위해 모은 이벤트는 보낼 때 대기열에 자리가 날 때까지 기다리므로, 모은 이벤트를 보내다가 `dispatch queue full`로 처리를 중단하지는 않습니다.
 - 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
 - `interruptible: true`에서는 취소한 이전 실행이 끝난 뒤에 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리가 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
@@ -319,7 +324,7 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 - `option.exclude`에는 경로 패턴을 적습니다.
 - 패턴에 맞는 파일과 폴더는 감시하지 않습니다.
   - 패턴에 맞는 폴더는 그 아래 전체와 함께 감시 목록에 넣지 않습니다. 감시를 시작할 때 있던 폴더든 감시 중에 생긴 폴더든 같습니다. 그래서 `node_modules`처럼 큰 폴더를 빼면 그 안의 항목은 하나도 감시 목록에 들어가지 않습니다.
-  - 패턴에 맞는 파일은 만들거나 수정하거나 삭제해도 hook이 실행되지 않습니다.
+  - 패턴에 맞는 파일은 만들거나 수정하거나 삭제해도 hook이 실행되지 않고, 패턴에 맞는 폴더는 만들거나 지워도 [폴더 이벤트](#폴더-이벤트)가 오지 않습니다.
 
 ```yaml
 watchTargets:
@@ -335,6 +340,7 @@ watchTargets:
 - `*`는 이름의 일부, `?`는 글자 하나, `**`는 폴더 여러 단계에 맞습니다. `dist/**`는 `dist` 폴더와 그 아래 전체에 맞고, `**/*.log`는 어느 깊이에 있든 `.log` 파일에 맞습니다. `[abc]` 같은 문자 집합과 `{js,css}` 같은 선택지도 쓸 수 있습니다.
 - 패턴은 위에서부터 차례로 맞춰 보고, 마지막으로 맞은 패턴이 결과를 정합니다. `!`로 시작하는 패턴에 맞으면 앞선 패턴이 뺀 경로를 다시 감시합니다. 위 예시에서는 `site` 바로 아래의 `important.log`만 hook을 실행하고, 다른 `.log` 파일은 hook을 실행하지 않습니다.
 - 뺀 폴더는 감시하지 않으므로, 그 안의 경로는 `!`로 다시 감시하게 할 수 없습니다. 폴더 안의 일부만 남기려면 폴더 대신 폴더 안의 항목을 빼는 패턴을 씁니다. `dist/*`와 `!dist/keep.txt`를 쓰면 `dist` 안에서 `keep.txt`만 hook을 실행합니다. `dist/**`와 `!dist/keep.txt`를 쓰면 `dist`를 감시하지 않으므로 `keep.txt`도 hook을 실행하지 않습니다.
+- `dist/**`는 `dist` 폴더 자신에도 맞으므로, `dist`를 만들거나 지워도 폴더 이벤트가 오지 않습니다. `dist/*`는 `dist` 안의 항목에만 맞으므로, hook은 `dist`의 폴더 이벤트를 그대로 받습니다.
 - [기본 제외 규칙](#기본-제외-규칙)으로 빠지는 이름도 `!`로 다시 감시하게 할 수 없습니다.
 - 패턴은 따옴표로 감쌉니다. 따옴표가 없으면 YAML은 `*`나 `!`로 시작하는 값을 YAML 문법으로 읽습니다.
 
@@ -416,13 +422,76 @@ watchTargets:
 
 - `exclude` 패턴은 상위 대상의 `path`를 기준으로 하므로 `src/api/**`가 아니라 `api/**`로 적습니다.
 
-## 폴더 이벤트 감지에 대한 제약사항
+## 폴더 이벤트
 
-- 기본동작은 감시 대상 폴더 내의 **파일**의 이벤트에 따라 hook을 실행합니다.
-- 즉, 폴더를 만들거나 폴더의 이름을 바꾸거나 폴더를 옮겨도 새 경로로는 hook이 실행되지 않습니다.
-- 그러나, 폴더의 삭제 (빈 폴더 포함)에 대해서는 삭제 대상이 폴더임을 인식 할 수 없어 hook이 실행됩니다.
-- 폴더의 이름을 바꾸거나 폴더를 다른 폴더나 감시 대상 밖으로 옮기면, 폴더를 지울 때와 같이 폴더의 옛 경로의 `D`로 hook이 실행됩니다.
-- 이름을 바꾸거나 옮긴 폴더 안의 파일은 그 이름 바꾸기나 옮기기로 hook을 실행하지 않습니다.
+- hook은 파일뿐 아니라 폴더의 이벤트도 받습니다. `{{.IsDir}}`와 `DW_IS_DIR`는 폴더 이벤트이면 `true`, 파일 이벤트이면 `false`입니다.
+- 폴더 이벤트는 `C`와 `D`뿐입니다. 폴더에는 `U`가 없으며, 폴더 안의 변경은 그 안에 있는 파일의 이벤트로 hook에 갑니다.
+- `option.watchFileEvent`로 hook을 실행할 파일 이벤트를, `option.watchDirEvent`로 폴더 이벤트를 고릅니다. 기본값은 `CUD`와 `CD`이고, `none`을 적으면 그쪽 이벤트를 받지 않습니다.
+
+동작마다 hook이 받는 이벤트는 다음과 같습니다. 이벤트, `IsDir`, 경로 순서로 적습니다.
+
+| 동작 | hook이 받는 이벤트 |
+|---|---|
+| `mkdir src/pkg` | `C true src/pkg` |
+| `mkdir -p src/a/b/c` | `C true src/a` 하나 |
+| 파일이 든 폴더를 감시 대상 밖에서 `src/x`로 옮겨 오기 | `C true src/x` 하나 |
+| `mkdir src/n && echo hi > src/n/a.txt` | `C true src/n` 하나 |
+| 안에 파일 300개가 있는 `src/pkg`를 `rm -rf`로 지우기 | `D true src/pkg` 하나 |
+| `src/pkg`를 감시 대상 밖으로 옮기기 | `D true src/pkg` 하나 |
+| 폴더 이름 바꾸기, 감시 대상 안의 다른 폴더 아래로 옮기기 | 옛 경로의 `D true`, 그다음 새 경로의 `C true` |
+| 파일 생성, 수정, 삭제, 이름 바꾸기 | [파일 이벤트](#이름-바꾸기와-옮기기) 그대로, `IsDir`는 `false` |
+
+hook은 다음 약속에 기댈 수 있습니다.
+
+- 폴더 `C`는 그 폴더가 안에 든 것과 함께 생겼다는 뜻입니다. 폴더 안의 내용은 hook이 직접 읽습니다. 폴더를 옮겨 와도 watcher는 그 폴더와 함께 들어온 파일의 이벤트를 만들지 않습니다.
+- 폴더 `D`는 그 폴더와 그 안의 모든 것이 사라졌다는 뜻입니다.
+- 폴더 이벤트를 모으는 동안 온, 그 폴더 안의 파일과 하위 폴더의 이벤트는 폴더 이벤트에 흡수합니다. `watchDirEvent: none`이어도 똑같이 흡수하므로, 이때 폴더 단위의 변경은 hook을 실행하지 않습니다.
+- `noWait: true`에서는 한 감시 대상의 이벤트를 생긴 순서대로 hook에 넘깁니다. 폴더 이벤트를 모으는 동안에는 그 대상의 파일 이벤트도 함께 기다립니다.
+- hook은 같은 변경을 두 번 받을 수 있습니다. 예를 들어 폴더 `C`를 받고 안을 읽은 뒤, 그 폴더 안 파일의 `C`를 또 받을 수 있습니다.
+
+### 폴더 이벤트를 모으는 시간
+
+- 폴더가 생기거나 사라지면 watcher는 그 감시 대상의 이벤트를 모으고, `dirEventWaitMillisecond`(기본 100) 동안 새 이벤트가 없으면 모은 이벤트를 보냅니다.
+- 이벤트가 계속 오면 첫 이벤트부터 `dirEventMaxWaitMillisecond`(기본 1000)가 지났을 때 그때까지 모은 이벤트를 보냅니다. 그 뒤에 그 폴더 안에서 생긴 이벤트는 흡수하지 않고 따로 hook에 갑니다.
+- 감시 대상의 하위 폴더 안에서 파일을 지워도 이벤트를 모으기 시작합니다. 폴더를 통째로 지우면 폴더 안의 파일을 지운 이벤트가 폴더의 이벤트보다 먼저 오기 때문입니다. 그래서 `noWait: true`에서도 이런 삭제와 그 뒤의 이벤트는 최대 `dirEventWaitMillisecond`만큼 늦게 hook에 갑니다.
+- `0`을 적으면 기본값을 씁니다.
+
+`watchFileEvent`나 `watchDirEvent`가 빈 값이거나 받지 않는 글자를 담았거나 둘 다 `none`이면, watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].option.watchDirEvent: U is not a folder event; use C, D, or none
+```
+
+### 폴더 이벤트 감지에 대한 제약사항
+
+- 느린 디스크처럼 트리를 지우는 도중에 `dirEventWaitMillisecond`보다 오래 이벤트가 끊기면, 하위 폴더가 위 폴더의 `D`보다 먼저 따로 `D`로 hook에 갈 수 있습니다. 그런 디스크에서는 `dirEventWaitMillisecond`를 늘립니다.
+- 폴더 링크는 따라가지 않으므로, 링크를 만들거나 지우면 `IsDir`가 `false`인 파일 이벤트로 갑니다.
+- watcher가 폴더의 생성을 처리하기 전에 그 폴더가 지워지면, watcher는 그것이 폴더였는지 알 수 없어 파일의 `C`와 `D`로 hook에 넘깁니다.
 - 감시 대상 밖으로 옮긴 폴더 안의 변경은 더 이상 hook을 실행하지 않습니다.
   - Windows에서는 그렇게 옮기고 약 100ms 뒤에 watcher가 감시 대상의 감시를 다시 만들며, 그때 감시 대상 안에서 생긴 변경은 hook에 두 번 갈 수 있습니다.
 - Windows에서는 감시 중인 하위 폴더가 있는 폴더의 이름을 바꾸거나 그 폴더를 옮기면, 감시하는 동안 `Access is denied`로 실패합니다.
+
+### watchEvent에서 옮기기
+
+- 버전 3에서 `watchEvent`를 `watchFileEvent`와 `watchDirEvent`로 바꿨습니다.
+
+감시 대상의 `option`에 `watchEvent`가 남아 있으면 watcher는 hook을 하나도 실행하지 않고 다음 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].option.watchEvent is no longer supported; use option.watchFileEvent and option.watchDirEvent (see USAGE "Moving from watchEvent")
+```
+
+- 오류에 적힌 "Moving from watchEvent"는 영어판에서 이 절의 제목입니다.
+
+값은 다음과 같이 옮깁니다.
+
+| 옛 설정 | 옮긴 설정 |
+|---|---|
+| `watchEvent: CU` | `watchFileEvent: CU` |
+| `watchEvent: ''` | `watchFileEvent: CUD`, 또는 `watchFileEvent`를 적지 않음 |
+
+- 폴더 이벤트는 기본으로 켜집니다. `cat {{.Path}}`처럼 파일 경로를 기대하는 hook은 `{{.IsDir}}`를 확인하거나, 그 감시 대상에 `watchDirEvent: none`을 적어야 합니다.
+- 버전 3 전에는 폴더에 대해 hook이 다음 이벤트를 받았습니다.
+  - 폴더를 만들거나 옮겨 와도 hook이 실행되지 않았습니다. 폴더를 만든 직후에 쓴 파일은 hook을 실행하기도 했지만, 이제는 폴더 `C`에 흡수됩니다.
+  - 폴더를 지우면 hook이 폴더 경로의 `D`를 파일 이벤트와 구별 없이 받았고, Linux와 macOS에서는 안의 파일마다 `D`도 받았습니다. 이제는 폴더 `D` 하나만 받습니다.
+  - 이렇게 흡수되는 파일 이벤트는 `watchDirEvent: none`이어도 오지 않습니다.

@@ -199,6 +199,59 @@ func TestRemovedExcludeKeysStopBuild(t *testing.T) {
 	}
 }
 
+func TestWatchEventOptionsBuildEventKinds(t *testing.T) {
+	all, folder := domain.WatchAllEvent(), domain.WatchEvent{Create: true, Delete: true}
+	tests := []struct {
+		name       string
+		option     string
+		file, dir  domain.WatchEvent
+		wait, maxW domain.Millisecond
+	}{
+		{name: "defaults", option: "{}", file: all, dir: folder},
+		{name: "files only", option: "{watchFileEvent: CD, watchDirEvent: none}", file: domain.WatchEvent{Create: true, Delete: true}},
+		{name: "folders only", option: "{watchFileEvent: none, watchDirEvent: D}", dir: domain.WatchEvent{Delete: true}},
+		{name: "wait times", option: "{dirEventWaitMillisecond: 300, dirEventMaxWaitMillisecond: 5000}", file: all, dir: folder, wait: 300, maxW: 5000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			option := buildCommandSet(t, "watchTargets:\n  - path: site\n    option: "+tt.option+"\n").WatchTargets[0].Option
+			if option.WatchFileEvent != tt.file || option.WatchDirEvent != tt.dir {
+				t.Errorf("WatchFileEvent, WatchDirEvent = %+v, %+v, want %+v, %+v", option.WatchFileEvent, option.WatchDirEvent, tt.file, tt.dir)
+			}
+			if option.DirEventWait != tt.wait || option.DirEventMaxWait != tt.maxW {
+				t.Errorf("DirEventWait, DirEventMaxWait = %d, %d, want %d, %d", option.DirEventWait, option.DirEventMaxWait, tt.wait, tt.maxW)
+			}
+		})
+	}
+}
+
+func TestInvalidWatchEventOptionStopsBuild(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{name: "old watchEvent", option: "watchEvent: CUD", want: `option.watchEvent is no longer supported; use option.watchFileEvent and option.watchDirEvent (see USAGE "Moving from watchEvent")`},
+		{name: "old watchEvent with new options", option: "{watchFileEvent: CUD, watchEvent: ''}", want: `option.watchEvent is no longer supported; use option.watchFileEvent and option.watchDirEvent (see USAGE "Moving from watchEvent")`},
+		{name: "empty file events", option: "watchFileEvent: ''", want: "option.watchFileEvent: empty value; use C, U, D, or none"},
+		{name: "unknown file event", option: "watchFileEvent: CX", want: "option.watchFileEvent: X is not a file event; use C, U, D, or none"},
+		{name: "lower case", option: "watchFileEvent: cud", want: "option.watchFileEvent: c is not a file event; use C, U, D, or none"},
+		{name: "folder update", option: "watchDirEvent: U", want: "option.watchDirEvent: U is not a folder event; use C, D, or none"},
+		{name: "empty folder events", option: "watchDirEvent: ''", want: "option.watchDirEvent: empty value; use C, D, or none"},
+		{name: "none with letters", option: "watchDirEvent: Cnone", want: "option.watchDirEvent: n is not a folder event; use C, D, or none"},
+		{name: "both none", option: "{watchFileEvent: none, watchDirEvent: none}", want: "option: watchFileEvent and watchDirEvent are both none; onChange would never run"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      " + tt.option + "\n"
+			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+			if want := "watchTargets[1]." + tt.want; err == nil || err.Error() != want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
 func TestExcludeBuildsPatterns(t *testing.T) {
 	commands := buildCommandSet(t, "watchTargets:\n  - path: site\n    option:\n      exclude: ['dist/**', '**/*.log', '!important.log']\n")
 	got := commands.WatchTargets[0].Option.Exclude
@@ -216,7 +269,7 @@ func TestInvalidExcludePatternStopsBuild(t *testing.T) {
 }
 
 func TestUnknownTemplateVariableInEventHookStopsBuild(t *testing.T) {
-	const available = "available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event"
+	const available = "available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event, IsDir"
 	tests := []struct {
 		name string
 		data string

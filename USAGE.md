@@ -79,7 +79,10 @@ watchTargets:
         - [ path pattern of files and folders to exclude from watching, relative to path ]
       waitMillisecond: [ wait time after an event occurs before executing the hook, default is 100 ]
       watchSubDir: [ whether to monitor subdirectories, default is true ]
-      watchEvent: [ monitoring events (C: create, U: update, D: delete or move away), default is "CUD" ]
+      watchFileEvent: [ file events that run the hook (C: create or move in, U: update, D: delete or move away), or none, default is "CUD" ]
+      watchDirEvent: [ folder events that run the hook (C: create or move in, D: delete or move away), or none, default is "CD" ]
+      dirEventWaitMillisecond: [ quiet time after the last event before collected folder events are sent, default is 100 ]
+      dirEventMaxWaitMillisecond: [ longest time folder events are collected, default is 1000 ]
       noWait: [ whether to execute the hook immediately without waiting after an event occurs, default is false ]
       interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
@@ -165,15 +168,16 @@ working directory <working directory>: <cause>
 
 ### Variables in commands
 
-| Variable           | Environment variable | Description                                                              | Example (when `test/dir2` is set as the monitored directory) |
-|--------------------|----------------------|--------------------------------------------------------------------------|--------------------------------------------------------------|
-| {{.Path}}          | `DW_PATH`            | Relative path of the file where the event occurred                       | test/dir2/b.txt                                              |
-| {{.AbsPath}}       | `DW_ABS_PATH`        | Absolute path of the file where the event occurred                       | /Users/example/directory-watcher/test/dir2/b.txt             |
-| {{.Name}}          | `DW_NAME`            | Name of the file where the event occurred                                | b.txt                                                        |
-| {{.ExtName}}       | `DW_EXT_NAME`        | Extension of the file where the event occurred                           | .txt                                                         |
-| {{.ParentPath}}    | `DW_PARENT_PATH`     | Relative path of the folder that holds the file where the event occurred | test/dir2                                                    |
-| {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | Absolute path of the folder that holds the file where the event occurred | /Users/example/directory-watcher/test/dir2                   |
-| {{.Event}}         | `DW_EVENT`           | Event type (C: create, U: update, D: delete or move away)               | C                                                            |
+| Variable           | Environment variable | Description                                                                         | Example (when `test/dir2` is set as the monitored directory) |
+|--------------------|----------------------|-------------------------------------------------------------------------------------|--------------------------------------------------------------|
+| {{.Path}}          | `DW_PATH`            | Relative path of the file or folder where the event occurred                        | test/dir2/b.txt                                              |
+| {{.AbsPath}}       | `DW_ABS_PATH`        | Absolute path of the file or folder where the event occurred                        | /Users/example/directory-watcher/test/dir2/b.txt             |
+| {{.Name}}          | `DW_NAME`            | Name of the file or folder where the event occurred                                 | b.txt                                                        |
+| {{.ExtName}}       | `DW_EXT_NAME`        | Extension of the file where the event occurred; empty for a folder                  | .txt                                                         |
+| {{.ParentPath}}    | `DW_PARENT_PATH`     | Relative path of the folder that holds the file or folder where the event occurred  | test/dir2                                                    |
+| {{.ParentAbsPath}} | `DW_PARENT_ABS_PATH` | Absolute path of the folder that holds the file or folder where the event occurred  | /Users/example/directory-watcher/test/dir2                   |
+| {{.Event}}         | `DW_EVENT`           | Event type (C: create or move in, U: update, D: delete or move away)               | C                                                            |
+| {{.IsDir}}         | `DW_IS_DIR`          | `true` for a [folder event](#folder-events), `false` for a file event               | false                                                        |
 
 - Only the hooks that run for a change use these variables: the target's `onChange` and global `onBeforeChange` and `onAfterChange`.
 - The other hooks run their commands as written, so `{{.Path}}` in them stays as that literal text.
@@ -183,7 +187,7 @@ working directory <working directory>: <cause>
 If a command uses a variable that is not in the table, the watcher runs no hook, prints an error like the one below, and exits with code 1:
 
 ```text
-Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event
+Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePath"; available: Path, AbsPath, Name, ExtName, ParentPath, ParentAbsPath, Event, IsDir
 ```
 
 - The location before the colon points to the command in the config.
@@ -247,7 +251,7 @@ The hook receives these events for each action:
 - With `noWait: false`, only the last event within `waitMillisecond` runs the hook, so a rename or a move inside the target runs the hook once with `C` for the new path.
 - If the old path matches `exclude` or the [default exclusion](#default-exclusion), the hook does not receive the `D`.
 - macOS can report the new path before the old one. The watcher then holds the `C` and the events after it until the `D` for the old path arrives, for at most 1 second.
-- Renamed and moved folders are covered in [Limitations on folder event detection](#limitations-on-folder-event-detection).
+- Renamed and moved folders are covered in [Folder events](#folder-events).
 
 ### Moving from version 2 rename events
 
@@ -294,6 +298,7 @@ Error context is passed as environment variables, never interpolated into comman
 ## Overload and shutdown
 
 - Each target keeps at most 256 pending events and runs one run of its hooks at a time. `noWait: true` preserves received-event order; it does not become latest-only under load. Debounce retains the last received valid event, and excluded paths neither execute nor reset its timer. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the debounce result.
+- Events collected for [folder events](#folder-events) wait for room in the queue when they are sent, so sending them never stops processing with `dispatch queue full`.
 - A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
 - A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
 - With `interruptible: true`, a new run starts only after the canceled previous run has ended. A shutdown signal cancels running start and change commands, discards pending changes, waits for event handling to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
@@ -315,7 +320,7 @@ Error context is passed as environment variables, never interpolated into comman
 - `option.exclude` lists path patterns.
 - A file or folder that matches is not watched:
   - A matched folder and everything below it are not added to the watch list, whether the folder existed when watching started or was created later. Excluding a large folder such as `node_modules` adds no watches for anything in it.
-  - Creating, modifying, or deleting a matched file does not run hooks.
+  - Creating, modifying, or deleting a matched file does not run hooks, and creating or deleting a matched folder sends no [folder event](#folder-events).
 
 ```yaml
 watchTargets:
@@ -331,6 +336,7 @@ watchTargets:
 - `*` matches any part of a name, `?` matches one character, and `**` matches any number of folders. `dist/**` matches the folder `dist` and everything below it, and `**/*.log` matches `.log` files at any depth. Character classes such as `[abc]` and alternatives such as `{js,css}` also work.
 - Patterns are checked from top to bottom, and the last pattern that matches decides. A pattern that starts with `!` watches a path again that an earlier pattern excluded. In the example, `important.log` directly under `site` runs hooks, and other `.log` files do not.
 - `!` cannot watch a path inside an excluded folder again, because that folder is not watched. To keep part of a folder, exclude the entries inside it instead of the folder: with `dist/*` and `!dist/keep.txt`, only `keep.txt` in `dist` runs hooks. With `dist/**` and `!dist/keep.txt`, `dist` is not watched, so `keep.txt` does not run hooks either.
+- `dist/**` also matches the folder `dist` itself, so creating or deleting `dist` sends no folder event. `dist/*` matches only the entries in `dist`, so the hook still receives the folder events of `dist`.
 - `!` also cannot watch a name that [default exclusion](#default-exclusion) excludes.
 - Quote each pattern. Unquoted, YAML reads a value that starts with `*` or `!` as its own syntax.
 
@@ -410,13 +416,74 @@ watchTargets:
 
 - The pattern is relative to the parent target's `path`, so write `api/**`, not `src/api/**`.
 
-## Limitations on folder event detection
+## Folder events
 
-- By default, hooks are executed based on **file** events within the monitored folder.
-- Therefore, hooks are not executed for folder creation or for the new path of a renamed or moved folder.
-- However, hooks are executed for folder deletion (including empty folders) as it cannot be recognized that the target is a folder.
-- Renaming a folder, or moving it to another folder or out of the target, runs the hook with `D` for the folder's old path, the same as deleting it.
-- The files inside a folder that is renamed or moved do not run hooks for the rename or move.
+- The hook receives events of folders as well as files. `{{.IsDir}}` and `DW_IS_DIR` are `true` for a folder event and `false` for a file event.
+- A folder event is `C` or `D`. A folder has no `U`: a change inside a folder reaches the hook as an event of the file inside it.
+- `option.watchFileEvent` chooses the file events that run the hook, and `option.watchDirEvent` chooses the folder events. They default to `CUD` and `CD`, and `none` turns one of them off.
+
+The hook receives these events for each action, written as event, `IsDir`, and path:
+
+| Action | Events the hook receives |
+|---|---|
+| `mkdir src/pkg` | `C true src/pkg` |
+| `mkdir -p src/a/b/c` | One `C true src/a` |
+| Move a folder that holds files into the target as `src/x` | One `C true src/x` |
+| `mkdir src/n && echo hi > src/n/a.txt` | One `C true src/n` |
+| `rm -rf src/pkg` with 300 files inside | One `D true src/pkg` |
+| Move `src/pkg` out of the target | One `D true src/pkg` |
+| Rename a folder, or move it under another folder in the target | `D true` for the old path, then `C true` for the new path |
+| Create, update, delete, or rename a file | The [file events](#renamed-and-moved-files), with `IsDir` `false` |
+
+A hook can rely on the following:
+
+- A folder `C` means that the folder appeared together with everything in it. The hook reads what is inside the folder itself: the watcher sends no file events for the files a folder brings with it, even when the folder is moved in.
+- A folder `D` means that the folder and everything in it are gone.
+- Events of the files and subfolders inside a folder that arrive while its folder event is being collected are absorbed into that folder event. They are absorbed in the same way with `watchDirEvent: none`, so a change of a whole folder then runs no hook.
+- With `noWait: true`, the hook receives the events of a target in the order they happened. While folder events are being collected, the file events of that target wait with them.
+- The hook can receive the same change twice. For example, after the hook receives `C` for a folder and reads it, it can receive `C` for a file in that folder.
+
+### Collecting folder events
+
+- After a folder is created or deleted, the watcher collects the events of the target and sends them once no event has arrived for `dirEventWaitMillisecond` (default 100).
+- When events keep arriving, the watcher sends what it has collected `dirEventMaxWaitMillisecond` (default 1000) after the first event. Events inside the folder after that reach the hook on their own and are not absorbed.
+- Deleting a file inside a subfolder of the target also starts collecting, because deleting a whole folder reports the files inside it before the folder. With `noWait: true`, such a deletion and the events after it reach the hook up to `dirEventWaitMillisecond` later.
+- `0` uses the default.
+
+If `watchFileEvent` or `watchDirEvent` is empty, has a letter it does not accept, or both are `none`, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
+
+```text
+Error: watchTargets[0].option.watchDirEvent: U is not a folder event; use C, D, or none
+```
+
+### Limitations on folder event detection
+
+- If deleting a tree pauses for longer than `dirEventWaitMillisecond`, for example on a slow disk, a subfolder can reach the hook as its own `D` before the `D` of the folder above it. Raise `dirEventWaitMillisecond` for such disks.
+- A link to a folder is not followed, so creating or deleting the link is a file event with `IsDir` `false`.
+- A folder that is deleted before the watcher handles its creation reaches the hook as a file `C` and `D`, because the watcher can no longer tell that it was a folder.
 - After a folder is moved out of the target, changes in it no longer run hooks.
   - On Windows, the watcher re-creates its watches of the target about 100 ms after such a move, and changes made in the target at that moment can reach the hook twice.
 - On Windows, renaming or moving a folder that holds a watched subfolder fails with `Access is denied` while the folder is watched.
+
+### Moving from watchEvent
+
+- Version 3 replaced `watchEvent` with `watchFileEvent` and `watchDirEvent`.
+
+If a target's `option` still has `watchEvent`, the watcher runs no hook, prints the error below, and exits with code 1:
+
+```text
+Error: watchTargets[0].option.watchEvent is no longer supported; use option.watchFileEvent and option.watchDirEvent (see USAGE "Moving from watchEvent")
+```
+
+Move the value as follows:
+
+| Before | After |
+|---|---|
+| `watchEvent: CU` | `watchFileEvent: CU` |
+| `watchEvent: ''` | `watchFileEvent: CUD`, or no `watchFileEvent` |
+
+- Folder events are on by default. A hook that expects the path of a file, such as `cat {{.Path}}`, has to check `{{.IsDir}}`, or the target has to set `watchDirEvent: none`.
+- Before version 3, the hook received these events for folders:
+  - Creating a folder or moving one in ran no hook. A file written right after its folder was created sometimes ran the hook, and it is now absorbed into the folder `C`.
+  - Deleting a folder ran the hook with `D` for the folder path, with `IsDir` unavailable, and on Linux and macOS also with `D` for each file inside. Now the hook receives one folder `D`.
+  - These file events stay absorbed with `watchDirEvent: none` as well.

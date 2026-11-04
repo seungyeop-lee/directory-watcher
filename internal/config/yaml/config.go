@@ -1,6 +1,7 @@
 package yaml
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
@@ -138,37 +139,59 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.Wat
 }
 
 type WatchTargetsOptionConfig struct {
-	Exclude         config.Exclude     `yaml:"exclude"`
-	WaitMillisecond config.Millisecond `yaml:"waitMillisecond"`
-	WatchSubDir     *bool              `yaml:"watchSubDir"`
-	WatchEvent      config.WatchEvent  `yaml:"watchEvent"`
-	NoWait          *bool              `yaml:"noWait"`
-	Interruptible   *bool              `yaml:"interruptible"`
+	Exclude                    config.Exclude     `yaml:"exclude"`
+	WaitMillisecond            config.Millisecond `yaml:"waitMillisecond"`
+	WatchSubDir                *bool              `yaml:"watchSubDir"`
+	WatchFileEvent             *config.WatchEvent `yaml:"watchFileEvent"`
+	WatchDirEvent              *config.WatchEvent `yaml:"watchDirEvent"`
+	DirEventWaitMillisecond    config.Millisecond `yaml:"dirEventWaitMillisecond"`
+	DirEventMaxWaitMillisecond config.Millisecond `yaml:"dirEventMaxWaitMillisecond"`
+	NoWait                     *bool              `yaml:"noWait"`
+	Interruptible              *bool              `yaml:"interruptible"`
 
-	// RemovedExcludeDir와 RemovedExcludeSuffix는 v3에서 없앤 키를 받는다. yaml.Unmarshal은 모르는 키를
-	// 무시하므로, 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더와 파일이 경고 없이 다시 감시된다.
+	// RemovedExcludeDir, RemovedExcludeSuffix, RemovedWatchEvent는 v3에서 없앤 키를 받는다. yaml.Unmarshal은
+	// 모르는 키를 무시하므로, 키를 받아 두지 않으면 옛 설정에서 뺐던 폴더, 파일, 이벤트가 경고 없이 다시 감시된다.
 	RemovedExcludeDir    yaml.Node `yaml:"excludeDir" json:"-"`
 	RemovedExcludeSuffix yaml.Node `yaml:"excludeSuffix" json:"-"`
+	RemovedWatchEvent    yaml.Node `yaml:"watchEvent" json:"-"`
 }
 
 func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, error) {
 	for _, removed := range []struct {
-		key  string
-		node yaml.Node
-	}{{"excludeDir", c.RemovedExcludeDir}, {"excludeSuffix", c.RemovedExcludeSuffix}} {
+		key, replacement, section string
+		node                      yaml.Node
+	}{
+		{"excludeDir", "option.exclude", "Moving from excludeDir and excludeSuffix", c.RemovedExcludeDir},
+		{"excludeSuffix", "option.exclude", "Moving from excludeDir and excludeSuffix", c.RemovedExcludeSuffix},
+		{"watchEvent", "option.watchFileEvent and option.watchDirEvent", "Moving from watchEvent", c.RemovedWatchEvent},
+	} {
 		if removed.node.Kind != 0 {
-			return domain.WatchTargetsOption{}, fmt.Errorf(`option.%s is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")`, removed.key)
+			return domain.WatchTargetsOption{}, fmt.Errorf(`option.%s is no longer supported; use %s (see USAGE %q)`, removed.key, removed.replacement, removed.section)
 		}
 	}
 	exclude, err := converter.NewExcludeConverter(c.Exclude).Convert()
 	if err != nil {
 		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
 	}
+	watchFileEvent, err := converter.NewWatchFileEventConverter(c.WatchFileEvent).Convert()
+	if err != nil {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
+	}
+	watchDirEvent, err := converter.NewWatchDirEventConverter(c.WatchDirEvent).Convert()
+	if err != nil {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.%w", err)
+	}
+	if watchFileEvent.IsNone() && watchDirEvent.IsNone() {
+		return domain.WatchTargetsOption{}, errors.New("option: watchFileEvent and watchDirEvent are both none; onChange would never run")
+	}
 	return domain.WatchTargetsOption{
 		Exclude:         exclude,
 		WaitMillisecond: converter.NewWaitMillisecondConverter(c.WaitMillisecond).Convert(),
 		WatchSubDir:     converter.NewWatchSubDirConverter(c.WatchSubDir).Convert(),
-		WatchEvent:      converter.NewWatchEventConverter(c.WatchEvent).Convert(),
+		WatchFileEvent:  watchFileEvent,
+		WatchDirEvent:   watchDirEvent,
+		DirEventWait:    domain.Millisecond(c.DirEventWaitMillisecond),
+		DirEventMaxWait: domain.Millisecond(c.DirEventMaxWaitMillisecond),
 		NoWait:          converter.NewNoWaitConverter(c.NoWait).Convert(),
 		Interruptible:   converter.NewInterruptibleConverter(c.Interruptible).Convert(),
 	}, nil

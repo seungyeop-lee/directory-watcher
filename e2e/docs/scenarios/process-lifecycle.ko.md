@@ -18,7 +18,7 @@
 
 - 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식(`세대|PID|깊이|상태`)과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
 - 대상 `onFinishWatch`는 `TARGET:onFinishWatch`를, 전역 `onFinishWatch`는 `GLOBAL:onFinishWatch`를 기록합니다.
-- 대상 옵션은 `interruptible: true`, `waitMillisecond: 100`, `watchEvent: C`, `exclude: ['*.probe']`입니다.
+- 대상 옵션은 `interruptible: true`, `waitMillisecond: 100`, `watchFileEvent: C`, `exclude: ['*.probe']`입니다.
 
 ## 진행 순서
 

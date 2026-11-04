@@ -4,28 +4,30 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// WatchEvent는 hook에 넘길 이벤트 종류다. 파일 이벤트와 폴더 이벤트를 따로 둔다.
 type WatchEvent struct {
 	Create bool
 	Update bool
 	Delete bool
 }
 
-func (e WatchEvent) IsListening(ev fsnotify.Event) bool {
-	// 삭제된 경우, 경로를 통해 디렉토리인지를 판단 할 수 없는 한계가 있음.
-	if Path(ev.Name).IsDir() {
-		return false
-	}
-
-	switch {
-	case e.Create && ev.Op.Has(fsnotify.Create):
-		return true
-	case e.Update && ev.Op.Has(fsnotify.Write):
-		return true
-	case e.Delete && ev.Op.Has(fsnotify.Remove):
-		return true
+// Has는 이벤트 종류 op를 hook에 넘기는지 판단한다.
+func (e WatchEvent) Has(op Operation) bool {
+	switch fsnotify.Op(op) {
+	case fsnotify.Create:
+		return e.Create
+	case fsnotify.Write:
+		return e.Update
+	case fsnotify.Remove:
+		return e.Delete
 	default:
 		return false
 	}
+}
+
+// IsNone은 어떤 이벤트 종류도 hook에 넘기지 않는지 판단한다.
+func (e WatchEvent) IsNone() bool {
+	return !e.Create && !e.Update && !e.Delete
 }
 
 func WatchAllEvent() WatchEvent {

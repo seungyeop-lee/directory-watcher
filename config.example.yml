@@ -24,7 +24,7 @@ watchTargets:
         - echo 'dir2 onStartWatch'
       onChange:
         # Write template variables outside quotes; each one becomes a single argument.
-        - echo 'dir2 onChange' {{.Path}}, {{.AbsPath}}, {{.Name}}, {{.ExtName}}, {{.ParentPath}}, {{.ParentAbsPath}}, {{.Event}}
+        - echo 'dir2 onChange' {{.Path}}, {{.AbsPath}}, {{.Name}}, {{.ExtName}}, {{.ParentPath}}, {{.ParentAbsPath}}, {{.Event}}, {{.IsDir}}
         - sleep 10000
         - echo 'dir2 onChange after sleep'
       onFinishWatch:
@@ -36,7 +36,8 @@ watchTargets:
         - '**/*_test.go'
         - '**/*~'
       waitMillisecond: 1000 # default 100
-      watchEvent: CDU
+      watchFileEvent: CDU # default CUD
+      watchDirEvent: CD # default CD; none turns folder events off
       noWait: true # default false
       interruptible: true
   - path: 'test/dir3'

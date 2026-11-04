@@ -29,7 +29,7 @@ func TestFastInflowSlowHook(t *testing.T) {
       noWait: %t
       interruptible: %t
       waitMillisecond: 30
-      watchEvent: CU
+      watchFileEvent: CU
       exclude: ['*.probe', '*.swp']
 `, s.Watch, s.Hook("--delay=80ms", "--line=DONE:{{.Path}}"), s.Hook("--line=FINISH"), noWait, interruptible))
 				initial := filepath.Join(s.Watch, "initial.txt")
@@ -106,7 +106,7 @@ func TestTargetsRunIndependently(t *testing.T) {
         - %s
     option:
       noWait: true
-      watchEvent: C
+      watchFileEvent: C
       exclude: ['*.probe']
   - path: '%s'
     lifeCycle:
@@ -114,7 +114,7 @@ func TestTargetsRunIndependently(t *testing.T) {
         - %s
     option:
       noWait: true
-      watchEvent: C
+      watchFileEvent: C
       exclude: ['*.probe']
 `, s.Watch, s.Hook("--delay=800ms", "--line=SLOW"), other, s.Hook("--line=FAST")))
 	otherProbe := filepath.Join(other, "readiness.probe")
@@ -142,7 +142,7 @@ func TestBoundedOverloadCLI(t *testing.T) {
         - %s
     option:
       noWait: true
-      watchEvent: C
+      watchFileEvent: C
       exclude: ['*.probe']
 `, s.Watch, s.Hook("--depth=2")))
 	s.AwaitReadyGenerations("startup tree occupies sequential worker", 1)

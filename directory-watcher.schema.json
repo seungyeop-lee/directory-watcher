@@ -75,12 +75,31 @@
                 "description": "Whether to monitor subdirectories.",
                 "default": true
               },
-              "watchEvent": {
+              "watchFileEvent": {
                 "type": "string",
-                "description": "Monitoring events (C: create, U: update, D: delete).",
+                "description": "File events that run the hook (C: create or move in, U: update, D: delete or move away), or none. watchFileEvent and watchDirEvent cannot both be none.",
                 "default": "CUD",
-                "pattern": "^[CUD]{1,3}$",
-                "examples": ["CUD", "CU", "CD"]
+                "pattern": "^(none|[CUD]+)$",
+                "examples": ["CUD", "CU", "none"]
+              },
+              "watchDirEvent": {
+                "type": "string",
+                "description": "Folder events that run the hook (C: create or move in, D: delete or move away), or none. A folder event stands for the folder and everything in it.",
+                "default": "CD",
+                "pattern": "^(none|[CD]+)$",
+                "examples": ["CD", "D", "none"]
+              },
+              "dirEventWaitMillisecond": {
+                "type": "integer",
+                "description": "Quiet time in milliseconds after the last event before collected folder events are sent. 0 uses the default.",
+                "default": 100,
+                "minimum": 0
+              },
+              "dirEventMaxWaitMillisecond": {
+                "type": "integer",
+                "description": "Longest time in milliseconds that folder events are collected. 0 uses the default.",
+                "default": 1000,
+                "minimum": 0
               },
               "noWait": {
                 "type": "boolean",

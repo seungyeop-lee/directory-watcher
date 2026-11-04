@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -31,10 +32,17 @@ var eventVariables = []struct {
 	{"Path", "DW_PATH", func(e *domain.Event) string { return e.Path.String() }},
 	{"AbsPath", "DW_ABS_PATH", func(e *domain.Event) string { return e.Path.Abs() }},
 	{"Name", "DW_NAME", func(e *domain.Event) string { return e.Path.Name() }},
-	{"ExtName", "DW_EXT_NAME", func(e *domain.Event) string { return e.Path.ExtName() }},
+	{"ExtName", "DW_EXT_NAME", func(e *domain.Event) string {
+		// 폴더 이름의 점 뒤 글자는 확장자가 아니다.
+		if e.IsDir {
+			return ""
+		}
+		return e.Path.ExtName()
+	}},
 	{"ParentPath", "DW_PARENT_PATH", func(e *domain.Event) string { return e.Path.ParentPath() }},
 	{"ParentAbsPath", "DW_PARENT_ABS_PATH", func(e *domain.Event) string { return e.Path.ParentAbsPath() }},
 	{"Event", "DW_EVENT", func(e *domain.Event) string { return e.Operation.String() }},
+	{"IsDir", "DW_IS_DIR", func(e *domain.Event) string { return strconv.FormatBool(e.IsDir) }},
 }
 
 // EventVariableNames는 hook 명령에서 쓸 수 있는 템플릿 변수의 이름과, 같은 값을 담는 환경 변수의 이름을 같은 순서로 돌려준다.

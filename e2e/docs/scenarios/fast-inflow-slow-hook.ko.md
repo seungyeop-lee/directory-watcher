@@ -18,7 +18,7 @@
 
 - 대상 `onChange`는 `hookrec --delay=80ms --line=DONE:{{.Path}}`입니다. 시작할 때 `BEGIN|PID|DONE:<경로>`를, 80ms 뒤 `DONE:<경로>`를, 그 전에 취소되면 `CANCEL|PID|DONE:<경로>`를 기록합니다.
 - 대상 `onFinishWatch`는 `FINISH`를 기록합니다.
-- 대상 옵션은 하위 테스트별 `noWait`·`interruptible`과 `waitMillisecond: 30`, `watchEvent: CU`, `exclude: ['*.probe', '*.swp']`입니다.
+- 대상 옵션은 하위 테스트별 `noWait`·`interruptible`과 `waitMillisecond: 30`, `watchFileEvent: CU`, `exclude: ['*.probe', '*.swp']`입니다.
 
 ## 하위 테스트
 

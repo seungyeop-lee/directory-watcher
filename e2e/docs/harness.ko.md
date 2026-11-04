@@ -31,7 +31,8 @@
 
 | 시나리오 | 파일 | 검증 내용 | 사용하는 지원 코드 |
 |---|---|---|---|
-| [`TestGoldenPath`](scenarios/golden-path.ko.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 7개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestGoldenPath`](scenarios/golden-path.ko.md) | `scenarios/golden_path_test.go` | 생성·수정·삭제, hook 순서, 8개 이벤트 변수 | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나 | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md) | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) | `scenarios/process_test.go` | `noWait`·`interruptible` 네 조합의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md) | `scenarios/reliability_test.go` | 느린 hook 중 빠른 유입의 네 조합, 제외·debounce, 종료 후 실행 금지 | `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `AwaitDelayedHooksGone` |
@@ -64,7 +65,7 @@ func TestCreateAnotherFile(t *testing.T) {
       onChange:
         - %s
     option:
-      watchEvent: C
+      watchFileEvent: C
       exclude: ['*.probe']
 `, s.Watch, s.Hook("--line=CHANGE:{{.Name}}")))
 	s.Write(filepath.Join(s.Watch, "another.txt"), nil)

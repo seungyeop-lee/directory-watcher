@@ -18,7 +18,7 @@ import (
 )
 
 func TestStopDiscardsPendingEvents(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -65,7 +65,7 @@ func TestDebounceHandlerTerminatesWhenInputCloses(t *testing.T) {
 }
 
 func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, watchErrors := controlledSource(r)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -100,7 +100,7 @@ func testCommandSet(paths ...string) domain.CommandSet {
 	empty := emptyCommand()
 	set := domain.CommandSet{Global: domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: empty, OnBeforeChange: empty, OnAfterChange: empty, OnFinishWatch: empty}}}
 	for _, path := range paths {
-		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}})
+		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}})
 	}
 	return set
 }
@@ -129,7 +129,7 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 }
 
 func TestBoundedDispatchReportsLoss(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)

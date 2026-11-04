@@ -25,11 +25,13 @@ type renameFixture struct {
 	changed <-chan domain.Event
 	result  <-chan error
 	phase   int
+	// sentinelDirs는 changes가 표지 파일을 쓰는 폴더다. 감시 대상 기준 상대 경로이고, ""는 감시 대상이다.
+	sentinelDirs []string
 }
 
 func newRenameFixture(t *testing.T) *renameFixture {
 	base := t.TempDir()
-	f := &renameFixture{t: t, target: filepath.Join(base, "target"), outside: filepath.Join(base, "outside")}
+	f := &renameFixture{t: t, target: filepath.Join(base, "target"), outside: filepath.Join(base, "outside"), sentinelDirs: []string{"", "src", "dst"}}
 	for _, dir := range []string{"target/src", "target/dst", "outside"} {
 		if err := os.MkdirAll(filepath.Join(base, filepath.FromSlash(dir)), 0700); err != nil {
 			t.Fatal(err)
@@ -61,16 +63,22 @@ func (f *renameFixture) move(from, to string) {
 }
 
 func (f *renameFixture) start(exclude domain.ExcludePatterns) {
-	f.runner, f.changed, f.result = startExcludeRunner(f.t, f.target, domain.WatchTargetsOption{
-		NoWait:      true,
-		WatchSubDir: true,
-		WatchEvent:  domain.WatchAllEvent(),
-		Exclude:     exclude,
-	}, newMockLogger(), nil)
+	f.startWith(domain.WatchTargetsOption{
+		NoWait:         true,
+		WatchSubDir:    true,
+		WatchFileEvent: domain.WatchAllEvent(),
+		WatchDirEvent:  domain.WatchEvent{Create: true, Delete: true},
+		Exclude:        exclude,
+	})
 }
 
-// changes는 감시 대상의 모든 감시 폴더에 표지 파일을 쓰고, 그 표지들의 hook이 모두 실행될 때까지 hook이 받은
-// 이벤트를 "D src/a.txt"처럼 돌려준다. 표지 파일의 이벤트는 빼고 돌려준다.
+func (f *renameFixture) startWith(option domain.WatchTargetsOption) {
+	f.runner, f.changed, f.result = startExcludeRunner(f.t, f.target, option, newMockLogger(), nil)
+}
+
+// changes는 sentinelDirs의 폴더마다 표지 파일을 쓰고, 그 표지들의 hook이 모두 실행될 때까지 hook이 받은
+// 이벤트를 "D src/a.txt"처럼 돌려준다. 폴더 이벤트는 "C src/d/"처럼 경로 끝에 /를 붙인다. 표지 파일의 이벤트는
+// 빼고 돌려준다.
 //
 // Windows는 폴더마다 따로 이벤트를 받으므로, 한 폴더의 표지만 기다리면 다른 폴더의 이벤트가 그 뒤에 올 수 있다.
 func (f *renameFixture) changes() []string {
@@ -78,7 +86,7 @@ func (f *renameFixture) changes() []string {
 	f.phase++
 	sentinel := fmt.Sprintf("zz-sentinel-%d.txt", f.phase)
 	waiting := map[string]bool{}
-	for _, dir := range []string{"", "src", "dst"} {
+	for _, dir := range f.sentinelDirs {
 		rel := filepath.ToSlash(filepath.Join(dir, sentinel))
 		f.write(rel)
 		waiting[rel] = true
@@ -95,6 +103,9 @@ func (f *renameFixture) changes() []string {
 			if strings.HasPrefix(filepath.Base(rel), "zz-sentinel-") {
 				delete(waiting, rel)
 				continue
+			}
+			if ev.IsDir {
+				rel += "/"
 			}
 			got = append(got, ev.Operation.String()+" "+rel)
 		case err := <-f.result:
@@ -132,18 +143,19 @@ func TestRenamedOrMovedFileNotifiesOldPathAsDelete(t *testing.T) {
 	}
 }
 
-// 폴더의 이름을 바꾸거나 옮기면 hook이 옛 경로의 삭제(D)를 한 번 받고, 옮긴 폴더 안의 변경은 새 경로로만 받는지
-// 확인한다. 감시 대상 밖으로 옮긴 폴더는 그 아래 폴더까지 감시가 풀려 옮겨 간 곳의 변경으로 hook이 실행되지 않는다.
+// 폴더의 이름을 바꾸거나 옮기면 hook이 옛 경로의 폴더 삭제(D)를 한 번 받고 그다음에 새 경로의 폴더 생성(C)을 받으며,
+// 옮긴 폴더 안의 변경은 새 경로로만 받는지 확인한다. 감시 대상 밖으로 옮긴 폴더는 그 아래 폴더까지 감시가 풀려 옮겨
+// 간 곳의 변경으로 hook이 실행되지 않는다.
 func TestRenamedOrMovedFolderNotifiesOldPathAsDelete(t *testing.T) {
 	cases := []struct {
 		name     string
 		from, to string
 		want     []string
 	}{
-		{name: "rename in the same folder", from: "src/d", to: "src/e", want: []string{"D src/d"}},
-		{name: "move to another folder in the target", from: "src/d", to: "dst/d", want: []string{"D src/d"}},
-		{name: "move out of the target", from: "src/d", to: "../outside/d", want: []string{"D src/d"}},
-		{name: "move into the target", from: "../outside/d", to: "src/d"},
+		{name: "rename in the same folder", from: "src/d", to: "src/e", want: []string{"D src/d/", "C src/e/"}},
+		{name: "move to another folder in the target", from: "src/d", to: "dst/d", want: []string{"D src/d/", "C dst/d/"}},
+		{name: "move out of the target", from: "src/d", to: "../outside/d", want: []string{"D src/d/"}},
+		{name: "move into the target", from: "../outside/d", to: "src/d", want: []string{"C src/d/"}},
 	}
 	for _, nested := range []bool{false, true} {
 		for _, tc := range cases {
@@ -223,13 +235,15 @@ func TestFolderRecreatedAfterMoveOutIsWatched(t *testing.T) {
 	f.write("src/d/f.txt")
 	f.start(nil)
 	f.move("src/d", "../outside/d")
-	if got, want := f.changes(), []string{"D src/d"}; !slices.Equal(got, want) {
+	if got, want := f.changes(), []string{"D src/d/"}; !slices.Equal(got, want) {
 		t.Fatalf("hook events = %v, want %v", got, want)
 	}
 	if err := os.Mkdir(f.path("src/d"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	f.changes()
+	if got, want := f.changes(), []string{"C src/d/"}; !slices.Equal(got, want) {
+		t.Fatalf("hook events = %v, want %v", got, want)
+	}
 	f.write("src/d/f.txt")
 	if got := f.changes(); !slices.Contains(got, "C src/d/f.txt") {
 		t.Fatalf("creation in the recreated folder did not reach the hook (got %v)", got)
@@ -260,8 +274,10 @@ func TestFolderRecreatedRightAfterMoveOutIgnoresMovedFolder(t *testing.T) {
 	if err := os.Mkdir(f.path("src/d"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	// 옛 폴더의 D는 같은 경로에 폴더가 이미 다시 생겼으면 오지 않는다. IsListening이 그 경로를 폴더로 보고 버린다.
-	f.changes()
+	// 같은 경로에 폴더가 이미 다시 생겼어도, 옛 폴더를 감시 목록에 적어 두었으므로 옛 폴더의 D가 온다.
+	if got, want := f.changes(), []string{"D src/d/", "C src/d/"}; !slices.Equal(got, want) {
+		t.Fatalf("hook events = %v, want %v", got, want)
+	}
 	f.write("../outside/d/moved.txt")
 	f.write("../outside/d/other.txt")
 	f.write("src/d/new.txt")

@@ -17,7 +17,7 @@
 | Slow target | Watch folder | `hookrec --delay=800ms --line=SLOW` |
 | Fast target | `other` in the run folder | `hookrec --line=FAST` |
 
-- Both targets use `noWait: true`, `watchEvent: C`, and `exclude: ['*.probe']`.
+- Both targets use `noWait: true`, `watchFileEvent: C`, and `exclude: ['*.probe']`.
 
 ## Sequence
 

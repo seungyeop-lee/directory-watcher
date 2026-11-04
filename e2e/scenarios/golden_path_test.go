@@ -34,7 +34,7 @@ func TestGoldenPath(t *testing.T) {
 	expected := append(expectedSequence(target), "TARGET:onFinishWatch", "GLOBAL:onFinishWatch")
 	actual := s.Lines()
 	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("hook sequence or seven event variables mismatch\nwant: %q\ngot: %q", expected, actual)
+		t.Fatalf("hook sequence or eight event variables mismatch\nwant: %q\ngot: %q", expected, actual)
 	}
 	for _, dir := range []string{s.Work, s.Watch} {
 		if made, _ := filepath.Glob(filepath.Join(dir, "pwned*")); len(made) != 0 {
@@ -48,10 +48,10 @@ func TestGoldenPath(t *testing.T) {
 const goldenFileName = `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`
 
 // goldenConfig는 모든 전역 hook과 대상 hook이 라벨을 기록하게 하고, change hook은
-// 일곱 이벤트 변수도 changeValues 순서대로 기록하게 한다. 변수는 따옴표 밖에 두어 값에 공백이
+// 여덟 이벤트 변수도 changeValues 순서대로 기록하게 한다. 변수는 따옴표 밖에 두어 값에 공백이
 // 있어도 인자 하나로 넘어가게 하고, 구분자는 sh와 cmd가 해석하지 않는 쉼표를 쓴다.
 func goldenConfig(s *harness.Scenario) string {
-	change := "{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}}"
+	change := "{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}},{{.IsDir}}"
 	command := func(label, suffix string) string {
 		if suffix != "" {
 			label += ":" + suffix
@@ -79,14 +79,14 @@ watchTargets:
         - %s
     option:
       waitMillisecond: 100
-      watchEvent: CDU
+      watchFileEvent: CDU
       exclude: ['*.probe']
 `, command("GLOBAL:onStartWatch", ""), command("GLOBAL:onBeforeChange", change), command("GLOBAL:onAfterChange", change), command("GLOBAL:onFinishWatch", ""), s.Watch, command("TARGET:onStartWatch", ""), command("TARGET:onChange", change), command("TARGET:onFinishWatch", ""))
 }
 
 func changeValues(target, event string) string {
 	dir := filepath.Dir(target)
-	return fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s", target, target, filepath.Base(target), filepath.Ext(target), dir, dir, event)
+	return fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,false", target, target, filepath.Base(target), filepath.Ext(target), dir, dir, event)
 }
 
 func expectedSequence(target string) []string {

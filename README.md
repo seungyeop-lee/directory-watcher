@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](README.ko.md)
 
-- Directory Watcher runs the commands you define when files are created, modified, or deleted in the directories you watch.
+- Directory Watcher runs the commands you define when files are created, modified, or deleted, or folders are created or deleted, in the directories you watch.
 - Use it to rebuild or test code as you edit it, restart a development server when its sources change, or back up files when they change.
 
 ## Features
@@ -10,8 +10,9 @@
 ### Run commands when files change
 
 - Watch several directories at once. Each watch target has its own `onChange` commands, and the global `onBeforeChange` and `onAfterChange` commands run before and after every target's `onChange`.
-- Choose which events to react to (create, update, delete), exclude files and folders from watching with path patterns, or skip subdirectories.
-- Pass the changed file's path, name, extension, directory, and event type to a command with [template variables](USAGE.md#variables-in-commands).
+- Choose which file events (create, update, delete) and folder events (create, delete) to react to, exclude files and folders from watching with path patterns, or skip subdirectories.
+- Pass the changed file's or folder's path, name, extension, directory, event type, and whether it is a folder to a command with [template variables](USAGE.md#variables-in-commands).
+- When a folder appears or disappears together with its contents, as with `mkdir -p`, moving a folder in, or `rm -rf`, the hook receives one event for the top folder instead of one per file. See [Folder events](USAGE.md#folder-events).
 - When watch targets' paths overlap, one change in an overlapping folder runs the hooks of each target. See [Overlapping target paths](USAGE.md#overlapping-target-paths).
 
 ### Handle bursts of changes
@@ -138,7 +139,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 - **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
 - **Stop:** press Ctrl+C or send SIGTERM. The watcher cancels running commands, runs the finish commands, and exits.
-- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, excluding paths, overlapping target paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
+- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, folder events, excluding paths, overlapping target paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
 
 ## How it works
 
@@ -153,7 +154,10 @@ flowchart TD
         watchDirs["Start watching the target directory"]
         targetStart["target onStartWatch"]
         receiveEvent(("Event received"))
-        filterEvent{"Watched event type and<br>not an excluded path?"}
+        excludeCheck{"Excluded path?"}
+        collectChoice{"Folder created or deleted,<br>or file deleted in a subfolder?"}
+        collectFolder["Collect the target's events<br>and absorb those inside the folder"]
+        kindFilter{"Event type chosen in<br>watchFileEvent or watchDirEvent?"}
         queueEvent{"Room in the target's<br>256-event queue?"}
         modeChoice{"noWait?"}
         debounceWait["Wait waitMillisecond after the last event<br>and keep only that event"]
@@ -167,9 +171,14 @@ flowchart TD
     globalStart --> watchDirs
     watchDirs --> targetStart
     targetStart --> receiveEvent
-    receiveEvent -->|"a new directory that is not excluded<br>joins the watch list"| filterEvent
-    filterEvent -->|"no: ignore"| receiveEvent
-    filterEvent -->|"yes"| queueEvent
+    receiveEvent -->|"a new directory that is not excluded<br>joins the watch list"| excludeCheck
+    excludeCheck -->|"yes: ignore"| receiveEvent
+    excludeCheck -->|"no"| collectChoice
+    collectChoice -->|"yes, or already collecting"| collectFolder
+    collectChoice -->|"no"| kindFilter
+    collectFolder -->|"dirEventWaitMillisecond with no event,<br>or dirEventMaxWaitMillisecond"| kindFilter
+    kindFilter -->|"no: ignore"| receiveEvent
+    kindFilter -->|"yes"| queueEvent
     queueEvent -->|"no"| fatalStop
     queueEvent -->|"yes"| modeChoice
     modeChoice -->|"false"| debounceWait
@@ -182,6 +191,7 @@ flowchart TD
     runChange -->|"next event"| receiveEvent
 ```
 
+- Collected events wait for room in the queue instead of stopping the watcher. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
 - With `interruptible: false`, events that arrive while target `onStartWatch` or a change is running wait in the queue until it finishes. With `interruptible: true`, the next change cancels a running target `onStartWatch` too.
 - The commands of one run execute one after another, and the run stops at the first command that fails. The failure is logged as an `[ERROR]` line; see [`config.yml`](USAGE.md#configyml) in the usage guide.
 

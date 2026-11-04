@@ -31,7 +31,8 @@
 
 | Scenario | File | What it verifies | Supporting code used |
 |---|---|---|---|
-| [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | Create, update, delete, hook order, 7 event variables | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestGoldenPath`](scenarios/golden-path.md) | `scenarios/golden_path_test.go` | Create, update, delete, hook order, 8 event variables | `Start`, `Hook`, `AwaitLine`, `Stop` |
+| [`TestFolderEvents`](scenarios/folder-events.md) | `scenarios/folder_events_test.go` | Events the hook receives for each folder and file action, one event for the top folder | `Start`, `Hook`, `Await`, `Lines`, `Stop` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.md) | `scenarios/process_test.go` | Three processes of the start hook, restart after the previous generation completes, finish hook order, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) | `scenarios/process_test.go` | Start hook shutdown and replacement in the four `noWait`·`interruptible` combinations | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md) | `scenarios/reliability_test.go` | Four combinations of fast inflow during a slow hook, exclusion and debounce, no runs after shutdown | `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `AwaitDelayedHooksGone` |
@@ -64,7 +65,7 @@ func TestCreateAnotherFile(t *testing.T) {
       onChange:
         - %s
     option:
-      watchEvent: C
+      watchFileEvent: C
       exclude: ['*.probe']
 `, s.Watch, s.Hook("--line=CHANGE:{{.Name}}")))
 	s.Write(filepath.Join(s.Watch, "another.txt"), nil)

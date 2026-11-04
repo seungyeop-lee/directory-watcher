@@ -172,21 +172,32 @@ func receivedJSON(t *testing.T, output, prefix string, v any) {
 	t.Fatalf("program printed no %q line: %q", prefix, output)
 }
 
+// 폴더 이벤트는 {{.IsDir}}가 true이고, 이름에 점이 있어도 {{.ExtName}}이 빈 값이다.
 func TestTemplateVariablesAreReplacedWithTheirValues(t *testing.T) {
-	event := &domain.Event{Path: domain.Path(filepath.Join("dir", "b.txt")), Operation: domain.Operation(fsnotify.Write)}
-	templates := `{{.Path}} {{.AbsPath}} {{.Name}} {{.ExtName}} {{.ParentPath}} {{.ParentAbsPath}} {{.Event}}`
-	want := []string{event.Path.String(), event.Path.Abs(), "b.txt", ".txt", "dir", filepath.Dir(event.Path.Abs()), "U"}
+	file := &domain.Event{Path: domain.Path(filepath.Join("dir", "b.txt")), Operation: domain.Operation(fsnotify.Write)}
+	folder := &domain.Event{Path: domain.Path(filepath.Join("dir", "pkg.v2")), Operation: domain.Operation(fsnotify.Create), IsDir: true}
+	templates := `{{.Path}} {{.AbsPath}} {{.Name}} [{{.ExtName}}] {{.ParentPath}} {{.ParentAbsPath}} {{.Event}} {{.IsDir}}`
+	cases := []struct {
+		name  string
+		event *domain.Event
+		want  []string
+	}{
+		{"file", file, []string{file.Path.String(), file.Path.Abs(), "b.txt", "[.txt]", "dir", filepath.Dir(file.Path.Abs()), "U", "false"}},
+		{"folder", folder, []string{folder.Path.String(), folder.Path.Abs(), "pkg.v2", "[]", "dir", filepath.Dir(folder.Path.Abs()), "C", "true"}},
+	}
 	for _, shell := range testedShells(t) {
-		t.Run(shell.String(), func(t *testing.T) {
-			ctx, output := capturedContext(t)
-			cmd := command.NewManager(argsCommand(t, shell, templates))
-			if err := cmd.Run(ctx, domain.Path(t.TempDir()), event); err != nil {
-				t.Fatal(err)
-			}
-			if got := receivedArgs(t, output()); !equalLines(got, want) {
-				t.Fatalf("program received %q, want %q", got, want)
-			}
-		})
+		for _, tc := range cases {
+			t.Run(shell.String()+"/"+tc.name, func(t *testing.T) {
+				ctx, output := capturedContext(t)
+				cmd := command.NewManager(argsCommand(t, shell, templates))
+				if err := cmd.Run(ctx, domain.Path(t.TempDir()), tc.event); err != nil {
+					t.Fatal(err)
+				}
+				if got := receivedArgs(t, output()); !equalLines(got, tc.want) {
+					t.Fatalf("program received %q, want %q", got, tc.want)
+				}
+			})
+		}
 	}
 }
 
@@ -202,6 +213,7 @@ func TestEventEnvironmentUsesCurrentNamesOnly(t *testing.T) {
 		"DW_PARENT_PATH":     "dir",
 		"DW_PARENT_ABS_PATH": filepath.Dir(event.Path.Abs()),
 		"DW_EVENT":           "U",
+		"DW_IS_DIR":          "false",
 	}
 	removed := []string{"DW_FILE_NAME", "DW_DIR_PATH", "DW_DIR_ABS_PATH"}
 	for _, shell := range testedShells(t) {

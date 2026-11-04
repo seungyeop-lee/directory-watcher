@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](golden-path.ko.md)
 
-- Creates, updates, and deletes one file whose name contains characters that shells interpret, and checks that the global and target hooks each run once in the defined order, receive the correct values for the 7 event variables, and never run the file name as a command.
+- Creates, updates, and deletes one file whose name contains characters that shells interpret, and checks that the global and target hooks each run once in the defined order, receive the correct values for the 8 event variables, and never run the file name as a command.
 
 ## What it checks and success criteria
 
@@ -15,9 +15,9 @@
 4. `TARGET:onFinishWatch`
 5. `GLOBAL:onFinishWatch`
 
-- `<variables>` is `{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}}`.
+- `<variables>` is `{{.Path}},{{.AbsPath}},{{.Name}},{{.ExtName}},{{.ParentPath}},{{.ParentAbsPath}},{{.Event}},{{.IsDir}}`.
 - The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of the test file, and `{{.ParentPath}}` and `{{.ParentAbsPath}}` are both the absolute path of the watch folder.
-- `{{.Name}}` is the test file name, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
+- `{{.Name}}` is the test file name, `{{.ExtName}}` is `.txt`, `{{.Event}}` is `C`, `U`, or `D`, and `{{.IsDir}}` is `false`.
 
 - The test file name is `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`.
 - It contains the syntax that sh, cmd, and powershell use to chain or substitute commands, so a shell that reads the value as a command creates a folder whose name starts with `pwned`, and cmd changes `%OS%` if it expands the value again.
@@ -29,7 +29,7 @@
 
 - All of the global hooks `onStartWatch`, `onBeforeChange`, `onAfterChange`, and `onFinishWatch` and the target hooks `onStartWatch`, `onChange`, and `onFinishWatch` are configured.
 - Each hook records its own label, such as `GLOBAL:onBeforeChange`, with `hookrec --line=<label>`. Change hooks append `:<variables>` after the label. The variables are written outside quotes so that each value is passed as one argument even with spaces, and they are separated by commas, which sh and cmd do not interpret.
-- The target options are `waitMillisecond: 100`, `watchEvent: CDU`, and `exclude: ['*.probe']`.
+- The target options are `waitMillisecond: 100`, `watchFileEvent: CDU`, and `exclude: ['*.probe']`.
 
 ## Sequence
 
@@ -49,7 +49,7 @@ sequenceDiagram
         testCode->>watchDir: create, update, or delete the test file
         watchDir-->>watcherProc: file event
         watcherProc->>hookRec: onBeforeChange, onChange, onAfterChange
-        hookRec->>recordFile: three lines of label and 7 variables
+        hookRec->>recordFile: three lines of label and 8 variables
         testCode->>recordFile: wait for GLOBAL:onAfterChange (up to 10s)
     end
     testCode->>watcherProc: shutdown signal

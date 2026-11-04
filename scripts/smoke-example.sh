@@ -57,7 +57,7 @@ for dir in "$@"; do
 	: >"$dir/$file"
 done
 wait_for "dir1 onChange"
-wait_for "dir2 onChange test/dir2/$file, $root/test/dir2/$file, $file, .txt, test/dir2, $root/test/dir2, C"
+wait_for "dir2 onChange test/dir2/$file, $root/test/dir2/$file, $file, .txt, test/dir2, $root/test/dir2, C, false"
 wait_for "$root/cmd"
 
 kill -TERM "$pid"
