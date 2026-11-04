@@ -11,6 +11,7 @@ Directory Watcher runs the commands you define when files are created, modified,
 - Watch several directories at once. Each watch target has its own `onChange` commands, and the global `onBeforeChange` and `onAfterChange` commands run before and after every target's `onChange`.
 - Choose which events to react to (create, update, delete), exclude files and folders from watching with path patterns, or skip subdirectories.
 - Pass the changed file's path, name, extension, directory, and event type to a command with [template variables](USAGE.md#variables-in-commands).
+- When watch targets' paths overlap, one change in an overlapping folder runs the hooks of each target. See [Overlapping target paths](USAGE.md#overlapping-target-paths).
 
 ### Handle bursts of changes
 
@@ -128,7 +129,7 @@ Download the executable from the [releases page](https://github.com/seungyeop-le
 
 - **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
 - **Stop:** press Ctrl+C or send SIGTERM. The watcher cancels running commands, runs the finish commands, and exits.
-- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, excluding paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
+- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, excluding paths, overlapping target paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
 
 ## How it works
 

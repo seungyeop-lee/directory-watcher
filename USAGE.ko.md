@@ -279,6 +279,31 @@ Error: watchTargets[0].option.excludeDir is no longer supported; use option.excl
 | `excludeSuffix: ['~']` | `exclude: ['**/*~']` |
 | `excludeSuffix: ['/out.txt']` | `exclude: ['**/out.txt']` |
 
+## 감시 대상의 경로가 겹칠 때
+
+두 감시 대상의 `path`가 같거나 한 대상의 `path`가 다른 대상의 상위 폴더이면, 겹치는 폴더를 두 대상이 각각 감시합니다. watcher는 이런 설정도 오류나 경고 없이 실행합니다.
+
+- 겹치는 폴더 안에서 변경이 하나 생기면, 그 폴더를 감시하는 대상마다 hook이 실행됩니다.
+- 예를 들어 `src`와 `src/api`를 함께 감시하면, `src/api/a.txt`를 만들었을 때 두 대상의 `onChange`가 모두 실행됩니다.
+- 전역 `onBeforeChange`와 `onAfterChange`도 대상마다 실행되므로, 위 예시의 변경 하나에 각각 두 번 실행됩니다.
+- 두 대상의 hook은 상대 대상의 hook이 끝나기를 기다리지 않습니다.
+- 대기열, `waitMillisecond` 대기, `interruptible` 취소는 대상마다 따로 적용됩니다.
+- 겹치는 폴더는 대상마다 감시 목록에 들어가므로, Linux의 inotify watch나 macOS의 열린 파일 같은 OS 감시 자원도 대상 수만큼 씁니다.
+- 한 대상의 hook이 다른 대상의 `path` 안에 파일을 쓰면, 그 쓰기로 다른 대상의 hook이 실행됩니다.
+
+상위 대상이 하위 대상의 폴더를 감시하지 않게 하려면, 상위 대상의 `exclude`에 그 폴더를 적습니다. 다음 설정에서는 `src/api` 안의 변경으로 `src/api` 대상의 hook만 실행되고, `src` 대상은 `src/api`를 감시 목록에 넣지 않습니다.
+
+```yaml
+watchTargets:
+  - path: src
+    option:
+      exclude:
+        - 'api/**'
+  - path: src/api
+```
+
+`exclude` 패턴은 상위 대상의 `path`를 기준으로 하므로 `src/api/**`가 아니라 `api/**`로 적습니다.
+
 ## 폴더 이벤트 감지에 대한 제약사항
 
 - 기본동작은 감시 대상 폴더 내의 **파일**의 이벤트에 따라 hook을 실행합니다.

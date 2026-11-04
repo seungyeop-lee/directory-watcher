@@ -279,6 +279,31 @@ For a target with `path: 'site'`:
 | `excludeSuffix: ['~']` | `exclude: ['**/*~']` |
 | `excludeSuffix: ['/out.txt']` | `exclude: ['**/out.txt']` |
 
+## Overlapping target paths
+
+When two watch targets have the same `path`, or one target's `path` is a parent folder of the other's, both targets watch the overlapping folders. The watcher runs such a config without an error or warning.
+
+- One change in an overlapping folder runs the hooks of every target that watches that folder.
+- For example, when you watch both `src` and `src/api`, creating `src/api/a.txt` runs the `onChange` of both targets.
+- Global `onBeforeChange` and `onAfterChange` also run for each target, so the single change in that example runs each of them twice.
+- The hooks of one target do not wait for the hooks of the other target to finish.
+- Each target applies its own queue, `waitMillisecond` wait, and `interruptible` cancellation.
+- Each target adds the overlapping folders to its own watch list, so they use OS watch resources, such as inotify watches on Linux or open files on macOS, once per target.
+- When one target's hook writes a file inside another target's `path`, that write runs the other target's hooks.
+
+To keep a parent target from watching a child target's folder, add that folder to the parent target's `exclude`. With the config below, a change in `src/api` runs only the `src/api` target's hooks, and the `src` target does not add `src/api` to its watch list:
+
+```yaml
+watchTargets:
+  - path: src
+    option:
+      exclude:
+        - 'api/**'
+  - path: src/api
+```
+
+The pattern is relative to the parent target's `path`, so write `api/**`, not `src/api/**`.
+
 ## Limitations on folder event detection
 
 - By default, hooks are executed based on **file** events within the monitored folder.
