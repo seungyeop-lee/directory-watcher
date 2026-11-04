@@ -3,7 +3,7 @@
 🇺🇸 [English](start-hook-shutdown-modes.md) | 🇰🇷 한국어
 
 - 시작 hook이 실제 부모·자식·손자 프로세스 트리를 실행하는 동안 변경 이벤트와 종료 신호가 들어옵니다.
-- 이때 `noWait`·`interruptible` 네 조합에서 시작 hook이 교체되거나 유지되고 종료 시 모든 프로세스가 정상 완료하는지 확인합니다.
+- 이때 `hookBatch.deliver`·`interruptible` 네 조합에서 시작 hook이 교체되거나 유지되고 종료 시 모든 프로세스가 정상 완료하는지 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -16,16 +16,16 @@
 ## 설정
 
 - 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
-- 대상 옵션은 하위 테스트별 `noWait`·`interruptible`과 `hookBatch.waitMillisecond: 10`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다. 종료 hook은 설정하지 않습니다.
+- 대상 옵션은 하위 테스트별 `hookBatch.deliver`·`interruptible`, `deliver: last`에서 10이고 `deliver: each`에서 0인 `hookBatch.waitMillisecond`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다. 종료 hook은 설정하지 않습니다.
 
 ## 하위 테스트
 
 | 하위 테스트 | 변경 이벤트 처리 | 추가 대기·확인 |
 |---|---|---|
-| `noWait=false/interruptible=false` | 10ms debounce, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
-| `noWait=false/interruptible=true` | 10ms debounce, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
-| `noWait=true/interruptible=false` | 대기 없이 순차 실행, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
-| `noWait=true/interruptible=true` | 대기 없이 실행, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
+| `deliver=last/interruptible=false` | 10ms 기다린 뒤 마지막으로 바뀐 경로 실행, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
+| `deliver=last/interruptible=true` | 10ms 기다린 뒤 마지막으로 바뀐 경로 실행, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
+| `deliver=each/interruptible=false` | 대기 없이 순차 실행, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
+| `deliver=each/interruptible=true` | 대기 없이 실행, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
 
 ## 진행 순서
 
@@ -72,7 +72,7 @@ go run ./e2e/linux -- -run '^TestStartHookShutdownModes$'
 make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 ```
 
-- 하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^noWait=true$/^interruptible=false$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
+- 하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^deliver=each$/^interruptible=false$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 - Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 

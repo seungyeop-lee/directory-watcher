@@ -32,14 +32,17 @@ type WatchTargetsLifeCycle struct {
 }
 
 type WatchTargetsOption struct {
-	Exclude         ExcludePatterns
-	WaitMillisecond Millisecond
-	WatchSubDir     bool
-	WatchFileEvent  WatchEvent
-	WatchDirEvent   WatchEvent
-	// DirEventWait와 DirEventMaxWait는 폴더 이벤트를 모으는 시간이다. 0이면 기본값을 쓴다.
+	Exclude ExcludePatterns
+	// WaitMillisecond와 MaxWaitMillisecond는 hook을 실행하기 전에 이벤트를 모으는 시간이다. WaitMillisecond가
+	// 0이면 모으지 않는다.
+	WaitMillisecond    Millisecond
+	MaxWaitMillisecond Millisecond
+	Deliver            Deliver
+	WatchSubDir        bool
+	WatchFileEvent     WatchEvent
+	WatchDirEvent      WatchEvent
+	// DirEventWait와 DirEventMaxWait는 폴더 이벤트를 모으는 시간이다. DirEventWait가 0이면 모으지 않는다.
 	DirEventWait    Millisecond
 	DirEventMaxWait Millisecond
-	NoWait          bool
 	Interruptible   Interruptible
 }

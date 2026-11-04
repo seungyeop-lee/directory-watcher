@@ -18,7 +18,7 @@ import (
 )
 
 func TestStopDiscardsPendingEvents(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -52,20 +52,20 @@ func TestStopDiscardsPendingEvents(t *testing.T) {
 	}
 }
 
-func TestDebounceHandlerTerminatesWhenInputCloses(t *testing.T) {
-	r := &watchTargetRunner{runChangeHook: func(domain.Event) {}, waitMillisecond: 10, logger: newMockLogger()}
+func TestRunChangesTerminatesWhenInputCloses(t *testing.T) {
+	r := &watchTargetRunner{runChangeHook: func(domain.Event) {}, stop: make(chan struct{}), logger: newMockLogger()}
 	input, done := make(chan domain.Event), make(chan struct{})
-	go func() { r.selectEventHandler()(input); close(done) }()
+	go func() { r.runChanges(input); close(done) }()
 	close(input)
 	select {
 	case <-done:
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("closed event input leaked debounce handler")
+		t.Fatal("closed event input leaked the run loop")
 	}
 }
 
 func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, watchErrors := controlledSource(r)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -100,7 +100,7 @@ func testCommandSet(paths ...string) domain.CommandSet {
 	empty := emptyCommand()
 	set := domain.CommandSet{Global: domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnStartWatch: empty, OnBeforeChange: empty, OnAfterChange: empty, OnFinishWatch: empty}}}
 	for _, path := range paths {
-		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}})
+		set.WatchTargets = append(set.WatchTargets, domain.WatchTargetsCommandSet{Path: domain.Path(path), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: empty, OnFinishWatch: empty}, Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchFileEvent: domain.WatchEvent{Create: true}}})
 	}
 	return set
 }
@@ -129,7 +129,7 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 }
 
 func TestBoundedDispatchReportsLoss(t *testing.T) {
-	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{NoWait: true, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(t.TempDir()), Option: domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchFileEvent: domain.WatchEvent{Create: true}}}, newMockLogger())
 	assertWatchDirectoriesRemovable(t, r)
 	events, _ := controlledSource(r)
 	entered, release, result := make(chan struct{}), make(chan struct{}), make(chan error, 1)
@@ -160,7 +160,7 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 	if growth := peak - baseline; growth > 4 {
 		t.Errorf("unbounded goroutines: %d", growth)
 	}
-	t.Logf("pending capacity=%d active=1 goroutine baseline=%d sampled-peak=%d noWait-timers=0 loss-latency=%s", dispatchCapacity, baseline, peak, time.Since(started))
+	t.Logf("pending capacity=%d active=1 goroutine baseline=%d sampled-peak=%d loss-latency=%s", dispatchCapacity, baseline, peak, time.Since(started))
 	close(release)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -175,11 +175,22 @@ func TestBoundedDispatchReportsLoss(t *testing.T) {
 	t.Logf("goroutines after stop=%d baseline=%d", runtime.NumGoroutine(), baseline)
 }
 
+// 기다린 뒤 last로 넘기면 마지막 유효 이벤트 하나만, 기다리지 않고 each로 넘기면 모든 이벤트가 생긴 순서대로 hook에
+// 가는지, 그리고 두 interruptible 값 모두에서 hook이 겹쳐 실행되지 않는지 확인한다.
 func TestControlledModesPreservePolicy(t *testing.T) {
-	for _, noWait := range []bool{false, true} {
+	modes := []struct {
+		name    string
+		wait    domain.Millisecond
+		deliver domain.Deliver
+	}{
+		{"waitMillisecond=100/deliver=last", 100, domain.DeliverLast},
+		{"waitMillisecond=0/deliver=each", 0, domain.DeliverEach},
+	}
+	for _, mode := range modes {
 		for _, interruptible := range []bool{false, true} {
-			t.Run(fmt.Sprintf("noWait=%t/interruptible=%t", noWait, interruptible), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/interruptible=%t", mode.name, interruptible), func(t *testing.T) {
 				helper.GlobalLogger = newMockLogger()
+				each := mode.deliver == domain.DeliverEach
 				var mu sync.Mutex
 				var started, completed []string
 				active, peak := 0, 0
@@ -191,7 +202,7 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 					if active > peak {
 						peak = active
 					}
-					started = append(started, event.Path.String())
+					started = append(started, filepath.Base(event.Path.String()))
 					mu.Unlock()
 					began <- struct{}{}
 					defer func() { mu.Lock(); active--; mu.Unlock() }()
@@ -200,23 +211,35 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 						return ctx.Context().Err()
 					case <-time.After(5 * time.Millisecond):
 						mu.Lock()
-						completed = append(completed, event.Path.String())
+						completed = append(completed, filepath.Base(event.Path.String()))
 						mu.Unlock()
 						changed <- struct{}{}
 						return nil
 					}
 				})
 				empty := emptyCommand()
-				hooks := domain.Interruptible(interruptible).BuildHookFuncBuilder("test", domain.HookInfo{OnStartWatch: empty, OnBeforeChange: empty, OnChange: command, OnAfterChange: empty, OnFinishWatch: empty}, newMockLogger())(".")
-				r := &watchTargetRunner{noWait: noWait, waitMillisecond: 20, watchRoot: ".", exclude: domain.ExcludePatterns{"**/*.swp"}, stop: make(chan struct{}), runChangeHook: hooks.RunChangeHook}
-				input, done := make(chan domain.Event, 64), make(chan struct{})
-				go func() { r.selectEventHandler()(input); close(done) }()
+				option := hookBatchOption(mode.wait, 1000, mode.deliver)
+				option.Exclude = domain.ExcludePatterns{"**/*.swp"}
+				option.Interruptible = domain.Interruptible(interruptible)
+				root := t.TempDir()
+				r := NewWatchTargetRunner(
+					domain.GlobalCommandSet{LifeCycle: domain.GlobalLifeCycle{OnBeforeChange: empty, OnAfterChange: empty}},
+					domain.WatchTargetsCommandSet{Path: domain.Path(root), LifeCycle: domain.WatchTargetsLifeCycle{OnStartWatch: empty, OnChange: command, OnFinishWatch: empty}, Option: option},
+					newMockLogger())
+				events, _ := controlledSource(r)
+				go r.Run()
+				// 파일을 모두 만든 뒤 이벤트를 몰아 넣어, last의 이벤트가 한 번 기다리는 동안 모두 모이게 한다.
+				var names []string
 				for n := range 24 {
-					input <- domain.Event{Path: domain.Path(fmt.Sprintf("%02d.go", n))}
-					if noWait && interruptible {
+					names = append(names, filepath.Join(root, fmt.Sprintf("%02d.go", n)))
+					writeFile(t, names[n])
+				}
+				for _, name := range names {
+					events <- fsnotify.Event{Name: name, Op: fsnotify.Create}
+					if each && interruptible {
 						<-began
 					}
-					input <- domain.Event{Path: "excluded.swp"}
+					events <- fsnotify.Event{Name: filepath.Join(root, "excluded.swp"), Op: fsnotify.Create}
 				}
 				deadline := time.After(3 * time.Second)
 				for {
@@ -232,22 +255,21 @@ func TestControlledModesPreservePolicy(t *testing.T) {
 						t.Fatal("last valid event did not complete")
 					}
 				}
-				close(r.stop)
-				hooks.Cancel()
-				<-done
-				hooks.RunFinishHook()
+				var wg sync.WaitGroup
+				wg.Add(1)
+				r.Stop(&wg)
 				mu.Lock()
 				defer mu.Unlock()
 				if peak != 1 || active != 0 {
 					t.Fatalf("overlapping/leaked execution: peak=%d active=%d", peak, active)
 				}
-				if !noWait {
+				if !each {
 					if len(started) != 1 || started[0] != "23.go" {
-						t.Fatalf("debounce: %v", started)
+						t.Fatalf("last: %v", started)
 					}
 				} else {
 					if len(started) != 24 {
-						t.Fatalf("noWait dropped work: %v", started)
+						t.Fatalf("each dropped work: %v", started)
 					}
 					for n, path := range started {
 						if path != fmt.Sprintf("%02d.go", n) {
@@ -282,23 +304,4 @@ func assertWatchDirectoriesRemovable(t *testing.T, targets ...*watchTargetRunner
 			}
 		}
 	})
-}
-
-func TestZeroDebounceKeepsDefaultWait(t *testing.T) {
-	called := make(chan struct{}, 1)
-	r := &watchTargetRunner{runChangeHook: func(domain.Event) { called <- struct{}{} }}
-	input, done := make(chan domain.Event), make(chan struct{})
-	go func() { r.selectEventHandler()(input); close(done) }()
-	defer func() { close(input); <-done }()
-	input <- domain.Event{Path: "valid.go"}
-	select {
-	case <-called:
-		t.Fatal("zero wait lost the existing 100ms debounce default")
-	case <-time.After(20 * time.Millisecond):
-	}
-	select {
-	case <-called:
-	case <-time.After(time.Second):
-		t.Fatal("default debounce did not execute")
-	}
 }

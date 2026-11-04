@@ -64,11 +64,13 @@ func (f *renameFixture) move(from, to string) {
 
 func (f *renameFixture) start(exclude domain.ExcludePatterns) {
 	f.startWith(domain.WatchTargetsOption{
-		NoWait:         true,
-		WatchSubDir:    true,
-		WatchFileEvent: domain.WatchAllEvent(),
-		WatchDirEvent:  domain.WatchEvent{Create: true, Delete: true},
-		Exclude:        exclude,
+		Deliver:         domain.DeliverEach,
+		DirEventWait:    100,
+		DirEventMaxWait: 1000,
+		WatchSubDir:     true,
+		WatchFileEvent:  domain.WatchAllEvent(),
+		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
+		Exclude:         exclude,
 	})
 }
 

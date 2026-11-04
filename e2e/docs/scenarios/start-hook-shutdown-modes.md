@@ -3,7 +3,7 @@
 🇺🇸 English | 🇰🇷 [한국어](start-hook-shutdown-modes.ko.md)
 
 - While the start hook runs a real parent, child, and grandchild process tree, a change event and a shutdown signal arrive.
-- Checks, in the four `noWait`·`interruptible` combinations, that the start hook is replaced or kept, and that all processes complete gracefully on shutdown.
+- Checks, in the four `hookBatch.deliver`·`interruptible` combinations, that the start hook is replaced or kept, and that all processes complete gracefully on shutdown.
 
 ## What it checks and success criteria
 
@@ -16,16 +16,16 @@
 ## Configuration
 
 - The target `onStartWatch` and `onChange` are set to the same `hookrec --depth=2` command. The record format and signal handling are described in [`hookrec` process trees and delayed hooks](../harness.md#hookrec-process-trees-and-delayed-hooks).
-- The target options are the per-subtest `noWait` and `interruptible`, plus `hookBatch.waitMillisecond: 10`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`. No finish hook is configured.
+- The target options are the per-subtest `hookBatch.deliver` and `interruptible`, plus `hookBatch.waitMillisecond`, which is 10 with `deliver: last` and 0 with `deliver: each`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`. No finish hook is configured.
 
 ## Subtests
 
 | Subtest | Change event handling | Extra waits and checks |
 |---|---|---|
-| `noWait=false/interruptible=false` | 10ms debounce, start hook kept | No parent `start` other than the first generation |
-| `noWait=false/interruptible=true` | 10ms debounce, start hook cancelled and replaced | Wait for 2 generations ready |
-| `noWait=true/interruptible=false` | Sequential runs without waiting, start hook kept | No parent `start` other than the first generation |
-| `noWait=true/interruptible=true` | Runs without waiting, start hook cancelled and replaced | Wait for 2 generations ready |
+| `deliver=last/interruptible=false` | Last changed path after a 10ms wait, start hook kept | No parent `start` other than the first generation |
+| `deliver=last/interruptible=true` | Last changed path after a 10ms wait, start hook cancelled and replaced | Wait for 2 generations ready |
+| `deliver=each/interruptible=false` | Sequential runs without waiting, start hook kept | No parent `start` other than the first generation |
+| `deliver=each/interruptible=true` | Runs without waiting, start hook cancelled and replaced | Wait for 2 generations ready |
 
 ## Sequence
 
@@ -72,7 +72,7 @@ go run ./e2e/linux -- -run '^TestStartHookShutdownModes$'
 make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 ```
 
-- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestStartHookShutdownModes$/^noWait=true$/^interruptible=false$'`.
+- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestStartHookShutdownModes$/^deliver=each$/^interruptible=false$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
 - To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 

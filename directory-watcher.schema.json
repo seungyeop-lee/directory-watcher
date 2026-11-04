@@ -96,13 +96,13 @@
                 "properties": {
                   "waitMillisecond": {
                     "type": "integer",
-                    "description": "Quiet time in milliseconds after the last event before collected folder events are sent. 0 uses the default.",
+                    "description": "Quiet time in milliseconds after the last event before collected folder events are sent. 0 turns collecting off.",
                     "default": 100,
                     "minimum": 0
                   },
                   "maxWaitMillisecond": {
                     "type": "integer",
-                    "description": "Longest time in milliseconds that folder events are collected. 0 uses the default.",
+                    "description": "Longest time in milliseconds that folder events are collected.",
                     "default": 1000,
                     "minimum": 0
                   }
@@ -111,21 +111,28 @@
               },
               "hookBatch": {
                 "type": "object",
-                "description": "How long the hook waits for more events before it runs.",
+                "description": "How events are collected and merged into runs of the hook.",
                 "properties": {
                   "waitMillisecond": {
                     "type": "integer",
-                    "description": "Wait time in milliseconds after an event occurs before executing the hook. 0 uses the default.",
+                    "description": "Quiet time in milliseconds after the last event before the collected events become runs. 0 does not wait: each event becomes runs on its own.",
                     "default": 100,
                     "minimum": 0
+                  },
+                  "maxWaitMillisecond": {
+                    "type": "integer",
+                    "description": "Longest time in milliseconds that events are collected. It cannot be less than waitMillisecond.",
+                    "default": 1000,
+                    "minimum": 0
+                  },
+                  "deliver": {
+                    "type": "string",
+                    "description": "Runs made from the events collected in one wait. last: one run for the path that changed last, among the paths with a final change. lastPerPath: one run for each path with a final change, in the order the paths last changed. each: one run for each event, in the order the events happened.",
+                    "enum": ["last", "lastPerPath", "each"],
+                    "default": "last"
                   }
                 },
                 "additionalProperties": false
-              },
-              "noWait": {
-                "type": "boolean",
-                "description": "Whether to execute the hook immediately without waiting after an event occurs.",
-                "default": false
               },
               "interruptible": {
                 "type": "boolean",

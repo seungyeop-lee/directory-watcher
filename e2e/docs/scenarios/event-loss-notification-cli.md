@@ -64,8 +64,8 @@ In `failure`, `timeout`, and `success-tree`, the notification creates a real par
 | Location | Hooks and options |
 |---|---|
 | Global | `onError` (per mode), `onBeforeChange`: `BEFORE`, `onFinishWatch`: `GLOBAL:FINISH` |
-| Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `noWait: true`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
-| Target 2: `other` in the run folder | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `noWait: true`, `watch.fileEvent: C` |
+| Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
+| Target 2: `other` in the run folder | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C` |
 
 - The watcher is launched with `Launch` at the default ERROR log level.
 - With no DEBUG log, watch readiness is judged from the `BEGIN` record of `START` and the `OTHER:READY` record instead of probe events.

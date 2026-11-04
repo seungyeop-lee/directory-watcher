@@ -31,7 +31,7 @@
 ## Configuration
 
 - The target `onChange` hook records `CHANGE:{{.Event}},{{.IsDir}},{{.Path}}` with `hookrec`.
-- The target options are `noWait: true` and `watch.exclude: ['*.probe']`. `watch.fileEvent` and `watch.dirEvent` keep their defaults, `CUD` and `CD`.
+- The target options are `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, and `watch.exclude: ['*.probe']`. `watch.fileEvent` and `watch.dirEvent` keep their defaults, `CUD` and `CD`.
 - Before watching starts, the test creates `src` and `dst` in the watch folder, and `outside/x` with 3 files and `outside/big` with 300 files in the run folder.
 
 ## Sequence

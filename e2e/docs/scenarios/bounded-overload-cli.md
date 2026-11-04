@@ -17,7 +17,7 @@
 ## Configuration
 
 - The target `onStartWatch` is `hookrec --depth=2`. No change hook or finish hook is configured.
-- The target options are `noWait: true`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`.
+- The target options are `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`.
 
 ## Sequence
 

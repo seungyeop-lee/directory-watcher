@@ -31,7 +31,7 @@
 ## 설정
 
 - 대상 `onChange` hook은 `hookrec`으로 `CHANGE:{{.Event}},{{.IsDir}},{{.Path}}`를 기록합니다.
-- 대상 옵션은 `noWait: true`, `watch.exclude: ['*.probe']`입니다. `watch.fileEvent`와 `watch.dirEvent`는 기본값 `CUD`와 `CD`를 씁니다.
+- 대상 옵션은 `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.exclude: ['*.probe']`입니다. `watch.fileEvent`와 `watch.dirEvent`는 기본값 `CUD`와 `CD`를 씁니다.
 - 테스트는 감시를 시작하기 전에 감시 폴더에 `src`와 `dst`를, 실행 폴더에 파일 3개가 든 `outside/x`와 파일 300개가 든 `outside/big`을 만듭니다.
 
 ## 진행 순서

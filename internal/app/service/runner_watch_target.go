@@ -63,6 +63,10 @@ type watchTargetRunner struct {
 	// 때를 알린다. collect를 본다.
 	batch    *eventBatch
 	batchDue <-chan time.Time
+	// hookBatch는 hook에 넘기려고 기다리는 동안 받은 이벤트이고, 기다리지 않을 때는 nil이다. hookBatchDue는
+	// hookBatch로 실행을 만들 때를 알린다. batchForHook을 본다.
+	hookBatch    *changeBatch
+	hookBatchDue <-chan time.Time
 	// retiring은 rebuildWatcher가 갈아 끼운 뒤 아직 닫지 않은 예전 watcher다. retireWatcher를 본다.
 	retiring *retiredWatcher
 
@@ -72,13 +76,14 @@ type watchTargetRunner struct {
 	cancelHook    func()
 
 	exclude         domain.ExcludePatterns
-	waitMillisecond domain.Millisecond
+	hookWait        time.Duration
+	hookMaxWait     time.Duration
+	deliver         domain.Deliver
 	watchSubDir     bool
 	watchFileEvent  domain.WatchEvent
 	watchDirEvent   domain.WatchEvent
 	dirEventWait    time.Duration
 	dirEventMaxWait time.Duration
-	noWait          bool
 
 	logger      helper.Logger
 	watcher     *fsnotify.Watcher
@@ -110,13 +115,14 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		runFinishHook:   hookFunc.RunFinishHook,
 		cancelHook:      hookFunc.Cancel,
 		exclude:         commandSet.Option.Exclude,
-		waitMillisecond: commandSet.Option.WaitMillisecond,
+		hookWait:        commandSet.Option.WaitMillisecond.Duration(),
+		hookMaxWait:     commandSet.Option.MaxWaitMillisecond.Duration(),
+		deliver:         commandSet.Option.Deliver,
 		watchSubDir:     commandSet.Option.WatchSubDir,
 		watchFileEvent:  commandSet.Option.WatchFileEvent,
 		watchDirEvent:   commandSet.Option.WatchDirEvent,
-		dirEventWait:    durationOr(commandSet.Option.DirEventWait, defaultDirEventWait),
-		dirEventMaxWait: durationOr(commandSet.Option.DirEventMaxWait, defaultDirEventMaxWait),
-		noWait:          commandSet.Option.NoWait,
+		dirEventWait:    commandSet.Option.DirEventWait.Duration(),
+		dirEventMaxWait: commandSet.Option.DirEventMaxWait.Duration(),
 		logger:          logger,
 		watcher:         watcher,
 		watchedDirs:     map[string]map[string]entryInfo{},
@@ -157,7 +163,7 @@ func (r *watchTargetRunner) Run() error {
 	go func() {
 		defer close(r.handlerDone)
 		r.runStartHook()
-		r.selectEventHandler()(events)
+		r.runChanges(events)
 	}()
 	for {
 		select {
@@ -179,6 +185,10 @@ func (r *watchTargetRunner) Run() error {
 			}
 		case <-r.batchDue:
 			if err := r.flushBatch(events); err != nil {
+				return r.exitError(err)
+			}
+		case <-r.hookBatchDue:
+			if err := r.flushHookBatch(events); err != nil {
 				return r.exitError(err)
 			}
 		case ev, ok := <-r.watchEvents:
@@ -219,8 +229,8 @@ func (r *watchTargetRunner) exitError(err error) error {
 	return &FatalError{Path: r.path, Cause: err}
 }
 
-// handleEvent는 fsnotify 이벤트 ev를 감시 목록에 반영하고, 제외되지 않은 파일과 폴더의 생성, 수정, 삭제이면
-// collect로 넘긴다.
+// handleEvent는 fsnotify 이벤트 ev를 감시 목록과 기록에 반영하고, 제외되지 않은 파일과 폴더의 생성, 수정,
+// 삭제이면 collect로 넘긴다. 넘기는 이벤트에는 반영하기 전에 경로가 기록에 있었는지를 함께 적는다.
 func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.Event) error {
 	r.printEventLog(ev)
 	// fsnotify의 kqueue 구현(macOS)은 감시 대상 안의 폴더 링크를 스스로 따라가, 링크가 가리키는
@@ -232,7 +242,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 	if r.isUnreleased(ev.Name) {
 		return nil
 	}
-	var isDir bool
+	var isDir, existed bool
 	switch {
 	case ev.Op.Has(fsnotify.Create):
 		delete(r.selfRenames, ev.Name)
@@ -243,6 +253,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 				return err
 			}
 		}
+		_, existed = r.recorded(ev.Name)
 		// 폴더를 가리키는 링크는 따라가지 않으므로 폴더로 보지 않는다.
 		info, err := os.Lstat(ev.Name)
 		isDir = err == nil && info.IsDir()
@@ -261,7 +272,8 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 			return nil
 		}
 		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 기록에 적어 둔 폴더인지로 판단한다.
-		wasDir, _ := r.recorded(ev.Name)
+		var wasDir bool
+		wasDir, existed = r.recorded(ev.Name)
 		isDir = r.unwatchTree(ev.Name) || wasDir
 		if isDir && inotifyOS && ev.Op.Has(fsnotify.Rename) {
 			r.addSelfRename(ev.Name)
@@ -273,6 +285,12 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 		if r.isDir(ev.Name) {
 			return nil
 		}
+		// 생성 이벤트를 놓친 파일은 수정 이벤트에서 기록에 넣는다. 그래야 이번에는 생성으로, 다음부터는 수정으로 넘긴다.
+		if _, existed = r.recorded(ev.Name); !existed {
+			if _, err := os.Lstat(ev.Name); err == nil {
+				r.addEntry(ev.Name, false)
+			}
+		}
 		ev.Op = fsnotify.Write
 	default:
 		return nil
@@ -280,23 +298,30 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event, events chan<- domain.
 	if r.isExcluded(ev.Name) {
 		return nil
 	}
-	return r.collect(domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, events)
+	return r.collect(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed}, events)
 }
 
-// dispatch는 e가 감시하는 이벤트 종류이면 hook이 받도록 events에 넣는다. events가 가득 찼으면 넣지 않고
-// 오류를 돌려준다.
-func (r *watchTargetRunner) dispatch(e domain.Event, events chan<- domain.Event) error {
-	if !r.listens(e) {
-		return nil
+// enqueue는 실행 runs를 차례로 대기열 events에 넣는다. 대기열이 가득 찼으면, block이 true이면 자리가 날 때까지
+// 기다리고 false이면 오류를 돌려준다.
+func (r *watchTargetRunner) enqueue(runs []domain.Event, events chan<- domain.Event, block bool) error {
+	for _, run := range runs {
+		select {
+		case <-r.stop:
+			return errStopped
+		case events <- run:
+			continue
+		default:
+		}
+		if !block {
+			return fmt.Errorf("dispatch queue full (capacity %d): %w", dispatchCapacity, fsnotify.ErrEventOverflow)
+		}
+		select {
+		case <-r.stop:
+			return errStopped
+		case events <- run:
+		}
 	}
-	select {
-	case <-r.stop:
-		return errStopped
-	case events <- e:
-		return nil
-	default:
-		return fmt.Errorf("dispatch queue full (capacity %d): %w", dispatchCapacity, fsnotify.ErrEventOverflow)
-	}
+	return nil
 }
 
 // listens는 e가 watchFileEvent나 watchDirEvent에서 고른 이벤트 종류인지 판단한다.
@@ -440,65 +465,23 @@ func (r *watchTargetRunner) isExcluded(name string) bool {
 	return ok && r.exclude.Excludes(filepath.ToSlash(rel))
 }
 
-func (r *watchTargetRunner) selectEventHandler() func(chan domain.Event) {
-	return func(input chan domain.Event) {
-		wait := r.waitMillisecond.Duration()
-		if wait == 0 {
-			wait = 100 * time.Millisecond
-		}
-		var timer *time.Timer
-		if !r.noWait {
-			timer = time.NewTimer(time.Hour)
-			if !timer.Stop() {
-				<-timer.C
+// runChanges는 대기열 input의 실행을 넣은 순서대로 hook에 넘긴다.
+func (r *watchTargetRunner) runChanges(input <-chan domain.Event) {
+	for {
+		select {
+		case <-r.stop:
+			return
+		case event, ok := <-input:
+			if !ok {
+				return
 			}
-			defer timer.Stop()
-		}
-		var threshold <-chan time.Time
-		var latest domain.Event
-		for {
+			// 감시를 멈춘 뒤에 꺼낸 실행은 hook에 넘기지 않는다.
 			select {
 			case <-r.stop:
 				return
 			default:
 			}
-			select {
-			case <-r.stop:
-				return
-			case event, ok := <-input:
-				if !ok {
-					return
-				}
-				if r.isExcluded(event.Path.String()) {
-					continue
-				}
-				if r.noWait {
-					select {
-					case <-r.stop:
-						return
-					default:
-					}
-					r.runChangeHook(event)
-					continue
-				}
-				latest = event
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				timer.Reset(wait)
-				threshold = timer.C
-			case <-threshold:
-				threshold = nil
-				select {
-				case <-r.stop:
-					return
-				default:
-				}
-				r.runChangeHook(latest)
-			}
+			r.runChangeHook(event)
 		}
 	}
 }

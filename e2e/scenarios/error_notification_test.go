@@ -55,7 +55,9 @@ watchTargets:
       watch:
         exclude: ['*.probe']
         fileEvent: C
-      noWait: true
+      hookBatch:
+        waitMillisecond: 0
+        deliver: each
   - path: '%s'
     lifeCycle:
       onStartWatch:
@@ -67,7 +69,9 @@ watchTargets:
     option:
       watch:
         fileEvent: C
-      noWait: true
+      hookBatch:
+        waitMillisecond: 0
+        deliver: each
 `, notification, s.Hook("--line=BEFORE"), s.Hook("--line=GLOBAL:FINISH"),
 				s.Watch, s.Hook("--delay=30s", "--line=START"), s.Hook("--line=CHANGE"), s.Hook("--line=TARGET:FINISH"),
 				other, s.Hook("--line=OTHER:READY"), s.Hook("--line=OTHER:CHANGE"), s.Hook("--line=OTHER:FINISH")))
@@ -261,8 +265,13 @@ func assertLossExit(t *testing.T, s *harness.Scenario, cause string) {
 }
 
 func TestNormalChangesDoNotNotify(t *testing.T) {
-	for _, noWait := range []bool{false, true} {
-		t.Run(fmt.Sprintf("noWait=%t", noWait), func(t *testing.T) {
+	for _, deliver := range []string{"last", "each"} {
+		t.Run(fmt.Sprintf("deliver=%s", deliver), func(t *testing.T) {
+			// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
+			each, wait := deliver == "each", 50
+			if each {
+				wait = 0
+			}
 			s := harness.NewScenario(t)
 			s.Start(fmt.Sprintf(`global:
   lifeCycle:
@@ -280,9 +289,9 @@ watchTargets:
         exclude: ['*.probe']
         fileEvent: C
       hookBatch:
-        waitMillisecond: 50
-      noWait: %t
-`, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--line=CHANGE:{{.Path}}"), s.Hook("--line=FINISH"), noWait))
+        waitMillisecond: %d
+        deliver: %s
+`, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--line=CHANGE:{{.Path}}"), s.Hook("--line=FINISH"), wait, deliver))
 			var paths []string
 			for n := range 20 {
 				path := filepath.Join(s.Watch, fmt.Sprintf("normal-%02d.txt", n))
@@ -290,13 +299,13 @@ watchTargets:
 				s.Write(path, nil)
 			}
 			deadline := time.Now().Add(10 * time.Second)
-			s.AwaitChangesComplete("CHANGE:", paths, fsnotify.Create, noWait, time.Until(deadline))
+			s.AwaitChangesComplete("CHANGE:", paths, fsnotify.Create, each, time.Until(deadline))
 			last := filepath.Join(s.Watch, "last.txt")
 			s.Write(last, nil)
-			s.AwaitLine("isolated normal/debounced event completes", time.Until(deadline), "CHANGE:"+last)
+			s.AwaitLine("isolated normal/merged event completes", time.Until(deadline), "CHANGE:"+last)
 			s.Stop()
 			if got := errorContexts(t, s.Records); len(got) != 0 {
-				t.Fatalf("normal/debounced events invoked onError: %v", got)
+				t.Fatalf("normal/merged events invoked onError: %v", got)
 			}
 			if harness.CountRecord(s.Lines(), "FINISH") != 1 {
 				t.Fatal("normal finish hook missing")

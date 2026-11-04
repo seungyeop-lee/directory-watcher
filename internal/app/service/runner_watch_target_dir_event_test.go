@@ -125,7 +125,7 @@ func TestFolderChangeNotifiesTopFolderOnce(t *testing.T) {
 	}
 }
 
-// noWait: true에서 폴더 이벤트를 모으는 동안 생긴 다른 파일의 이벤트는 폴더 이벤트와 생긴 순서대로 hook에
+// deliver: each에서 폴더 이벤트를 모으는 동안 생긴 다른 파일의 이벤트는 폴더 이벤트와 생긴 순서대로 hook에
 // 가는지 확인한다.
 func TestFolderEventKeepsOrderWithFileEvents(t *testing.T) {
 	f := newRenameFixture(t)
@@ -152,10 +152,11 @@ func TestFolderEventIsSentWithinMaxWaitDuringContinuousWrites(t *testing.T) {
 	const maxWait = 500 * time.Millisecond
 	f := newRenameFixture(t)
 	f.startWith(domain.WatchTargetsOption{
-		NoWait:          true,
+		Deliver:         domain.DeliverEach,
 		WatchSubDir:     true,
 		WatchFileEvent:  domain.WatchAllEvent(),
 		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
+		DirEventWait:    100,
 		DirEventMaxWait: domain.Millisecond(maxWait / time.Millisecond),
 	})
 	stop, writing := make(chan struct{}), make(chan struct{})
@@ -203,7 +204,7 @@ func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
 	f := newRenameFixture(t)
 	f.fill("src/pkg", 5)
 	f.fill("../outside/x", 3)
-	f.startWith(domain.WatchTargetsOption{NoWait: true, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()})
+	f.startWith(domain.WatchTargetsOption{Deliver: domain.DeliverEach, DirEventWait: 100, DirEventMaxWait: 1000, WatchSubDir: true, WatchFileEvent: domain.WatchAllEvent()})
 	f.mkdirAll("src/a/b")
 	f.write("src/a/b/c.txt")
 	f.move("../outside/x", "src/x")
@@ -223,9 +224,11 @@ func TestFolderEventWithoutWatchSubDir(t *testing.T) {
 	f.sentinelDirs = []string{""}
 	f.fill("src", 3)
 	f.startWith(domain.WatchTargetsOption{
-		NoWait:         true,
-		WatchFileEvent: domain.WatchAllEvent(),
-		WatchDirEvent:  domain.WatchEvent{Create: true, Delete: true},
+		Deliver:         domain.DeliverEach,
+		DirEventWait:    100,
+		DirEventMaxWait: 1000,
+		WatchFileEvent:  domain.WatchAllEvent(),
+		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
 	})
 	f.removeAll("src")
 	if got, want := f.changes(), []string{"D src/"}; !slices.Equal(got, want) {
@@ -290,10 +293,12 @@ func TestBatchLargerThanQueueDoesNotOverflow(t *testing.T) {
 	var mu sync.Mutex
 	deleted := 0
 	f.runner, f.changed, f.result = startExcludeRunner(t, f.target, domain.WatchTargetsOption{
-		NoWait:         true,
-		WatchSubDir:    true,
-		WatchFileEvent: domain.WatchAllEvent(),
-		WatchDirEvent:  domain.WatchEvent{Create: true, Delete: true},
+		Deliver:         domain.DeliverEach,
+		DirEventWait:    100,
+		DirEventMaxWait: 1000,
+		WatchSubDir:     true,
+		WatchFileEvent:  domain.WatchAllEvent(),
+		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
 	}, newMockLogger(), func(ev domain.Event) {
 		if ev.Operation.String() == "D" {
 			mu.Lock()

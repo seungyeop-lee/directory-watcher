@@ -139,12 +139,12 @@ func (c WatchTargetsLifeCycleConfig) BuildLifeCycle(shell cmd.Shell) (domain.Wat
 }
 
 // WatchTargetsOptionConfig는 감시 대상 옵션을 처리 단계별 그룹으로 받는다. watch는 무엇을 감시할지,
-// dirBatch는 폴더 이벤트를 만들려고 이벤트를 모으는 방식, hookBatch는 hook을 실행하기 전에 기다리는 방식을 정한다.
+// dirBatch는 폴더 이벤트를 만들려고 이벤트를 모으는 방식, hookBatch는 hook을 실행하기 전에 이벤트를 모으고 합치는
+// 방식을 정한다.
 type WatchTargetsOptionConfig struct {
 	Watch         WatchOptionConfig     `yaml:"watch"`
 	DirBatch      DirBatchOptionConfig  `yaml:"dirBatch"`
 	HookBatch     HookBatchOptionConfig `yaml:"hookBatch"`
-	NoWait        *bool                 `yaml:"noWait"`
 	Interruptible *bool                 `yaml:"interruptible"`
 
 	// Removed로 시작하는 필드는 v3에서 없애거나 그룹 안으로 옮긴 키를 받는다. yaml.Unmarshal은 모르는 키를 무시하므로,
@@ -155,6 +155,7 @@ type WatchTargetsOptionConfig struct {
 	RemovedWatchEvent      yaml.Node `yaml:"watchEvent" json:"-"`
 	RemovedWatchSubDir     yaml.Node `yaml:"watchSubDir" json:"-"`
 	RemovedWaitMillisecond yaml.Node `yaml:"waitMillisecond" json:"-"`
+	RemovedNoWait          yaml.Node `yaml:"noWait" json:"-"`
 }
 
 type WatchOptionConfig struct {
@@ -164,14 +165,20 @@ type WatchOptionConfig struct {
 	DirEvent  *config.WatchEvent `yaml:"dirEvent"`
 }
 
+// 기다리는 시간은 적지 않은 것과 0을 구별하려고 포인터로 받는다. waitMillisecond가 0이면 이벤트를 모으지 않는다.
 type DirBatchOptionConfig struct {
-	WaitMillisecond    config.Millisecond `yaml:"waitMillisecond"`
-	MaxWaitMillisecond config.Millisecond `yaml:"maxWaitMillisecond"`
+	WaitMillisecond    *config.Millisecond `yaml:"waitMillisecond"`
+	MaxWaitMillisecond *config.Millisecond `yaml:"maxWaitMillisecond"`
 }
 
 type HookBatchOptionConfig struct {
-	WaitMillisecond config.Millisecond `yaml:"waitMillisecond"`
+	WaitMillisecond    *config.Millisecond `yaml:"waitMillisecond"`
+	MaxWaitMillisecond *config.Millisecond `yaml:"maxWaitMillisecond"`
+	Deliver            *string             `yaml:"deliver"`
 }
+
+// 기다리는 시간을 적지 않았을 때 쓰는 값이다.
+const defaultWaitMillisecond, defaultMaxWaitMillisecond config.Millisecond = 100, 1000
 
 func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, error) {
 	const excludeSection, watchEventSection, optionsSection = "Moving from excludeDir and excludeSuffix", "Moving from watchEvent", "Moving from version 2 options"
@@ -185,6 +192,7 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 		{"watchEvent", "option.watch.fileEvent and option.watch.dirEvent", watchEventSection, c.RemovedWatchEvent},
 		{"watchSubDir", "option.watch.subDir", optionsSection, c.RemovedWatchSubDir},
 		{"waitMillisecond", "option.hookBatch.waitMillisecond", optionsSection, c.RemovedWaitMillisecond},
+		{"noWait", "option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait", optionsSection, c.RemovedNoWait},
 	} {
 		if removed.node.Kind != 0 {
 			return domain.WatchTargetsOption{}, fmt.Errorf(`option.%s is no longer supported; use %s (see USAGE %q)`, removed.key, removed.replacement, removed.section)
@@ -205,15 +213,25 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 	if fileEvent.IsNone() && dirEvent.IsNone() {
 		return domain.WatchTargetsOption{}, errors.New("option.watch: fileEvent and dirEvent are both none; onChange would never run")
 	}
+	wait := converter.NewMillisecondConverter(c.HookBatch.WaitMillisecond, defaultWaitMillisecond).Convert()
+	maxWait := converter.NewMillisecondConverter(c.HookBatch.MaxWaitMillisecond, defaultMaxWaitMillisecond).Convert()
+	if maxWait < wait {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.hookBatch: maxWaitMillisecond %d is less than waitMillisecond %d", maxWait, wait)
+	}
+	deliver, err := converter.NewDeliverConverter(c.HookBatch.Deliver).Convert()
+	if err != nil {
+		return domain.WatchTargetsOption{}, fmt.Errorf("option.hookBatch.%w", err)
+	}
 	return domain.WatchTargetsOption{
-		Exclude:         exclude,
-		WaitMillisecond: converter.NewWaitMillisecondConverter(c.HookBatch.WaitMillisecond).Convert(),
-		WatchSubDir:     converter.NewWatchSubDirConverter(c.Watch.SubDir).Convert(),
-		WatchFileEvent:  fileEvent,
-		WatchDirEvent:   dirEvent,
-		DirEventWait:    domain.Millisecond(c.DirBatch.WaitMillisecond),
-		DirEventMaxWait: domain.Millisecond(c.DirBatch.MaxWaitMillisecond),
-		NoWait:          converter.NewNoWaitConverter(c.NoWait).Convert(),
-		Interruptible:   converter.NewInterruptibleConverter(c.Interruptible).Convert(),
+		Exclude:            exclude,
+		WaitMillisecond:    wait,
+		MaxWaitMillisecond: maxWait,
+		Deliver:            deliver,
+		WatchSubDir:        converter.NewWatchSubDirConverter(c.Watch.SubDir).Convert(),
+		WatchFileEvent:     fileEvent,
+		WatchDirEvent:      dirEvent,
+		DirEventWait:       converter.NewMillisecondConverter(c.DirBatch.WaitMillisecond, defaultWaitMillisecond).Convert(),
+		DirEventMaxWait:    converter.NewMillisecondConverter(c.DirBatch.MaxWaitMillisecond, defaultMaxWaitMillisecond).Convert(),
+		Interruptible:      converter.NewInterruptibleConverter(c.Interruptible).Convert(),
 	}, nil
 }

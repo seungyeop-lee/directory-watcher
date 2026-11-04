@@ -17,8 +17,8 @@
 
 ### 몰려드는 변경 다루기
 
-- 기본 동작에서는 이벤트가 몰려도 마지막 이벤트 뒤 `hookBatch.waitMillisecond`(기본 100ms)가 지나면 hook을 한 번만 실행합니다.
-- `noWait: true`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다.
+- 기본 동작에서는 이벤트가 몰려도, 마지막 이벤트 뒤 `hookBatch.waitMillisecond`(기본 100ms)가 지나거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000ms)가 지나면 가장 나중에 바뀐 경로의 최종 변화로 hook을 한 번만 실행합니다.
+- `hookBatch.deliver: lastPerPath`로 설정하면 바뀐 경로마다 hook을 한 번씩 실행합니다. `hookBatch.deliver: each`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다. `hookBatch.waitMillisecond: 0`이면 기다리지 않고 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](USAGE.ko.md#hookbatch로-기다리고-합치기)에 있습니다.
 - 대상마다 대기 이벤트를 최대 256개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
 
 ### 오래 실행되는 프로세스 재시작하기
@@ -157,11 +157,10 @@ flowchart TD
         excludeCheck{"제외된 경로인가?"}
         collectChoice{"폴더 생성·삭제이거나<br>하위 폴더 안의 파일 삭제인가?"}
         collectFolder["대상의 이벤트를 모으고<br>폴더 안의 이벤트는 흡수"]
-        kindFilter{"watch.fileEvent나 watch.dirEvent에서<br>고른 이벤트 종류인가?"}
+        waitChoice{"hookBatch.waitMillisecond가<br>0인가?"}
+        collectHook["hookBatch.waitMillisecond 동안 이벤트가 없거나<br>hookBatch.maxWaitMillisecond가 지날 때까지 모음"]
+        mergeRuns["hookBatch.deliver에 따라 실행으로 합치고<br>watch.fileEvent나 watch.dirEvent에서 고른 종류만 남김"]
         queueEvent{"대상의 256개 대기열에<br>자리가 있는가?"}
-        modeChoice{"noWait?"}
-        debounceWait["마지막 이벤트 뒤 hookBatch.waitMillisecond 대기<br>그 이벤트만 남김"]
-        orderedRun["받은 순서대로 이벤트 처리"]
         interruptChoice{"interruptible?"}
         cancelPrevious["실행 중인 명령을 취소하고<br>끝나기를 기다림"]
         runChange["전역 onBeforeChange → onChange<br>→ 전역 onAfterChange"]
@@ -175,23 +174,23 @@ flowchart TD
     excludeCheck -->|"예: 무시"| receiveEvent
     excludeCheck -->|"아니오"| collectChoice
     collectChoice -->|"예, 또는 이미 모으는 중"| collectFolder
-    collectChoice -->|"아니오"| kindFilter
-    collectFolder -->|"dirBatch.waitMillisecond 동안 이벤트 없음,<br>또는 dirBatch.maxWaitMillisecond 지남"| kindFilter
-    kindFilter -->|"아니오: 무시"| receiveEvent
-    kindFilter -->|"예"| queueEvent
+    collectChoice -->|"아니오"| waitChoice
+    collectFolder -->|"dirBatch.waitMillisecond 동안 이벤트 없음,<br>또는 dirBatch.maxWaitMillisecond 지남"| waitChoice
+    waitChoice -->|"아니오"| collectHook
+    waitChoice -->|"예: 이벤트마다 따로"| mergeRuns
+    collectHook --> mergeRuns
+    mergeRuns -->|"실행 없음: 무시"| receiveEvent
+    mergeRuns -->|"실행마다"| queueEvent
     queueEvent -->|"아니오"| fatalStop
-    queueEvent -->|"예"| modeChoice
-    modeChoice -->|"false"| debounceWait
-    modeChoice -->|"true"| orderedRun
-    debounceWait --> interruptChoice
-    orderedRun --> interruptChoice
+    queueEvent -->|"예"| interruptChoice
     interruptChoice -->|"true"| cancelPrevious
     interruptChoice -->|"false: 실행 중인 명령이 끝날 때까지 대기"| runChange
     cancelPrevious --> runChange
     runChange -->|"다음 이벤트"| receiveEvent
 ```
 
-- 모은 이벤트는 watcher를 멈추지 않고 대기열에 자리가 날 때까지 기다립니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
+- 명령이 실행되는 동안에도 이벤트를 계속 받아 모으므로, `hookBatch`가 기다리는 시간이 끝날 때마다 그때 만든 실행이 대기열에 들어갑니다.
+- `hookBatch.waitMillisecond: 0`이면 폴더 이벤트를 위해 모은 이벤트는 watcher를 멈추지 않고 대기열에 자리가 날 때까지 기다립니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
 - `interruptible: false`에서는 대상 `onStartWatch`나 변경 명령이 실행되는 동안 들어온 이벤트가 그 명령이 끝날 때까지 대기열에서 기다립니다. `interruptible: true`에서는 실행 중인 대상 `onStartWatch`도 다음 변경이 취소합니다.
 - 한 번의 실행에 속한 명령은 차례대로 실행되며, 실패한 명령이 나오면 그 실행을 멈춥니다. 이 실패는 `[ERROR]` 로그로 남습니다. 자세한 내용은 사용 안내의 [`config.yml`](USAGE.ko.md#configyml)을 확인하세요.
 

@@ -187,9 +187,11 @@ func TestRecordWithoutWatchSubDirHoldsOnlyDirectChildren(t *testing.T) {
 	f.fill("src/sub", 2)
 	f.fill("gone", 2)
 	f.startWith(domain.WatchTargetsOption{
-		NoWait:         true,
-		WatchFileEvent: domain.WatchAllEvent(),
-		WatchDirEvent:  domain.WatchEvent{Create: true, Delete: true},
+		Deliver:         domain.DeliverEach,
+		DirEventWait:    100,
+		DirEventMaxWait: 1000,
+		WatchFileEvent:  domain.WatchAllEvent(),
+		WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
 	})
 	f.fill("new", 2)
 	f.write("added.txt")

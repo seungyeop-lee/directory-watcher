@@ -177,58 +177,78 @@ func readTrimmed(t *testing.T, path string) string {
 }
 
 func TestGroupedOptionsBuildOption(t *testing.T) {
+	// defaults는 설정 파일에 option을 적지 않았을 때의 값이다. 각 경우는 이 값에서 바뀌는 필드만 고친다.
+	defaults := domain.WatchTargetsOption{
+		WaitMillisecond:    100,
+		MaxWaitMillisecond: 1000,
+		Deliver:            domain.DeliverLast,
+		WatchSubDir:        true,
+		WatchFileEvent:     domain.WatchAllEvent(),
+		WatchDirEvent:      domain.WatchEvent{Create: true, Delete: true},
+		DirEventWait:       100,
+		DirEventMaxWait:    1000,
+	}
+	with := func(change func(o *domain.WatchTargetsOption)) domain.WatchTargetsOption {
+		o := defaults
+		change(&o)
+		return o
+	}
 	tests := []struct {
 		name   string
 		option string
 		want   domain.WatchTargetsOption
 	}{
-		{
-			name:   "defaults",
-			option: "{}",
-			want: domain.WatchTargetsOption{
-				WaitMillisecond: 100,
-				WatchSubDir:     true,
-				WatchFileEvent:  domain.WatchAllEvent(),
-				WatchDirEvent:   domain.WatchEvent{Create: true, Delete: true},
-			},
-		},
+		{name: "defaults", option: "{}", want: defaults},
 		{
 			name: "every group",
 			option: `
       watch: {subDir: false, exclude: ['dist/**'], fileEvent: CU, dirEvent: D}
       dirBatch: {waitMillisecond: 300, maxWaitMillisecond: 5000}
-      hookBatch: {waitMillisecond: 700}
-      noWait: true
+      hookBatch: {waitMillisecond: 700, maxWaitMillisecond: 3000, deliver: lastPerPath}
       interruptible: true`,
 			want: domain.WatchTargetsOption{
-				Exclude:         domain.ExcludePatterns{"dist/**"},
-				WaitMillisecond: 700,
-				WatchSubDir:     false,
-				WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
-				WatchDirEvent:   domain.WatchEvent{Delete: true},
-				DirEventWait:    300,
-				DirEventMaxWait: 5000,
-				NoWait:          true,
-				Interruptible:   true,
+				Exclude:            domain.ExcludePatterns{"dist/**"},
+				WaitMillisecond:    700,
+				MaxWaitMillisecond: 3000,
+				Deliver:            domain.DeliverLastPerPath,
+				WatchSubDir:        false,
+				WatchFileEvent:     domain.WatchEvent{Create: true, Update: true},
+				WatchDirEvent:      domain.WatchEvent{Delete: true},
+				DirEventWait:       300,
+				DirEventMaxWait:    5000,
+				Interruptible:      true,
 			},
+		},
+		{
+			name:   "zero waits are kept",
+			option: "{dirBatch: {waitMillisecond: 0, maxWaitMillisecond: 0}, hookBatch: {waitMillisecond: 0, deliver: each}}",
+			want: with(func(o *domain.WatchTargetsOption) {
+				o.WaitMillisecond, o.Deliver, o.DirEventWait, o.DirEventMaxWait = 0, domain.DeliverEach, 0, 0
+			}),
+		},
+		{
+			name:   "max wait equal to wait",
+			option: "{hookBatch: {waitMillisecond: 1000}}",
+			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond = 1000 }),
+		},
+		{
+			name:   "deliver last",
+			option: "{hookBatch: {deliver: last}}",
+			want:   defaults,
 		},
 		{
 			name:   "files only",
 			option: "{watch: {fileEvent: CD, dirEvent: none}}",
-			want: domain.WatchTargetsOption{
-				WaitMillisecond: 100,
-				WatchSubDir:     true,
-				WatchFileEvent:  domain.WatchEvent{Create: true, Delete: true},
-			},
+			want: with(func(o *domain.WatchTargetsOption) {
+				o.WatchFileEvent, o.WatchDirEvent = domain.WatchEvent{Create: true, Delete: true}, domain.WatchEvent{}
+			}),
 		},
 		{
 			name:   "folders only",
 			option: "{watch: {fileEvent: none, dirEvent: D}}",
-			want: domain.WatchTargetsOption{
-				WaitMillisecond: 100,
-				WatchSubDir:     true,
-				WatchDirEvent:   domain.WatchEvent{Delete: true},
-			},
+			want: with(func(o *domain.WatchTargetsOption) {
+				o.WatchFileEvent, o.WatchDirEvent = domain.WatchEvent{}, domain.WatchEvent{Delete: true}
+			}),
 		},
 	}
 	for _, tt := range tests {
@@ -236,6 +256,28 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 			got := buildCommandSet(t, "watchTargets:\n  - path: site\n    option: "+tt.option+"\n").WatchTargets[0].Option
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("Option = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInvalidHookBatchOptionStopsBuild(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{name: "unknown deliver", option: "deliver: latest", want: `option.hookBatch.deliver: unknown value "latest"; use last, lastPerPath, or each`},
+		{name: "empty deliver", option: "deliver: ''", want: `option.hookBatch.deliver: unknown value ""; use last, lastPerPath, or each`},
+		{name: "max wait below wait", option: "{waitMillisecond: 500, maxWaitMillisecond: 200}", want: "option.hookBatch: maxWaitMillisecond 200 is less than waitMillisecond 500"},
+		{name: "default max wait below wait", option: "waitMillisecond: 2000", want: "option.hookBatch: maxWaitMillisecond 1000 is less than waitMillisecond 2000"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      hookBatch:\n        " + tt.option + "\n"
+			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+			if want := "watchTargets[1]." + tt.want; err == nil || err.Error() != want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
 			}
 		})
 	}
@@ -262,6 +304,8 @@ func TestRemovedOptionKeysStopBuild(t *testing.T) {
 		{name: "watchEvent with watch group", option: "{watch: {fileEvent: CUD}, watchEvent: ''}", want: "option.watchEvent is no longer supported; " + toEvents},
 		{name: "watchSubDir", option: "watchSubDir: false", want: "option.watchSubDir is no longer supported; use option.watch.subDir " + fromOptions},
 		{name: "waitMillisecond", option: "waitMillisecond: 500", want: "option.waitMillisecond is no longer supported; use option.hookBatch.waitMillisecond " + fromOptions},
+		{name: "noWait true", option: "noWait: true", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait " + fromOptions},
+		{name: "noWait false", option: "noWait: false", want: "option.noWait is no longer supported; use option.hookBatch.waitMillisecond: 0 and option.hookBatch.deliver: each in place of noWait: true, or remove noWait " + fromOptions},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

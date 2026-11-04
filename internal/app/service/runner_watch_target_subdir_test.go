@@ -83,10 +83,12 @@ func TestSubDirWatchRuleIsSameAtStartAndWhileWatching(t *testing.T) {
 				r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 					Path: domain.Path(target),
 					Option: domain.WatchTargetsOption{
-						NoWait:         true,
-						WatchSubDir:    true,
-						Exclude:        tc.exclude,
-						WatchFileEvent: domain.WatchEvent{Create: true, Update: true},
+						Deliver:         domain.DeliverEach,
+						DirEventWait:    100,
+						DirEventMaxWait: 1000,
+						WatchSubDir:     true,
+						Exclude:         tc.exclude,
+						WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
 					},
 				}, newMockLogger())
 				t.Cleanup(func() {
@@ -224,10 +226,12 @@ func TestLinkedTargetPathWatchesLinkedFolder(t *testing.T) {
 			r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{
 				Path: domain.Path(link),
 				Option: domain.WatchTargetsOption{
-					NoWait:         true,
-					WatchSubDir:    tc.watchSubDir,
-					Exclude:        tc.exclude,
-					WatchFileEvent: domain.WatchEvent{Create: true, Update: true},
+					Deliver:         domain.DeliverEach,
+					DirEventWait:    100,
+					DirEventMaxWait: 1000,
+					WatchSubDir:     tc.watchSubDir,
+					Exclude:         tc.exclude,
+					WatchFileEvent:  domain.WatchEvent{Create: true, Update: true},
 				},
 			}, newMockLogger())
 			t.Cleanup(func() {

@@ -17,8 +17,8 @@
 
 ### Handle bursts of changes
 
-- By default, a burst of events runs the hook once, `hookBatch.waitMillisecond` (100 ms by default) after the last event.
-- With `noWait: true`, every event runs the hook, in the order the events were received.
+- By default, a burst of events runs the hook once, for the final change of the path that changed last, `hookBatch.waitMillisecond` (100 ms by default) after the last event and at most `hookBatch.maxWaitMillisecond` (1000 ms by default) after the first.
+- With `hookBatch.deliver: lastPerPath`, the hook runs once for each changed path. With `hookBatch.deliver: each`, it runs for every event, in the order the events were received. `hookBatch.waitMillisecond: 0` runs the hook without waiting. See [Waiting and merging with hookBatch](USAGE.md#waiting-and-merging-with-hookbatch).
 - Each target holds at most 256 pending events. Instead of growing without bound, the watcher stops when a target's queue is full.
 
 ### Restart long-running processes
@@ -157,11 +157,10 @@ flowchart TD
         excludeCheck{"Excluded path?"}
         collectChoice{"Folder created or deleted,<br>or file deleted in a subfolder?"}
         collectFolder["Collect the target's events<br>and absorb those inside the folder"]
-        kindFilter{"Event type chosen in<br>watch.fileEvent or watch.dirEvent?"}
+        waitChoice{"hookBatch.waitMillisecond<br>is 0?"}
+        collectHook["Collect events until hookBatch.waitMillisecond<br>passes with no event or hookBatch.maxWaitMillisecond ends"]
+        mergeRuns["Merge them into runs by hookBatch.deliver,<br>keeping types chosen in watch.fileEvent or watch.dirEvent"]
         queueEvent{"Room in the target's<br>256-event queue?"}
-        modeChoice{"noWait?"}
-        debounceWait["Wait hookBatch.waitMillisecond after the last event<br>and keep only that event"]
-        orderedRun["Take events in received order"]
         interruptChoice{"interruptible?"}
         cancelPrevious["Cancel the running commands<br>and wait for them to exit"]
         runChange["global onBeforeChange → onChange<br>→ global onAfterChange"]
@@ -175,23 +174,23 @@ flowchart TD
     excludeCheck -->|"yes: ignore"| receiveEvent
     excludeCheck -->|"no"| collectChoice
     collectChoice -->|"yes, or already collecting"| collectFolder
-    collectChoice -->|"no"| kindFilter
-    collectFolder -->|"dirBatch.waitMillisecond with no event,<br>or dirBatch.maxWaitMillisecond"| kindFilter
-    kindFilter -->|"no: ignore"| receiveEvent
-    kindFilter -->|"yes"| queueEvent
+    collectChoice -->|"no"| waitChoice
+    collectFolder -->|"dirBatch.waitMillisecond with no event,<br>or dirBatch.maxWaitMillisecond"| waitChoice
+    waitChoice -->|"no"| collectHook
+    waitChoice -->|"yes: each event on its own"| mergeRuns
+    collectHook --> mergeRuns
+    mergeRuns -->|"no run: ignore"| receiveEvent
+    mergeRuns -->|"each run"| queueEvent
     queueEvent -->|"no"| fatalStop
-    queueEvent -->|"yes"| modeChoice
-    modeChoice -->|"false"| debounceWait
-    modeChoice -->|"true"| orderedRun
-    debounceWait --> interruptChoice
-    orderedRun --> interruptChoice
+    queueEvent -->|"yes"| interruptChoice
     interruptChoice -->|"true"| cancelPrevious
     interruptChoice -->|"false: wait until the running commands finish"| runChange
     cancelPrevious --> runChange
     runChange -->|"next event"| receiveEvent
 ```
 
-- Collected events wait for room in the queue instead of stopping the watcher. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
+- Events keep being received and collected while commands run, so each `hookBatch` wait that ends adds its runs to the queue.
+- With `hookBatch.waitMillisecond: 0`, events collected for folder events wait for room in the queue instead of stopping the watcher. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
 - With `interruptible: false`, events that arrive while target `onStartWatch` or a change is running wait in the queue until it finishes. With `interruptible: true`, the next change cancels a running target `onStartWatch` too.
 - The commands of one run execute one after another, and the run stops at the first command that fails. The failure is logged as an `[ERROR]` line; see [`config.yml`](USAGE.md#configyml) in the usage guide.
 

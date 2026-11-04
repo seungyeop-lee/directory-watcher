@@ -39,8 +39,9 @@ watchTargets:
         fileEvent: CDU # default CUD
         dirEvent: CD # default CD; none turns folder events off
       hookBatch:
-        waitMillisecond: 1000 # default 100
-      noWait: true # default false
+        waitMillisecond: 1000 # default 100; 0 does not wait
+        maxWaitMillisecond: 3000 # default 1000; not less than waitMillisecond
+        deliver: lastPerPath # default last; last, lastPerPath, or each
       interruptible: true
   - path: 'test/dir3'
     lifeCycle:

@@ -80,9 +80,14 @@ watchTargets:
 }
 
 func TestStartHookShutdownModes(t *testing.T) {
-	for _, noWait := range []bool{false, true} {
+	for _, deliver := range []string{"last", "each"} {
 		for _, interruptible := range []bool{false, true} {
-			t.Run(fmt.Sprintf("noWait=%t/interruptible=%t", noWait, interruptible), func(t *testing.T) {
+			t.Run(fmt.Sprintf("deliver=%s/interruptible=%t", deliver, interruptible), func(t *testing.T) {
+				// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
+				wait := 10
+				if deliver == "each" {
+					wait = 0
+				}
 				s := harness.NewScenario(t)
 				s.Start(fmt.Sprintf(`watchTargets:
   - path: '%s'
@@ -96,10 +101,10 @@ func TestStartHookShutdownModes(t *testing.T) {
         exclude: ['*.probe']
         fileEvent: C
       hookBatch:
-        waitMillisecond: 10
-      noWait: %t
+        waitMillisecond: %d
+        deliver: %s
       interruptible: %t
-`, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), noWait, interruptible))
+`, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), wait, deliver, interruptible))
 				s.AssertRunning("startup process", s.AwaitReadyGenerations("startup process tree ready", 1))
 				s.Write(filepath.Join(s.Watch, "during-start.txt"), nil)
 				if interruptible {

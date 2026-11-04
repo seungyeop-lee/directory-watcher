@@ -82,11 +82,12 @@ watchTargets:
         fileEvent: [ hook을 실행할 파일 이벤트 (C: 생성 또는 옮겨 옴, U: 수정, D: 삭제 또는 옮겨 나감) 또는 none, default는 "CUD" ]
         dirEvent: [ hook을 실행할 폴더 이벤트 (C: 생성 또는 옮겨 옴, D: 삭제 또는 옮겨 나감) 또는 none, default는 "CD" ]
       dirBatch: # 폴더 이벤트를 만들려고 이벤트를 모으는 방식
-        waitMillisecond: [ 모은 폴더 이벤트를 보내기 전에 마지막 이벤트 뒤로 기다리는 시간, default는 100 ]
+        waitMillisecond: [ 모은 폴더 이벤트를 보내기 전에 마지막 이벤트 뒤로 기다리는 시간, 0이면 모으지 않음, default는 100 ]
         maxWaitMillisecond: [ 폴더 이벤트를 모으는 가장 긴 시간, default는 1000 ]
-      hookBatch: # hook을 실행하기 전에 기다리는 방식
-        waitMillisecond: [ 이벤트 발생 후, hook을 실행하는 사이 대기시간, default는 100 ]
-      noWait: [ 이벤트 발생 후 대기시간 없이 바로 hook을 실행할지 여부, default는 false ]
+      hookBatch: # 이벤트를 기다려 모은 뒤 hook 실행으로 합치는 방식
+        waitMillisecond: [ 모은 이벤트로 실행을 만들기 전에 마지막 이벤트 뒤로 기다리는 시간, 0이면 기다리지 않음, default는 100 ]
+        maxWaitMillisecond: [ 이벤트를 모으는 가장 긴 시간, waitMillisecond보다 작을 수 없음, default는 1000 ]
+        deliver: [ 모은 이벤트로 만드는 실행 (last, lastPerPath, each), default는 last ]
       interruptible: [ 실행 중인 커맨드 중지 후 새 커맨드 실행 여부, default는 false ]
 ```
 
@@ -242,9 +243,9 @@ Error: watchTargets[0].lifeCycle.onChange[1]: unknown template variable "FilePat
 ### 버전 2의 옵션에서 옮기기
 
 - 버전 3에서는 감시 대상 옵션을 `option` 아래의 `watch`, `dirBatch`, `hookBatch` 그룹으로 나눴습니다.
-- `noWait`와 `interruptible`은 그대로 `option` 바로 아래에 둡니다.
+- `interruptible`은 그대로 `option` 바로 아래에 둡니다.
 
-감시 대상의 `option` 바로 아래에 `watchSubDir`나 `waitMillisecond`가 남아 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+감시 대상의 `option` 바로 아래에 `watchSubDir`, `waitMillisecond`, `noWait`가 남아 있으면 watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
 ```text
 Error: watchTargets[0].option.watchSubDir is no longer supported; use option.watch.subDir (see USAGE "Moving from version 2 options")
@@ -258,9 +259,18 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 |---|---|
 | `watchSubDir: false` | `watch: {subDir: false}` |
 | `waitMillisecond: 500` | `hookBatch: {waitMillisecond: 500}` |
+| `waitMillisecond: 0` | `waitMillisecond`를 적지 않습니다. 버전 3에서 `0`은 기본값 100이 아니라 기다리지 않음을 뜻합니다 |
+| `waitMillisecond: 3000`처럼 1000보다 큰 `waitMillisecond` | `hookBatch: {waitMillisecond: 3000, maxWaitMillisecond: 3000}`. `maxWaitMillisecond`는 기본값이 1000이고 `waitMillisecond`보다 작을 수 없습니다 |
+| `noWait: true` | `hookBatch: {waitMillisecond: 0, deliver: each}` |
+| `noWait: false` | `noWait`를 적지 않습니다 |
 | `excludeDir`, `excludeSuffix` | `watch.exclude`, [excludeDir와 excludeSuffix에서 옮기기](#excludedir와-excludesuffix에서-옮기기)를 따릅니다 |
 | `watchEvent` | `watch.fileEvent`와 `watch.dirEvent`, [watchEvent에서 옮기기](#watchevent에서-옮기기)를 따릅니다 |
-| `noWait`, `interruptible` | 바뀌지 않습니다 |
+| `interruptible` | 바뀌지 않습니다 |
+
+- 버전 2의 `noWait: false`는 기다리는 동안 받은 마지막 이벤트 하나로 hook을 실행했습니다. 버전 3의 기본값 `deliver: last`는 가장 나중에 바뀐 경로의 최종 변화로 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](#hookbatch로-기다리고-합치기)에 있습니다.
+  - 한 번 기다리는 동안 만들었다가 지운 파일은 버전 2에서 `D`로 hook을 실행했고, 버전 3에서는 hook을 실행하지 않습니다.
+  - watcher가 생성 이벤트를 놓친 파일은 `U`가 아니라 `C`로 hook에 갑니다.
+- 버전 2는 이벤트가 계속 오는 동안 계속 기다렸습니다. 버전 3은 첫 이벤트부터 늦어도 `hookBatch.maxWaitMillisecond`(기본 1000)가 지나면 hook을 실행합니다.
 
 ## 이름 바꾸기와 옮기기
 
@@ -275,7 +285,7 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 | 감시 대상 밖으로 옮기기 | 옛 경로의 `D` |
 | 감시 대상 안으로 옮겨 오기 | 새 경로의 `C` |
 
-- `noWait: false`이면 `hookBatch.waitMillisecond` 안의 마지막 이벤트만 hook을 실행하므로, 이름 바꾸기와 감시 대상 안의 옮기기는 새 경로의 `C`로 hook을 한 번 실행합니다.
+- 기본값 `hookBatch.deliver: last`에서는 한 번 기다리는 동안 가장 나중에 바뀐 경로만 hook을 실행하므로, 이름 바꾸기와 감시 대상 안의 옮기기는 새 경로의 `C`로 hook을 한 번 실행합니다.
 - 옛 경로가 `exclude`나 [기본 제외 규칙](#기본-제외-규칙)에 맞으면 hook은 그 `D`를 받지 않습니다.
 - macOS는 새 경로를 옛 경로보다 먼저 알리기도 합니다. 그러면 watcher는 옛 경로의 `D`가 올 때까지 `C`와 그 뒤의 이벤트를 최대 1초 동안 미뤄 둡니다.
 - 폴더의 이름 바꾸기와 옮기기는 [폴더 이벤트](#폴더-이벤트)에 있습니다.
@@ -286,18 +296,52 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
   - Windows에서는 다른 폴더나 감시 대상 밖으로 옮기면 이미 옛 경로의 `D`가 왔지만, 같은 폴더 안에서 이름을 바꾸면 오지 않았습니다.
 - `D`로 실행되는 hook은 이제 파일의 이름을 바꾸거나 파일을 옮겨 나갈 때도 실행되며, 그 경우와 삭제를 구별하지 못합니다.
 
-## hookBatch.waitMillisecond와 noWait
+## hookBatch로 기다리고 합치기
 
-- `watchTargets.path` 내부에서 이벤트가 발생하게 되면 `hookBatch.waitMillisecond` 만큼 대기 후 hook을 실행합니다.
-- 대기 중 `watchTargets.path` 내부에서 다른 이벤트가 발생하게 되면 그 전 이벤트는 무시됩니다. 즉, 새로 생긴 이벤트 기준으로 `hookBatch.waitMillisecond` 만큼 다시 대기 후 hook을 실행합니다.
-- `watchTargets.path` 내부의 이벤트가 무시되지 않고, 모든 이벤트로 인해 hook이 즉시 실행되길 원한다면 noWait를 true로 설정합니다. (이벤트에 대한 hook은 순차적으로 실행됩니다.)
+- watcher는 감시 대상의 이벤트를 모으다가, `hookBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000)가 지나면 모은 이벤트로 hook 실행을 만듭니다.
+- hook이 도는 동안에도 이벤트를 계속 모읍니다. 기다리는 시간이 끝날 때마다 그때 만든 실행을 감시 대상의 대기열에 넣고, 다른 때 만든 실행끼리는 합치지 않습니다.
+- `hookBatch.waitMillisecond: 0`이면 기다리지 않고 이벤트 하나마다 따로 실행을 만들며, `maxWaitMillisecond`는 쓰이지 않습니다.
+
+`maxWaitMillisecond`가 `waitMillisecond`보다 작거나 `deliver`가 아래 값이 아니면, watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+
+```text
+Error: watchTargets[0].option.hookBatch: maxWaitMillisecond 1000 is less than waitMillisecond 3000
+```
+
+`hookBatch.deliver`는 한 번 기다리는 동안 모은 이벤트로 어떤 실행을 만들지 정합니다.
+
+| `deliver` | 만드는 실행 |
+|---|---|
+| `last` (기본값) | 최종 변화가 있는 경로 가운데 가장 나중에 바뀐 경로 하나로 실행 하나를 만듭니다. 그런 경로가 없으면 실행을 만들지 않습니다. |
+| `lastPerPath` | 최종 변화가 있는 경로마다 실행 하나를 만들고, 경로가 마지막으로 바뀐 순서대로 둡니다. |
+| `each` | 이벤트마다 실행 하나를 만들고, 이벤트가 생긴 순서대로 둡니다. 최종 변화는 계산하지 않습니다. |
+
+예를 들어 한 번 기다리는 동안 `a.txt` 생성, `a.txt` 수정, `b.txt` 수정, `x.swp` 생성, `x.swp` 삭제가 모이면 다음과 같이 실행합니다.
+
+- `last`는 `b.txt`의 `U`로 hook을 한 번 실행합니다.
+- `lastPerPath`는 `a.txt`의 `C`로, 그다음 `b.txt`의 `U`로 hook을 실행합니다.
+- `each`는 hook을 다섯 번 실행합니다.
+
+`last`와 `lastPerPath`는 기다리기 전에 watcher가 기록해 둔 감시 대상의 파일 목록과 실행을 만들기 직전의 디스크를 비교해 경로마다 최종 변화를 정합니다.
+
+| 기다리기 전 | 지금 | 최종 변화 |
+|---|---|---|
+| 없었음 | 있음 | `C` |
+| 있었음 | 있음 | `U`, 폴더면 실행하지 않음 |
+| 있었음 | 없음 | `D` |
+| 없었음 | 없음 | 실행하지 않음 |
+
+- watcher가 생성 이벤트를 놓친 파일은 기록에 없으므로, 그 파일의 첫 변경은 `C`로 hook에 갑니다.
+- `watch.fileEvent`와 `watch.dirEvent`는 최종 변화 가운데서 고르고, `each`에서는 이벤트 가운데서 고릅니다.
+- watcher가 디스크를 확인한 뒤 hook이 돌기 전에 경로가 또 바뀔 수 있습니다. 그 변화는 새 이벤트로 따라오므로, hook은 실행될 때 실제 파일을 읽어야 합니다.
+- `lastPerPath`는 경로가 마지막으로 바뀐 순서대로 실행합니다. 파일 사이의 앞뒤 관계가 중요하면 `each`를 씁니다.
 
 ## 이벤트 유실 알림
 
 - `global.lifeCycle.onError`는 선택 항목이며 다른 hook과 같은 명령 목록 및 구조화된 `dir`/`cmd` 형식을 사용합니다.
 - watcher를 한 번 실행하는 동안 최대 한 번, 최초 치명적 오류가 이벤트 유실일 때만 실행합니다.
   - 대상의 전달 대기열이 가득 찬 경우(`dispatch queue full`)와 OS가 이벤트 overflow를 보고한 경우가 여기에 해당합니다.
-- 다른 치명적 오류, 정상 종료, debounce에 의한 대체는 알림을 실행하지 않습니다.
+- 다른 치명적 오류, 정상 종료, `hookBatch`가 합쳐서 넘기지 않은 이벤트는 알림을 실행하지 않습니다.
 
 오류 정보는 명령 템플릿에 삽입하지 않고 환경 변수로 전달합니다.
 
@@ -327,8 +371,8 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 
 ## 과부하와 종료
 
-- 대상마다 대기 이벤트는 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `noWait: true`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. debounce는 마지막으로 수신한 유효 이벤트를 보존하고, 제외된 경로는 실행하거나 타이머를 다시 설정하지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로 마지막 생성 파일이 debounce 결과라고 가정하면 안 됩니다.
-- [폴더 이벤트](#폴더-이벤트)를 위해 모은 이벤트는 보낼 때 대기열에 자리가 날 때까지 기다리므로, 모은 이벤트를 보내다가 `dispatch queue full`로 처리를 중단하지는 않습니다.
+- 대상마다 대기 실행은 최대 256개까지 두고, hook 실행은 한 번에 하나만 진행합니다. `hookBatch.deliver: each`는 수신 순서를 유지하며 과부하에서 최신 이벤트만 남기는 방식으로 바뀌지 않습니다. 제외된 경로는 실행을 만들지 않고 기다리는 시간도 늘리지 않습니다. 여러 파일의 생성 호출 순서가 OS 이벤트 수신 순서를 보장하지 않으므로, 마지막으로 만든 파일이 `deliver: last`가 실행하는 경로라고 가정하면 안 됩니다.
+- `hookBatch.waitMillisecond: 0`이면 [폴더 이벤트](#폴더-이벤트)를 위해 모은 이벤트는 보낼 때 대기열에 자리가 날 때까지 기다리므로, 모은 이벤트를 보내다가 `dispatch queue full`로 처리를 중단하지는 않습니다. 그 밖의 이벤트와 `hookBatch`가 기다리는 시간이 끝나 만든 실행은 대기열이 가득 찼으면 처리를 중단합니다.
 - 전달 대기열 포화 또는 watcher 오류가 발생하면 처리를 중단합니다. 기본 로그에 감시 대상과 원인을 남기고 모든 대상을 정리한 뒤 CLI가 비정상 종료합니다. 애플리케이션 포화는 `dispatch queue full`로 표시하여 OS overflow와 구분합니다. 자동 재시작·영속 큐는 제공하지 않습니다.
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
 - `interruptible: true`에서는 취소한 이전 실행이 끝난 뒤에 새 실행을 시작합니다. 종료 신호는 실행 중인 시작·변경 명령을 취소하고, 대기 변경을 버리고, 이벤트 처리가 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
@@ -475,15 +519,15 @@ hook은 다음 약속에 기댈 수 있습니다.
 - 폴더 `C`는 그 폴더가 안에 든 것과 함께 생겼다는 뜻입니다. 폴더 안의 내용은 hook이 직접 읽습니다. 폴더를 옮겨 와도 watcher는 그 폴더와 함께 들어온 파일의 이벤트를 만들지 않습니다.
 - 폴더 `D`는 그 폴더와 그 안의 모든 것이 사라졌다는 뜻입니다.
 - 폴더 이벤트를 모으는 동안 온, 그 폴더 안의 파일과 하위 폴더의 이벤트는 폴더 이벤트에 흡수합니다. `watch.dirEvent: none`이어도 똑같이 흡수하므로, 이때 폴더 단위의 변경은 hook을 실행하지 않습니다.
-- `noWait: true`에서는 한 감시 대상의 이벤트를 생긴 순서대로 hook에 넘깁니다. 폴더 이벤트를 모으는 동안에는 그 대상의 파일 이벤트도 함께 기다립니다.
+- `hookBatch.deliver: each`에서는 한 감시 대상의 이벤트를 생긴 순서대로 hook에 넘깁니다. 폴더 이벤트를 모으는 동안에는 그 대상의 파일 이벤트도 함께 기다립니다.
 - hook은 같은 변경을 두 번 받을 수 있습니다. 예를 들어 폴더 `C`를 받고 안을 읽은 뒤, 그 폴더 안 파일의 `C`를 또 받을 수 있습니다.
 
 ### 폴더 이벤트를 모으는 시간
 
 - 폴더가 생기거나 사라지면 watcher는 그 감시 대상의 이벤트를 모으고, `dirBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없으면 모은 이벤트를 보냅니다.
 - 이벤트가 계속 오면 첫 이벤트부터 `dirBatch.maxWaitMillisecond`(기본 1000)가 지났을 때 그때까지 모은 이벤트를 보냅니다. 그 뒤에 그 폴더 안에서 생긴 이벤트는 흡수하지 않고 따로 hook에 갑니다.
-- 감시 대상의 하위 폴더 안에서 파일을 지워도 이벤트를 모으기 시작합니다. 폴더를 통째로 지우면 폴더 안의 파일을 지운 이벤트가 폴더의 이벤트보다 먼저 오기 때문입니다. 그래서 `noWait: true`에서도 이런 삭제와 그 뒤의 이벤트는 최대 `dirBatch.waitMillisecond`만큼 늦게 hook에 갑니다.
-- `0`을 적으면 기본값을 씁니다.
+- 감시 대상의 하위 폴더 안에서 파일을 지워도 이벤트를 모으기 시작합니다. 폴더를 통째로 지우면 폴더 안의 파일을 지운 이벤트가 폴더의 이벤트보다 먼저 오기 때문입니다. 그래서 `hookBatch.waitMillisecond: 0`에서도 이런 삭제와 그 뒤의 이벤트는 최대 `dirBatch.waitMillisecond`만큼 늦게 hook에 갑니다.
+- `dirBatch.waitMillisecond: 0`이면 이벤트를 모으지 않으므로, hook은 생기거나 사라진 폴더 안의 파일과 하위 폴더의 이벤트도 받습니다.
 
 `watch.fileEvent`나 `watch.dirEvent`가 빈 값이거나 받지 않는 글자를 담았거나 둘 다 `none`이면, watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
@@ -493,7 +537,7 @@ Error: watchTargets[0].option.watch.dirEvent: U is not a folder event; use C, D,
 
 ### 폴더 이벤트 감지에 대한 제약사항
 
-- 느린 디스크처럼 트리를 지우는 도중에 `dirBatch.waitMillisecond`보다 오래 이벤트가 끊기면, 하위 폴더가 위 폴더의 `D`보다 먼저 따로 `D`로 hook에 갈 수 있습니다. 그런 디스크에서는 `dirBatch.waitMillisecond`를 늘립니다.
+- 느린 디스크에서나 `dirBatch.waitMillisecond`가 작을 때처럼 트리를 지우는 도중에 `dirBatch.waitMillisecond`보다 오래 이벤트가 끊기면, 하위 폴더가 위 폴더의 `D`보다 먼저 따로 `D`로 hook에 갈 수 있습니다. 그런 디스크에서는 `dirBatch.waitMillisecond`를 늘립니다.
 - 폴더 링크는 따라가지 않으므로, 링크를 만들거나 지우면 `IsDir`가 `false`인 파일 이벤트로 갑니다.
 - watcher가 폴더의 생성을 처리하기 전에 그 폴더가 지워지면, watcher는 그것이 폴더였는지 알 수 없어 파일의 `C`와 `D`로 hook에 넘깁니다.
 - 감시 대상 밖으로 옮긴 폴더 안의 변경은 더 이상 hook을 실행하지 않습니다.

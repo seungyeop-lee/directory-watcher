@@ -64,8 +64,8 @@
 | 위치 | hook과 옵션 |
 |---|---|
 | 전역 | `onError`(모드별), `onBeforeChange`: `BEFORE`, `onFinishWatch`: `GLOBAL:FINISH` |
-| 대상 1: 감시 폴더 | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `noWait: true`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
-| 대상 2: 실행 폴더의 `other` | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `noWait: true`, `watch.fileEvent: C` |
+| 대상 1: 감시 폴더 | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']` |
+| 대상 2: 실행 폴더의 `other` | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.fileEvent: C` |
 
 - watcher는 `Launch`로 기본 ERROR 로그 수준에서 실행합니다.
 - DEBUG 로그가 없으므로 probe 이벤트 대신 `START`의 `BEGIN` 기록과 `OTHER:READY` 기록으로 감시 준비를 판정합니다.

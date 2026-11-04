@@ -82,11 +82,12 @@ watchTargets:
         fileEvent: [ file events that run the hook (C: create or move in, U: update, D: delete or move away), or none, default is "CUD" ]
         dirEvent: [ folder events that run the hook (C: create or move in, D: delete or move away), or none, default is "CD" ]
       dirBatch: # collecting events into folder events
-        waitMillisecond: [ quiet time after the last event before collected folder events are sent, default is 100 ]
+        waitMillisecond: [ quiet time after the last event before collected folder events are sent, 0 turns collecting off, default is 100 ]
         maxWaitMillisecond: [ longest time folder events are collected, default is 1000 ]
-      hookBatch: # waiting before the hook runs
-        waitMillisecond: [ wait time after an event occurs before executing the hook, default is 100 ]
-      noWait: [ whether to execute the hook immediately without waiting after an event occurs, default is false ]
+      hookBatch: # waiting for events and merging them into runs of the hook
+        waitMillisecond: [ quiet time after the last event before the collected events become runs, 0 does not wait, default is 100 ]
+        maxWaitMillisecond: [ longest time events are collected, not less than waitMillisecond, default is 1000 ]
+        deliver: [ runs made from the collected events (last, lastPerPath, each), default is last ]
       interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
 
@@ -241,9 +242,9 @@ Rename each variable as follows:
 ### Moving from version 2 options
 
 - Version 3 groups the target options under `watch`, `dirBatch`, and `hookBatch` in `option`.
-- `noWait` and `interruptible` stay directly under `option`.
+- `interruptible` stays directly under `option`.
 
-If a target's `option` still has `watchSubDir` or `waitMillisecond` directly under it, the watcher runs no hook, prints an error like the one below, and exits with code 1:
+If a target's `option` still has `watchSubDir`, `waitMillisecond`, or `noWait` directly under it, the watcher runs no hook, prints an error like the one below, and exits with code 1:
 
 ```text
 Error: watchTargets[0].option.watchSubDir is no longer supported; use option.watch.subDir (see USAGE "Moving from version 2 options")
@@ -255,9 +256,18 @@ Move each version 2 option as follows:
 |---|---|
 | `watchSubDir: false` | `watch: {subDir: false}` |
 | `waitMillisecond: 500` | `hookBatch: {waitMillisecond: 500}` |
+| `waitMillisecond: 0` | No `waitMillisecond`: in version 3, `0` means no waiting instead of the default 100 |
+| `waitMillisecond` above 1000, such as `waitMillisecond: 3000` | `hookBatch: {waitMillisecond: 3000, maxWaitMillisecond: 3000}`, because `maxWaitMillisecond` defaults to 1000 and cannot be less than `waitMillisecond` |
+| `noWait: true` | `hookBatch: {waitMillisecond: 0, deliver: each}` |
+| `noWait: false` | No `noWait` |
 | `excludeDir`, `excludeSuffix` | `watch.exclude`, as described in [Moving from excludeDir and excludeSuffix](#moving-from-excludedir-and-excludesuffix) |
 | `watchEvent` | `watch.fileEvent` and `watch.dirEvent`, as described in [Moving from watchEvent](#moving-from-watchevent) |
-| `noWait`, `interruptible` | No change |
+| `interruptible` | No change |
+
+- With `noWait: false`, version 2 ran the hook once with the last event received in the wait. Version 3 defaults to `deliver: last`, which runs the hook with the final change of the path that changed last, as described in [Waiting and merging with hookBatch](#waiting-and-merging-with-hookbatch).
+  - A file created and deleted within one wait ran the hook with `D` in version 2 and runs no hook in version 3.
+  - A file whose create event the watcher missed reaches the hook as `C` instead of `U`.
+- Version 2 kept waiting while events kept arriving. Version 3 runs the hook at most `hookBatch.maxWaitMillisecond` (default 1000) after the first event.
 
 ## Renamed and moved files
 
@@ -272,7 +282,7 @@ The hook receives these events for each action:
 | Move out of the target | `D` for the old path |
 | Move into the target | `C` for the new path |
 
-- With `noWait: false`, only the last event within `hookBatch.waitMillisecond` runs the hook, so a rename or a move inside the target runs the hook once with `C` for the new path.
+- With `hookBatch.deliver: last`, the default, only the path that changed last within one wait runs the hook, so a rename or a move inside the target runs the hook once with `C` for the new path.
 - If the old path matches `exclude` or the [default exclusion](#default-exclusion), the hook does not receive the `D`.
 - macOS can report the new path before the old one. The watcher then holds the `C` and the events after it until the `D` for the old path arrives, for at most 1 second.
 - Renamed and moved folders are covered in [Folder events](#folder-events).
@@ -283,17 +293,51 @@ The hook receives these events for each action:
   - On Windows, a move to another folder or out of the target already arrived as `D` for the old path, but a rename in the same folder did not.
 - A hook that runs on `D` now also runs when a file is renamed or moved away, and it cannot tell that case from a deletion.
 
-## hookBatch.waitMillisecond and noWait
+## Waiting and merging with hookBatch
 
-- When an event occurs within `watchTargets.path`, the hook is executed after waiting for `hookBatch.waitMillisecond`.
-- If another event occurs within `watchTargets.path` during the waiting period, the previous event is ignored. That is, the `hookBatch.waitMillisecond` wait is reset based on the new event, and the hook is executed after the new waiting period.
-- If you want the hook to be executed immediately for every event within `watchTargets.path` without ignoring any events, set noWait to true. (Hooks for events are executed sequentially.)
+- The watcher collects the events of a target and turns them into runs of the hook once no event has arrived for `hookBatch.waitMillisecond` (default 100), or `hookBatch.maxWaitMillisecond` (default 1000) after the first event.
+- Collecting goes on while a hook runs. Each wait that ends puts its runs in the target's queue, and runs from different waits are never merged.
+- With `hookBatch.waitMillisecond: 0`, the watcher does not wait: each event becomes runs on its own, and `maxWaitMillisecond` is not used.
+
+If `maxWaitMillisecond` is less than `waitMillisecond`, or `deliver` is not one of the values below, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
+
+```text
+Error: watchTargets[0].option.hookBatch: maxWaitMillisecond 1000 is less than waitMillisecond 3000
+```
+
+`hookBatch.deliver` chooses the runs made from the events collected in one wait:
+
+| `deliver` | Runs |
+|---|---|
+| `last` (default) | One run for the path that changed last, among the paths with a final change. No run if no path has one. |
+| `lastPerPath` | One run for each path with a final change, in the order the paths last changed. |
+| `each` | One run for each event, in the order the events happened. Final changes are not computed. |
+
+For example, if one wait collects the creation of `a.txt`, an update of `a.txt`, an update of `b.txt`, the creation of `x.swp`, and the deletion of `x.swp`:
+
+- `last` runs the hook once, with `U` for `b.txt`.
+- `lastPerPath` runs the hook with `C` for `a.txt`, then with `U` for `b.txt`.
+- `each` runs the hook five times.
+
+`last` and `lastPerPath` find the final change of each path by comparing the watcher's record of the target's files before the wait with the disk right before the runs are made:
+
+| Before the wait | Now | Final change |
+|---|---|---|
+| Absent | Present | `C` |
+| Present | Present | `U`, or no run for a folder |
+| Present | Absent | `D` |
+| Absent | Absent | No run |
+
+- A file whose create event the watcher missed is absent from the record, so its first change reaches the hook as `C`.
+- `watch.fileEvent` and `watch.dirEvent` choose among the final changes, or among the events with `each`.
+- A path can change again after the watcher checks the disk and before the hook runs. That change follows as a new event, so the hook has to read the actual file when it runs.
+- `lastPerPath` runs paths in the order they last changed. Use `each` when the order between files matters.
 
 ## Event-loss notification
 
 - `global.lifeCycle.onError` is optional and uses the same command list and structured `dir`/`cmd` format as other hooks.
 - It runs at most once per watcher run, only when the first fatal error is an event loss: a target's dispatch queue is full (`dispatch queue full`) or the OS reports an event overflow.
-- Other fatal errors, normal termination, and debounce replacement do not notify.
+- Other fatal errors, normal termination, and events merged by `hookBatch` do not notify.
 
 Error context is passed as environment variables, never interpolated into command templates:
 
@@ -321,8 +365,8 @@ Error context is passed as environment variables, never interpolated into comman
 
 ## Overload and shutdown
 
-- Each target keeps at most 256 pending events and runs one run of its hooks at a time. `noWait: true` preserves received-event order; it does not become latest-only under load. Debounce retains the last received valid event, and excluded paths neither execute nor reset its timer. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the debounce result.
-- Events collected for [folder events](#folder-events) wait for room in the queue when they are sent, so sending them never stops processing with `dispatch queue full`.
+- Each target keeps at most 256 pending runs and runs one run of its hooks at a time. `hookBatch.deliver: each` preserves received-event order; it does not become latest-only under load. Excluded paths neither make runs nor extend a wait. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the path that `deliver: last` runs.
+- With `hookBatch.waitMillisecond: 0`, events collected for [folder events](#folder-events) wait for room in the queue when they are sent, so sending them never stops processing with `dispatch queue full`. Other events, and the runs made at the end of a `hookBatch` wait, stop processing if the queue is full.
 - A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
 - A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
 - With `interruptible: true`, a new run starts only after the canceled previous run has ended. A shutdown signal cancels running start and change commands, discards pending changes, waits for event handling to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
@@ -467,15 +511,15 @@ A hook can rely on the following:
 - A folder `C` means that the folder appeared together with everything in it. The hook reads what is inside the folder itself: the watcher sends no file events for the files a folder brings with it, even when the folder is moved in.
 - A folder `D` means that the folder and everything in it are gone.
 - Events of the files and subfolders inside a folder that arrive while its folder event is being collected are absorbed into that folder event. They are absorbed in the same way with `watch.dirEvent: none`, so a change of a whole folder then runs no hook.
-- With `noWait: true`, the hook receives the events of a target in the order they happened. While folder events are being collected, the file events of that target wait with them.
+- With `hookBatch.deliver: each`, the hook receives the events of a target in the order they happened. While folder events are being collected, the file events of that target wait with them.
 - The hook can receive the same change twice. For example, after the hook receives `C` for a folder and reads it, it can receive `C` for a file in that folder.
 
 ### Collecting folder events
 
 - After a folder is created or deleted, the watcher collects the events of the target and sends them once no event has arrived for `dirBatch.waitMillisecond` (default 100).
 - When events keep arriving, the watcher sends what it has collected `dirBatch.maxWaitMillisecond` (default 1000) after the first event. Events inside the folder after that reach the hook on their own and are not absorbed.
-- Deleting a file inside a subfolder of the target also starts collecting, because deleting a whole folder reports the files inside it before the folder. With `noWait: true`, such a deletion and the events after it reach the hook up to `dirBatch.waitMillisecond` later.
-- `0` uses the default.
+- Deleting a file inside a subfolder of the target also starts collecting, because deleting a whole folder reports the files inside it before the folder. Even with `hookBatch.waitMillisecond: 0`, such a deletion and the events after it reach the hook up to `dirBatch.waitMillisecond` later.
+- With `dirBatch.waitMillisecond: 0`, the watcher does not collect, so the hook also receives the events of the files and subfolders inside a folder that is created or deleted.
 
 If `watch.fileEvent` or `watch.dirEvent` is empty, has a letter it does not accept, or both are `none`, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
 
@@ -485,7 +529,7 @@ Error: watchTargets[0].option.watch.dirEvent: U is not a folder event; use C, D,
 
 ### Limitations on folder event detection
 
-- If deleting a tree pauses for longer than `dirBatch.waitMillisecond`, for example on a slow disk, a subfolder can reach the hook as its own `D` before the `D` of the folder above it. Raise `dirBatch.waitMillisecond` for such disks.
+- If deleting a tree pauses for longer than `dirBatch.waitMillisecond`, for example on a slow disk or with a small `dirBatch.waitMillisecond`, a subfolder can reach the hook as its own `D` before the `D` of the folder above it. Raise `dirBatch.waitMillisecond` for such disks.
 - A link to a folder is not followed, so creating or deleting the link is a file event with `IsDir` `false`.
 - A folder that is deleted before the watcher handles its creation reaches the hook as a file `C` and `D`, because the watcher can no longer tell that it was a folder.
 - After a folder is moved out of the target, changes in it no longer run hooks.
