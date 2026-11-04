@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](targets-run-independently.ko.md)
 
-While a hook of one watch target runs for 800ms, checks that a hook of another watch target runs right away without waiting for it to finish.
+- While a hook of one watch target runs for 800ms, checks that a hook of another watch target runs right away without waiting for it to finish.
 
 ## What it checks and success criteria
 
@@ -17,7 +17,7 @@ While a hook of one watch target runs for 800ms, checks that a hook of another w
 | Slow target | Watch folder | `hookrec --delay=800ms --line=SLOW` |
 | Fast target | `other` in the run folder | `hookrec --line=FAST` |
 
-Both targets use `noWait: true`, `watchEvent: C`, and `exclude: ['*.probe']`.
+- Both targets use `noWait: true`, `watchEvent: C`, and `exclude: ['*.probe']`.
 
 ## Sequence
 
@@ -50,11 +50,14 @@ sequenceDiagram
     testCode->>slowHook: wait for absence (up to 5s)
 ```
 
-`Start` confirms watch readiness only through `readiness.probe` in the watch folder. The test therefore writes `other/readiness.probe` repeatedly and judges the second target ready when that path appears in quotes in the DEBUG log.
+- `Start` confirms watch readiness only through `readiness.probe` in the watch folder.
+- The test therefore writes `other/readiness.probe` repeatedly and judges the second target ready when that path appears in quotes in the DEBUG log.
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestTargetsRunIndependently$' ./e2e/scenarios
@@ -62,7 +65,8 @@ go run ./e2e/linux -- -run '^TestTargetsRunIndependently$'
 make e2e-windows ARGS="-- -run '^TestTargetsRunIndependently$'"
 ```
 
-Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 

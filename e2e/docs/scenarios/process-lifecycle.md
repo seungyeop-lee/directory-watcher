@@ -2,7 +2,8 @@
 
 🇺🇸 English | 🇰🇷 [한국어](process-lifecycle.ko.md)
 
-In interruptible mode (`interruptible: true`), when a hook made of real parent, child, and grandchild processes is replaced by a file creation, checks that the new generation starts only after the previous generation completes gracefully. It also checks that, when the watcher shuts down, the finish hooks run after the current generation completes gracefully.
+- In interruptible mode (`interruptible: true`), when a hook made of real parent, child, and grandchild processes is replaced by a file creation, checks that the new generation starts only after the previous generation completes gracefully.
+- It also checks that, when the watcher shuts down, the finish hooks run after the current generation completes gracefully.
 
 ## What it checks and success criteria
 
@@ -58,7 +59,9 @@ sequenceDiagram
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestProcessLifecycle$' ./e2e/scenarios
@@ -66,7 +69,8 @@ go run ./e2e/linux -- -run '^TestProcessLifecycle$'
 make e2e-windows ARGS="-- -run '^TestProcessLifecycle$'"
 ```
 
-Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 
 ## Related code
 

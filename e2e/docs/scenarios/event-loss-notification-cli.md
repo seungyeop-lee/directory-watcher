@@ -2,9 +2,11 @@
 
 🇺🇸 English | 🇰🇷 [한국어](event-loss-notification-cli.ko.md)
 
-Causes a fatal error with a real dispatch queue saturation and checks that the CLI runs `global.lifeCycle.onError` once and exits abnormally with the original error. Six modes check that, even when the notification is absent, its executable is missing, it fails or times out, or only its parent exits first, the original error and the finish hooks are preserved and only the notification's descendants are cleaned up.
+- Causes a fatal error with a real dispatch queue saturation and checks that the CLI runs `global.lifeCycle.onError` once and exits abnormally with the original error.
+- Six modes check that, even when the notification is absent, its executable is missing, it fails or times out, or only its parent exits first, the original error and the finish hooks are preserved and only the notification's descendants are cleaned up.
 
-This saturation is a loss in the application queue and is not evidence of an observed OS overflow. The notification's environment variables and its run and cleanup time limit contract follow [Event-loss notification](../../../USAGE.md#event-loss-notification).
+- This saturation is a loss in the application queue and is not evidence of an observed OS overflow.
+- The notification's environment variables and its run and cleanup time limit contract follow [Event-loss notification](../../../USAGE.md#event-loss-notification).
 
 ## What it checks and success criteria
 
@@ -38,7 +40,10 @@ In the modes that run the notification (`success`, `failure`, `timeout`, `succes
 | `timeout` | Structured `dir`, string `cmd` | Parent, child, and grandchild run until they receive a signal | Working directory is `notification-workdir`, `onError notification failed` in the log, elapsed time at least 5 and at most 27 seconds, `NOTIFY` 0 times |
 | `success-tree` | Structured `dir`, list `cmd` | After the parent, child, and grandchild are ready, only the parent exits 0 when it sees the release file | Working directory is `notification-workdir`, no `onError notification failed` in the log |
 
-Every mode except `absent` sets `onError` to a command list with one entry, and the configuration form in the table is the form of that entry. In every mode except `absent` and `missing-command`, the notification command is `hookrec --error-context --line=NOTIFY`. `failure` and `success-tree` add `--depth=2 --release-file=<run folder>/release-notification`, `failure` adds `--exit-code=7`, and `timeout` adds `--depth=2`. Elapsed time is measured from the start of file creation.
+- Every mode except `absent` sets `onError` to a command list with one entry, and the configuration form in the table is the form of that entry.
+- In every mode except `absent` and `missing-command`, the notification command is `hookrec --error-context --line=NOTIFY`.
+- `failure` and `success-tree` add `--depth=2 --release-file=<run folder>/release-notification`, `failure` adds `--exit-code=7`, and `timeout` adds `--depth=2`.
+- Elapsed time is measured from the start of file creation.
 
 ### Extra checks for tree modes
 
@@ -49,7 +54,10 @@ In `failure`, `timeout`, and `success-tree`, the notification creates a real par
 - Right after the absence of the delayed start hook is confirmed, a check with no extra wait must find every process of the notification tree already gone. Processes removed by the forced termination in the test cleanup step do not count as a successful cleanup by the product.
 - Every process of the protected tree must be alive.
 
-Liveness records are left in `notification-before.log` and `notification-after.log` in the run folder, and in `protected-before.log` and `protected-after.log` in the protected tree's run folder. Each file holds the time of recording and, for each process, the generation, depth, PID, and whether it is alive. On Windows, it also holds the creation time and program queried through the process handle opened when each PID was first checked, the program that holds the PID now, and any errors from opening, querying, or waiting on the handle. The run folder is kept only on failure or with `DW_E2E_KEEP=1`.
+- Liveness records are left in `notification-before.log` and `notification-after.log` in the run folder, and in `protected-before.log` and `protected-after.log` in the protected tree's run folder.
+- Each file holds the time of recording and, for each process, the generation, depth, PID, and whether it is alive.
+- On Windows, it also holds the creation time and program queried through the process handle opened when each PID was first checked, the program that holds the PID now, and any errors from opening, querying, or waiting on the handle.
+- The run folder is kept only on failure or with `DW_E2E_KEEP=1`.
 
 ## Configuration
 
@@ -59,7 +67,8 @@ Liveness records are left in `notification-before.log` and `notification-after.l
 | Target 1: watch folder | `onStartWatch`: `hookrec --delay=30s --line=START`, `onChange`: `CHANGE`, `onFinishWatch`: `TARGET:FINISH`, `noWait: true`, `watchEvent: C`, `exclude: ['*.probe']` |
 | Target 2: `other` in the run folder | `onStartWatch`: `OTHER:READY`, `onChange`: `OTHER:CHANGE`, `onFinishWatch`: `OTHER:FINISH`, `noWait: true`, `watchEvent: C` |
 
-The watcher is launched with `Launch` at the default ERROR log level. With no DEBUG log, watch readiness is judged from the `BEGIN` record of `START` and the `OTHER:READY` record instead of probe events.
+- The watcher is launched with `Launch` at the default ERROR log level.
+- With no DEBUG log, watch readiness is judged from the `BEGIN` record of `START` and the `OTHER:READY` record instead of probe events.
 
 ## Sequence
 
@@ -108,7 +117,9 @@ sequenceDiagram
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestEventLossNotificationCLI$' ./e2e/scenarios
@@ -116,7 +127,8 @@ go run ./e2e/linux -- -run '^TestEventLossNotificationCLI$'
 make e2e-windows ARGS="-- -run '^TestEventLossNotificationCLI$'"
 ```
 
-To run a single mode, specify it as in `-run '^TestEventLossNotificationCLI$/^timeout$'`. Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run a single mode, specify it as in `-run '^TestEventLossNotificationCLI$/^timeout$'`.
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
 
 ## Related code
 

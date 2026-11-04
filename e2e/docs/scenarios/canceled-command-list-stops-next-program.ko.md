@@ -2,7 +2,8 @@
 
 🇺🇸 [English](canceled-command-list-stops-next-program.md) | 🇰🇷 한국어
 
-Windows에서 `cmd` 명령 목록인 시작 hook을 첫 프로그램이 실행되는 중에 취소합니다. `cmd.exe`가 첫 CTRL+BREAK 뒤에 시작한 다음 프로그램도 CTRL+BREAK를 받고 끝나는지 확인합니다.
+- Windows에서 `cmd` 명령 목록인 시작 hook을 첫 프로그램이 실행되는 중에 취소합니다.
+- `cmd.exe`가 첫 CTRL+BREAK 뒤에 시작한 다음 프로그램도 CTRL+BREAK를 받고 끝나는지 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -59,13 +60,16 @@ sequenceDiagram
 
 ## 실행
 
-이 테스트는 Windows에서만 실행됩니다. 저장소 루트에서 UTM Windows VM으로 실행합니다.
+- 이 테스트는 Windows에서만 실행됩니다.
+
+저장소 루트에서 UTM Windows VM으로 실행합니다.
 
 ```sh
 make e2e-windows ARGS="-- -run '^TestCanceledCommandListStopsNextProgram$'"
 ```
 
-UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하려면 [Windows 실행 명령](../windows.ko.md#실행-명령)을 참고합니다.
+- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+- Windows 호스트에서 직접 실행하려면 [Windows 실행 명령](../windows.ko.md#실행-명령)을 참고합니다.
 
 ## 관련 코드
 

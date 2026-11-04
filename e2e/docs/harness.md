@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](harness.ko.md)
 
-Paths in the tables and steps below are relative to the `e2e/` directory.
+- Paths in the tables and steps below are relative to the `e2e/` directory.
 
 ## Code locations by responsibility
 
@@ -20,7 +20,12 @@ Paths in the tables and steps below are relative to the `e2e/` directory.
 | `hookrec/` | Helper program that writes one-line records or creates real parent, child, and grandchild processes |
 | `linux/` | Entry point that passes a copy of the current source to an isolated Linux container and runs the same Go E2E |
 
-Building the binaries and setting up the console happen once for the whole test run. Each scenario owns its run folder, watcher, process observation, and cleanup. On Windows, `processObserver` keeps the handle it opened when it first observed a recorded PID until that scenario's cleanup finishes, and forced cleanup terminates only the `hookrec` handles in that scenario's records. Every recorded process is `hookrec`, so if a program other than this run's `hookrec` already holds the PID at that first observation, the recorded process has exited and its PID was reused; it is judged gone. When the program cannot be identified, the handle is kept and liveness is judged from it. Protected trees of other scenarios or other worktrees are therefore not cleaned up.
+- Building the binaries and setting up the console happen once for the whole test run.
+- Each scenario owns its run folder, watcher, process observation, and cleanup.
+- On Windows, `processObserver` keeps the handle it opened when it first observed a recorded PID until that scenario's cleanup finishes, and forced cleanup terminates only the `hookrec` handles in that scenario's records.
+- Every recorded process is `hookrec`, so if a program other than this run's `hookrec` already holds the PID at that first observation, the recorded process has exited and its PID was reused; it is judged gone.
+- When the program cannot be identified, the handle is kept and liveness is judged from it.
+- Protected trees of other scenarios or other worktrees are therefore not cleaned up.
 
 ## Scenarios and their supporting code
 
@@ -40,7 +45,8 @@ Building the binaries and setting up the console happen once for the whole test 
 | `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram` | `harness/process_observer_windows_test.go` | A recorded PID held by another program counts as gone on Windows | `NewScenario`, `AwaitDelayedHooksGone` |
 | `TestDelayedHooksGoneFailsWhileHookRuns` | `harness/process_observer_windows_test.go` | The delayed hook wait fails while a recorded hook runs on Windows | `NewScenario`, `Await`, `DelayedHookBegun`, `AwaitDelayedHooksGone` |
 
-Each scenario name links to a scenario document that describes what it checks and its success criteria, a sequence diagram, subtests, and run commands. The receive boundary checks and the limits of loss verification that span several scenarios are in [Race, overload, and loss verification](reliability.md), and running the Windows scenarios and checking CI is in [Running Windows E2E and checking CI results](windows.md).
+- Each scenario name links to a scenario document that describes what it checks and its success criteria, a sequence diagram, subtests, and run commands.
+- The receive boundary checks and the limits of loss verification that span several scenarios are in [Race, overload, and loss verification](reliability.md), and running the Windows scenarios and checking CI is in [Running Windows E2E and checking CI results](windows.md).
 
 ## Writing a new scenario
 
@@ -82,4 +88,10 @@ After writing the test, create the scenario documents and update the scenario li
 
 ## `hookrec` process trees and delayed hooks
 
-For a long-running process, put `s.Hook("--depth=2")` in a start or change hook. The parent actually runs a child, and the child runs a grandchild. The generation identifier is the parent PID, and each process records `generation|PID|depth|state`. The parent's `ready` is recorded after the child's `ready`, so `AwaitReadyGenerations` judges the whole generation ready by the parent's `ready`. On a shutdown signal, a process waits for a 150ms handling delay and for its child's graceful exit, then writes `complete`. A delayed hook is made with `s.Hook("--delay=80ms", "--line=...")` and writes `BEGIN|PID|record`, plus `CANCEL|PID|record` when cancelled. With `--cancel-exit-code=<code>`, it exits with that code after writing `CANCEL`; use it in a command list that starts the next program when the previous one fails, as with the shell `||`.
+- For a long-running process, put `s.Hook("--depth=2")` in a start or change hook.
+- The parent actually runs a child, and the child runs a grandchild.
+- The generation identifier is the parent PID, and each process records `generation|PID|depth|state`.
+- The parent's `ready` is recorded after the child's `ready`, so `AwaitReadyGenerations` judges the whole generation ready by the parent's `ready`.
+- On a shutdown signal, a process waits for a 150ms handling delay and for its child's graceful exit, then writes `complete`.
+- A delayed hook is made with `s.Hook("--delay=80ms", "--line=...")` and writes `BEGIN|PID|record`, plus `CANCEL|PID|record` when cancelled.
+- With `--cancel-exit-code=<code>`, a delayed hook exits with that code after writing `CANCEL`; use it in a command list that starts the next program when the previous one fails, as with the shell `||`.

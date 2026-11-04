@@ -2,7 +2,8 @@
 
 🇺🇸 [English](README.md) | 🇰🇷 한국어
 
-Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·삭제되면 미리 정해 둔 명령을 실행하는 프로그램입니다. 코드를 고칠 때마다 빌드나 테스트를 다시 실행하거나, 소스가 바뀌면 개발 서버를 재시작하거나, 파일이 바뀔 때 백업을 만드는 작업을 자동화할 수 있습니다.
+- Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·삭제되면 미리 정해 둔 명령을 실행하는 프로그램입니다.
+- 코드를 고칠 때마다 빌드나 테스트를 다시 실행하거나, 소스가 바뀌면 개발 서버를 재시작하거나, 파일이 바뀔 때 백업을 만드는 작업을 자동화할 수 있습니다.
 
 ## 기능
 
@@ -47,7 +48,11 @@ Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·�
 
 ### Homebrew
 
-macOS와 Linux에서 설치합니다. cask를 설치하려면 Homebrew 5.1.14 이상이 필요하고, 그보다 낮은 버전에서는 `Unexpected method 'postflight_steps'` 오류로 설치가 실패합니다. `brew --version`으로 버전을 확인하고, 5.1.14보다 낮으면 먼저 Homebrew를 업데이트합니다.
+- macOS와 Linux에서 설치합니다.
+- cask를 설치하려면 Homebrew 5.1.14 이상이 필요합니다.
+- 그보다 낮은 버전에서는 `Unexpected method 'postflight_steps'` 오류로 설치가 실패합니다.
+
+`brew --version`으로 버전을 확인하고, 5.1.14보다 낮으면 먼저 Homebrew를 업데이트합니다.
 
 ```shell
 brew update
@@ -59,7 +64,9 @@ brew update
 brew install --cask seungyeop-lee/tap/directory-watcher
 ```
 
-2.x 버전을 `brew install seungyeop-lee/tap/directory-watcher`로 설치했다면 Homebrew formula로 설치된 것이고, formula는 더 이상 새 버전을 받지 않습니다. formula를 지운 뒤 cask로 설치합니다.
+- 2.x 버전을 `brew install seungyeop-lee/tap/directory-watcher`로 설치했다면 Homebrew formula로 설치된 것이고, formula는 더 이상 새 버전을 받지 않습니다.
+
+formula를 지운 뒤 cask로 설치합니다.
 
 ```shell
 brew uninstall --formula directory-watcher
@@ -92,7 +99,9 @@ docker run --rm \
   ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
 ```
 
-컨테이너의 작업 폴더가 `/`이므로 `config.yml`의 `path: src`는 마운트한 `/src`를 가리킵니다. hook은 컨테이너 안에서 실행되므로, hook이 쓰는 파일과 도구가 컨테이너에 있어야 합니다. bind mount의 알려진 이슈는 [Docker로 실행하기](USAGE.ko.md#docker로-실행하기)에 있습니다.
+- 컨테이너의 작업 폴더가 `/`이므로 `config.yml`의 `path: src`는 마운트한 `/src`를 가리킵니다.
+- hook은 컨테이너 안에서 실행되므로, hook이 쓰는 파일과 도구가 컨테이너에 있어야 합니다.
+- bind mount의 알려진 이슈는 [Docker로 실행하기](USAGE.ko.md#docker로-실행하기)에 있습니다.
 
 ### Dockerfile에서 설치
 
@@ -102,7 +111,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 ### 릴리스 파일
 
-[releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에서 실행 파일을 내려받습니다.
+- [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에서 실행 파일을 내려받습니다.
 
 ## 시작하기
 
@@ -133,7 +142,9 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 ## 동작 다이어그램
 
-전역 `onStartWatch`가 가장 먼저 실행됩니다. 그 뒤 감시 대상마다 따로 시작하고, 각 대상은 다른 대상과 관계없이 자기 변경을 처리합니다.
+- 전역 `onStartWatch`가 가장 먼저 실행됩니다.
+
+그 뒤 감시 대상마다 따로 시작하고, 각 대상은 다른 대상과 관계없이 자기 변경을 처리합니다.
 
 ```mermaid
 flowchart TD
@@ -207,8 +218,9 @@ flowchart TD
 
 ## 개발 검증
 
-현재 워크트리 소스를 사용하는 macOS·Linux·Windows 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.ko.md)를 확인하세요.
+- 현재 워크트리 소스를 사용하는 macOS·Linux·Windows 자동 E2E 실행과 시나리오 추가 방법은 [E2E 가이드](e2e/README.ko.md)를 확인하세요.
 
 ## 라이선스
 
-이 프로젝트는 [GPL-3.0 라이선스](LICENSE)에 따라 제공됩니다. 자세한 내용은 라이선스 파일을 확인하세요.
+- 이 프로젝트는 [GPL-3.0 라이선스](LICENSE)에 따라 제공됩니다.
+- 자세한 내용은 라이선스 파일을 확인하세요.

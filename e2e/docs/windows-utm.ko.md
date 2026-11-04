@@ -2,11 +2,14 @@
 
 🇺🇸 [English](windows-utm.md) | 🇰🇷 한국어
 
-Mac에서 UTM의 Windows 11 ARM64 VM을 켜고, 현재 작업 트리의 소스로 `./e2e/scenarios` E2E를 게스트 안에서 실행한 뒤 결과를 Mac으로 가져옵니다. 실행기는 `e2e/windows`에 있고 macOS에서만 빌드됩니다.
+- Mac에서 UTM의 Windows 11 ARM64 VM을 켜고, 현재 작업 트리의 소스로 `./e2e/scenarios` E2E를 게스트 안에서 실행한 뒤 결과를 Mac으로 가져옵니다.
+- 실행기는 `e2e/windows`에 있고 macOS에서만 빌드됩니다.
 
 ## 사전 준비
 
-아래 준비는 한 번만 합니다. 실행기는 VM 구성을 바꾸지 않습니다.
+- 실행기는 VM 구성을 바꾸지 않습니다.
+
+아래 준비는 한 번만 합니다.
 
 1. UTM을 `/Applications/UTM.app`에 설치합니다. 다른 위치에 설치했다면 실행할 때 `-utmctl=<UTM.app>/Contents/MacOS/utmctl`을 지정합니다. Homebrew의 `/opt/homebrew/bin/utmctl` 같은 심볼릭 링크는 실행기가 거절합니다.
 2. UTM에 Windows 11 ARM64 VM을 만들고 Windows 설치와 라이선스 동의를 직접 마칩니다. 이 단계는 자동화하지 않습니다.
@@ -16,7 +19,11 @@ Mac에서 UTM의 Windows 11 ARM64 VM을 켜고, 현재 작업 트리의 소스�
 
 ### E2E 전용 VM 만들기
 
-**디스플레이 장치가 남은 VM은 `utmctl start --hide`로 켜도 VM 창이 화면에 뜹니다.** `--hide`는 UTM 메인 창만 대상으로 하므로, 디스플레이 장치를 제거한 복제본에서 E2E를 실행합니다. 원래 VM은 바꾸지 않습니다. 복제와 설정 변경은 두 VM이 모두 꺼진 상태에서 합니다.
+- **디스플레이 장치가 남은 VM은 `utmctl start --hide`로 켜도 VM 창이 화면에 뜹니다.**
+- `--hide`는 UTM 메인 창만 대상으로 하므로, 디스플레이 장치를 제거한 복제본에서 E2E를 실행합니다.
+- 원래 VM은 바꾸지 않습니다.
+
+복제와 설정 변경은 두 VM이 모두 꺼진 상태에서 합니다.
 
 1. 원래 VM을 복제합니다. 게스트에 설치한 Guest Tools와 Go도 함께 복제됩니다.
 
@@ -44,15 +51,18 @@ Mac에서 UTM의 Windows 11 ARM64 VM을 켜고, 현재 작업 트리의 소스�
 
 ## VM 선택
 
-`DW_E2E_UTM_VM` 환경 변수나 `ARGS="-vm=<VM>"`에 `utmctl list`에 나오는 전체 이름 또는 UUID를 지정합니다. 지정하지 않으면 모든 명령이 종료 코드 2로 끝납니다.
+`DW_E2E_UTM_VM` 환경 변수나 `ARGS="-vm=<VM>"`에 `utmctl list`에 나오는 전체 이름 또는 UUID를 지정합니다.
 
 ```sh
 export DW_E2E_UTM_VM=Windows-E2E
 ```
 
+- 지정하지 않으면 모든 명령이 종료 코드 2로 끝납니다.
+
 ## 실행 명령
 
-VM 기동과 종료에는 시간이 걸리므로, 여러 번 테스트할 때는 `up` → `e2e-windows`(반복) → `down` 순서로 실행합니다. 한 번만 실행할 때는 `make e2e-windows-all`을 사용합니다.
+- VM 기동과 종료에는 시간이 걸리므로, 여러 번 테스트할 때는 `up` → `e2e-windows`(반복) → `down` 순서로 실행합니다.
+- 한 번만 실행할 때는 `make e2e-windows-all`을 사용합니다.
 
 | 명령 | 동작 |
 |---|---|
@@ -61,22 +71,32 @@ VM 기동과 종료에는 시간이 걸리므로, 여러 번 테스트할 때는
 | `make e2e-windows-down` | VM에 정상 종료를 요청하고 꺼질 때까지 기다린 뒤, 실행 중인 VM이 하나도 없으면 UTM을 종료합니다. |
 | `make e2e-windows-all` | up·test·down을 차례로 실행하고, 이 실행이 켠 VM과 연 UTM만 끕니다. 처음부터 켜져 있던 VM과 UTM은 그대로 둡니다. |
 
-**`make e2e-windows-down`은 UTM을 누가 열었는지와 관계없이, 실행 중인 VM이 없으면 UTM을 종료합니다.** 직접 열어 둔 UTM도 닫힙니다. 다른 VM이 실행 중이면 UTM과 그 VM은 유지됩니다.
-
-실행기는 UTM을 `open -g`로 열고 UTM 메인 창을 바로 닫으며, VM 창은 디스플레이 장치가 없어 생기지 않습니다. 실행 중에 UTM 창을 직접 열어 클릭하지 않습니다([UTM이 크래시함](#utm이-크래시함)).
-
-성공하면 go test 출력에 각 테스트의 `PASS`가 표시되고 명령이 0으로 끝납니다. 테스트 실패, 시간 초과, 통신 실패, 결과 누락은 모두 0이 아닌 종료 코드로 끝납니다. make를 거치면 종료 코드는 2입니다. 게스트 실행 디렉터리를 지우지 못한 것은 종료 코드를 바꾸지 않고 경고로만 알립니다([게스트 실행 디렉터리가 남음](#게스트-실행-디렉터리가-남음)).
+- **`make e2e-windows-down`은 UTM을 누가 열었는지와 관계없이, 실행 중인 VM이 없으면 UTM을 종료합니다.**
+- 직접 열어 둔 UTM도 닫힙니다.
+- 다른 VM이 실행 중이면 UTM과 그 VM은 유지됩니다.
+- 실행기는 UTM을 `open -g`로 열고 UTM 메인 창을 바로 닫으며, VM 창은 디스플레이 장치가 없어 생기지 않습니다.
+- 실행 중에 UTM 창을 직접 열어 클릭하지 않습니다([UTM이 크래시함](#utm이-크래시함)).
+- 성공하면 go test 출력에 각 테스트의 `PASS`가 표시되고 명령이 0으로 끝납니다.
+- 테스트 실패, 시간 초과, 통신 실패, 결과 누락은 모두 0이 아닌 종료 코드로 끝납니다.
+- make를 거치면 종료 코드는 2입니다.
+- 게스트 실행 디렉터리를 지우지 못한 것은 종료 코드를 바꾸지 않고 경고로만 알립니다([게스트 실행 디렉터리가 남음](#게스트-실행-디렉터리가-남음)).
 
 ### 테스트 선택·반복·시간 제한
 
-`ARGS`에는 실행기 옵션을 먼저 쓰고, `--` 뒤에 go test 인자를 씁니다. 게스트에서는 `go test -count=1 -v <전달 인자> ./e2e/scenarios`로 실행하므로, 뒤에 붙인 `-count`가 기본값을 대신합니다. `--` 뒤에 패키지 경로를 더하면 그 패키지의 테스트도 `./e2e/scenarios`와 함께 실행합니다. 예를 들어 `make e2e-windows-all ARGS="-vm=Windows-E2E -- ./internal/app/service"`는 게스트에서 `go test -count=1 -v ./internal/app/service ./e2e/scenarios`를 실행합니다. `./e2e/scenarios`는 빼고 실행할 수 없습니다.
+- `ARGS`에는 실행기 옵션을 먼저 쓰고, `--` 뒤에 go test 인자를 씁니다.
+- 게스트에서는 `go test -count=1 -v <전달 인자> ./e2e/scenarios`로 실행하므로, 뒤에 붙인 `-count`가 기본값을 대신합니다.
+- `--` 뒤에 패키지 경로를 더하면 그 패키지의 테스트도 `./e2e/scenarios`와 함께 실행합니다.
+- 예를 들어 `make e2e-windows-all ARGS="-vm=Windows-E2E -- ./internal/app/service"`는 게스트에서 `go test -count=1 -v ./internal/app/service ./e2e/scenarios`를 실행합니다.
+- `./e2e/scenarios`는 빼고 실행할 수 없습니다.
 
 ```sh
 make e2e-windows ARGS="-deadline=10m -- -count=3 -timeout=5m -run '^(TestGoldenPath|TestProcessLifecycle|TestStartHookShutdownModes)$'"
 DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLifecycle$'"
 ```
 
-Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명령은 실패가 기대 결과입니다. Windows 경로를 값으로 넘길 때는 `ARGS="-guest-dir='D:\dw-e2e'"`처럼 작은따옴표로 감쌉니다. 감싸지 않으면 make가 실행하는 셸이 `\`를 지워 `D:dw-e2e`가 됩니다.
+- Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명령은 실패가 기대 결과입니다.
+- Windows 경로를 값으로 넘길 때는 `ARGS="-guest-dir='D:\dw-e2e'"`처럼 작은따옴표로 감쌉니다.
+- 감싸지 않으면 make가 실행하는 셸이 `\`를 지워 `D:dw-e2e`가 됩니다.
 
 | 옵션 | 기본값 | 의미 |
 |---|---|---|
@@ -88,11 +108,14 @@ Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명
 | `-ready-timeout` | `5m` | 기동 후 Guest Agent 응답을 기다리는 시간 |
 | `-stop-timeout` | `3m` | 종료 요청 후 VM이 꺼지기를 기다리는 시간 |
 
-`up`과 `down`은 `--` 뒤의 go test 인자를 받지 않습니다.
+- `up`과 `down`은 `--` 뒤의 go test 인자를 받지 않습니다.
 
 ## 결과 확인
 
-명령의 처음과 끝에 `Windows diagnostics: <Mac 경로>`가 출력됩니다. 이 디렉터리에는 다음 파일이 UTF-8 텍스트로 남습니다. 함께 남는 `guest.exe`는 게스트에 보낸 실행 파일입니다.
+- 명령의 처음과 끝에 `Windows diagnostics: <Mac 경로>`가 출력됩니다.
+- 이 디렉터리에 함께 남는 `guest.exe`는 게스트에 보낸 실행 파일입니다.
+
+이 디렉터리에는 다음 파일이 UTF-8 텍스트로 남습니다.
 
 | 파일 | 내용 |
 |---|---|
@@ -102,41 +125,64 @@ Mac에 설정한 `DW_E2E_FAULT`는 게스트로 전달되며, 위 두 번째 명
 | `stdout.log`, `stderr.log` | 게스트 go test의 출력 |
 | `diagnostics/` | 게스트 E2E 진단 파일. `cleanup.log`·`records.log.processes`의 분석은 [Windows 실패 분석](windows.ko.md#실패-분석)과 같습니다. |
 
-실행기는 결과의 실행 ID가 이번 실행과 같고, 오류·시간 초과·잔존 프로세스가 없으며, go 종료 코드가 0이고, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다. 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일과 `.agents/skills` 같은 심볼릭 링크는 전달하지 않습니다.
-
-게스트의 실행별 디렉터리 `<guest-dir>\<실행 ID>`는 회수가 끝나면 삭제됩니다. 회수에 실패하면 남겨 두고 오류 메시지에 경로를 표시합니다. 회수한 뒤에 디렉터리를 지우지 못하면 테스트 결과와 종료 코드는 그대로 두고, `Windows E2E cleanup:`으로 시작하는 경고에 남은 경로와 그 디렉터리를 지우는 명령을 표시합니다.
-
-같은 Mac에서 같은 VM에 대한 테스트는 동시에 실행할 수 있고, 각자 다른 실행 디렉터리를 사용합니다. 테스트가 실행 중인 동안 `up`의 기동과 `down`은 `another Windows E2E run on this Mac is using the VM`으로 거절됩니다. 다른 사용자 계정이나 다른 Mac의 실행과는 조정하지 않습니다.
+- 실행기는 결과의 실행 ID가 이번 실행과 같고, 오류·시간 초과·잔존 프로세스가 없으며, go 종료 코드가 0이고, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다.
+- 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일과 `.agents/skills` 같은 심볼릭 링크는 전달하지 않습니다.
+- 게스트의 실행별 디렉터리 `<guest-dir>\<실행 ID>`는 회수가 끝나면 삭제됩니다.
+- 회수에 실패하면 남겨 두고 오류 메시지에 경로를 표시합니다.
+- 회수한 뒤에 디렉터리를 지우지 못하면 테스트 결과와 종료 코드는 그대로 두고, `Windows E2E cleanup:`으로 시작하는 경고에 남은 경로와 그 디렉터리를 지우는 명령을 표시합니다.
+- 같은 Mac에서 같은 VM에 대한 테스트는 동시에 실행할 수 있고, 각자 다른 실행 디렉터리를 사용합니다.
+- 테스트가 실행 중인 동안 `up`의 기동과 `down`은 `another Windows E2E run on this Mac is using the VM`으로 거절됩니다.
+- 다른 사용자 계정이나 다른 Mac의 실행과는 조정하지 않습니다.
 
 ## 종료 동작
 
-`down`과 `all`은 `utmctl stop --request`로 Windows에 정상 종료를 요청하고, 꺼지지 않으면 30초마다 다시 요청합니다. VM 전원을 강제로 끄지 않으며, `-stop-timeout` 안에 꺼지지 않으면 VM을 켜 둔 채 실패합니다.
-
-2026-11-03에 확인한 요청은 모두 실제 종료였습니다. 게스트에는 winlogon의 전원 끄기(이벤트 1074, 이유 0x500ff)와 이벤트 로그 정상 중지(6006)가 남았고, 다음 부팅은 콜드 부팅(Kernel-Boot 27, 부팅 유형 0x0)이었습니다. 이 게스트는 최대 절전 모드가 꺼져 있어 빠른 시작을 사용할 수 없습니다. 첫 요청이 무시되고 두 번째 요청으로 꺼진 경우가 있었으며, 원인은 확인하지 못했습니다.
+- `down`과 `all`은 `utmctl stop --request`로 Windows에 정상 종료를 요청하고, 꺼지지 않으면 30초마다 다시 요청합니다.
+- VM 전원을 강제로 끄지 않으며, `-stop-timeout` 안에 꺼지지 않으면 VM을 켜 둔 채 실패합니다.
+- 2026-11-03에 확인한 요청은 모두 실제 종료였습니다.
+- 게스트에는 winlogon의 전원 끄기(이벤트 1074, 이유 0x500ff)와 이벤트 로그 정상 중지(6006)가 남았고, 다음 부팅은 콜드 부팅(Kernel-Boot 27, 부팅 유형 0x0)이었습니다.
+- 이 게스트는 최대 절전 모드가 꺼져 있어 빠른 시작을 사용할 수 없습니다.
+- 첫 요청이 무시되고 두 번째 요청으로 꺼진 경우가 있었으며, 원인은 확인하지 못했습니다.
 
 ## Windows ARM64와 x64의 차이
 
-UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 race detector는 Windows에서 `windows/amd64`만 지원하므로([요구 사항](https://go.dev/doc/articles/race_detector#Requirements)), 이 VM에서는 `-race` 검증을 할 수 없습니다. `-race` 검증과 Windows x64 동작은 계속 GitHub Actions의 `test (windows-latest)`로 확인합니다([CI 단계](windows.ko.md#ci-단계)). UTM 실행의 통과를 Windows x64 CI 결과로 대신하지 않습니다.
+- UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다.
+- Go의 race detector는 Windows에서 `windows/amd64`만 지원하므로([요구 사항](https://go.dev/doc/articles/race_detector#Requirements)), 이 VM에서는 `-race` 검증을 할 수 없습니다.
+- `-race` 검증과 Windows x64 동작은 계속 GitHub Actions의 `test (windows-latest)`로 확인합니다([CI 단계](windows.ko.md#ci-단계)).
+- UTM 실행의 통과를 Windows x64 CI 결과로 대신하지 않습니다.
 
 ## 문제 해결
 
 ### start가 응답하지 않음
 
-`utmctl start`가 VM을 켜지 않고 2분 뒤 `OSStatus error -1712`로 끝나는 상태가 같은 UTM 프로세스에서 계속될 수 있습니다([UTM #8006](https://github.com/utmapp/UTM/issues/8006)). `up`은 등록된 VM이 모두 꺼져 있으면 UTM을 한 번 정상 종료·재실행한 뒤 다시 기동합니다. 다른 VM이 실행 중이면 재시작하지 않고 실패하므로, 그 VM을 끄고 UTM을 종료한 뒤 `up`을 다시 실행합니다. 출력에 섞인 `OSStatus error -10004`는 기동 성공 여부와 관계없이 나오므로 무시해도 됩니다.
+- `utmctl start`가 VM을 켜지 않고 2분 뒤 `OSStatus error -1712`로 끝나는 상태가 같은 UTM 프로세스에서 계속될 수 있습니다([UTM #8006](https://github.com/utmapp/UTM/issues/8006)).
+- `up`은 등록된 VM이 모두 꺼져 있으면 UTM을 한 번 정상 종료·재실행한 뒤 다시 기동합니다.
+- 다른 VM이 실행 중이면 `up`은 UTM을 재시작하지 않고 실패하므로, 그 VM을 끄고 UTM을 종료한 뒤 `up`을 다시 실행합니다.
+- 출력에 섞인 `OSStatus error -10004`는 기동 성공 여부와 관계없이 나오므로 무시해도 됩니다.
 
 ### UTM이 크래시함
 
-실행 중에 UTM 창을 클릭하면 UTM이 SIGSEGV로 종료된 사례가 있었고, 이때 대기 중이던 요청은 `OSStatus error -609`로 끝났습니다. 실행 중에는 UTM 창을 열거나 클릭하지 않습니다. 크래시 보고서는 `~/Library/Logs/DiagnosticReports/UTM-*.ips`에 있습니다.
+- 실행 중에 UTM 창을 클릭하면 UTM이 SIGSEGV로 종료된 사례가 있었고, 이때 대기 중이던 요청은 `OSStatus error -609`로 끝났습니다.
+- 실행 중에는 UTM 창을 열거나 클릭하지 않습니다.
+- 크래시 보고서는 `~/Library/Logs/DiagnosticReports/UTM-*.ips`에 있습니다.
 
 ### QEMU가 종료 중에 비정상 종료함
 
-종료 요청 뒤 `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips`가 새로 생기면 `down`과 `all`은 VM이 꺼졌더라도 `QEMU aborted while the VM was stopping`으로 실패합니다. 디스플레이가 있는 원래 VM에서는 종료 11회 중 7회가 이렇게 끝났고, 전용 VM에서는 18회 중 0회였습니다(2026-11-03). 원인은 UTM의 QEMU 쪽이며 확인되지 않았습니다. 보고서에는 VM이 표시되지 않으므로, 같은 시간에 다른 VM의 QEMU가 비정상 종료해도 실패로 판정됩니다.
+- 종료 요청 뒤 `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips`가 새로 생기면 `down`과 `all`은 VM이 꺼졌더라도 `QEMU aborted while the VM was stopping`으로 실패합니다.
+- 디스플레이가 있는 원래 VM에서는 종료 11회 중 7회가 이렇게 끝났고, 전용 VM에서는 18회 중 0회였습니다(2026-11-03).
+- 원인은 UTM의 QEMU 쪽이며 확인되지 않았습니다.
+- 보고서에는 VM이 표시되지 않으므로, 같은 시간에 다른 VM의 QEMU가 비정상 종료해도 실패로 판정됩니다.
 
 ### 게스트 실행 디렉터리가 남음
 
-`Windows E2E cleanup: guest run directory <경로> is still there after ...`는 실행기가 1분 동안 `rmdir`를 되풀이해도 디렉터리가 남은 경우입니다. 디렉터리 안의 파일을 열어 두었거나 그 안을 현재 디렉터리로 쓰는 게스트 프로세스가 원인입니다. 2026-11-03에는 테스트가 끝난 뒤에도 실행 중이던 `hookrec.exe`가 `src\e2e\scenarios`를 붙잡고 있었습니다. `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다. 두 경고 모두 마지막 줄에는 디렉터리를 지우는 명령만 있습니다.
+- `Windows E2E cleanup: guest run directory <경로> is still there after ...`는 실행기가 1분 동안 `rmdir`를 되풀이해도 디렉터리가 남은 경우입니다.
+- 디렉터리 안의 파일을 열어 두었거나 그 안을 현재 디렉터리로 쓰는 게스트 프로세스가 원인입니다.
+- 2026-11-03에는 테스트가 끝난 뒤에도 실행 중이던 `hookrec.exe`가 `src\e2e\scenarios`를 붙잡고 있었습니다.
+- `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다.
+- 두 경고 모두 마지막 줄에는 디렉터리를 지우는 명령만 있습니다.
+- `utmctl exec`는 게스트 명령이 끝나기를 기다리지 않고, 돌려주는 출력과 종료 코드가 앞서 실행한 다른 게스트 명령의 것일 수 있습니다.
+- 아래 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
 
-`utmctl exec`는 게스트 명령이 끝나기를 기다리지 않고, 돌려주는 출력과 종료 코드가 앞서 실행한 다른 게스트 명령의 것일 수 있습니다. 그래서 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다. 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
+그래서 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다.
 
 1. 게스트의 프로세스 목록을 확인합니다. E2E가 빌드해 실행하는 `directory-watcher.exe`와 `hookrec.exe`, 그리고 `go.exe`와 `*.test.exe`가 남아 있는지 봅니다. 출력은 게스트의 코드 페이지로 인코딩됩니다.
 
@@ -152,7 +198,8 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
    /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\taskkill.txt'
    ```
 
-같은 VM에서 동시에 실행 중인 다른 테스트의 디렉터리도 `C:\dw-e2e` 아래에 있습니다. 경고에 나온 경로만 지웁니다.
+- 같은 VM에서 동시에 실행 중인 다른 테스트의 디렉터리도 `C:\dw-e2e` 아래에 있습니다.
+- 경고에 나온 경로만 지웁니다.
 
 3. 경고의 마지막 줄을 그대로 복사해 Mac의 셸에서 실행하여 디렉터리를 지웁니다.
 4. `C:\dw-e2e`의 목록에 경고의 실행 ID가 없으면 지워진 것입니다.
@@ -164,4 +211,5 @@ UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다. Go의 ra
 
 ### VM 창이 화면에 뜨거나 부팅음이 남
 
-디스플레이 장치가 남은 VM은 `up`이 거절합니다. 창 없이 켜졌는데 소리가 난다면 사운드 장치가 남아 있는 것이므로, [E2E 전용 VM 만들기](#e2e-전용-vm-만들기)의 3단계를 진행합니다.
+- 디스플레이 장치가 남은 VM은 `up`이 거절합니다.
+- 창 없이 켜졌는데 소리가 난다면 사운드 장치가 남아 있는 것이므로, [E2E 전용 VM 만들기](#e2e-전용-vm-만들기)의 3단계를 진행합니다.

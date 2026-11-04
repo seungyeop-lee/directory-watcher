@@ -2,11 +2,12 @@
 
 🇺🇸 [English](golden-path.md) | 🇰🇷 한국어
 
-셸이 해석하는 문자가 든 이름의 파일 하나를 생성·수정·삭제하고, 전역·대상 hook이 정해진 순서로 한 번씩 실행되며 7개 이벤트 변수가 올바른 값으로 전달되는지, 파일 이름이 명령으로 실행되지 않는지 확인합니다.
+- 셸이 해석하는 문자가 든 이름의 파일 하나를 생성·수정·삭제하고, 전역·대상 hook이 정해진 순서로 한 번씩 실행되며 7개 이벤트 변수가 올바른 값으로 전달되는지, 파일 이름이 명령으로 실행되지 않는지 확인합니다.
 
 ## 확인 내용과 성공 조건
 
-watcher가 정상 종료한 뒤 `records.log`의 전체 줄이 아래 순서와 정확히 같아야 합니다. 줄이 빠지거나, 더 있거나, 순서가 다르면 실패합니다.
+- watcher가 정상 종료한 뒤 `records.log`의 전체 줄이 아래 순서와 정확히 같아야 합니다.
+- 줄이 빠지거나, 더 있거나, 순서가 다르면 실패합니다.
 
 1. `GLOBAL:onStartWatch`
 2. `TARGET:onStartWatch`
@@ -14,11 +15,15 @@ watcher가 정상 종료한 뒤 `records.log`의 전체 줄이 아래 순서와 
 4. `TARGET:onFinishWatch`
 5. `GLOBAL:onFinishWatch`
 
-`<변수>`는 `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`입니다. 설정의 감시 경로가 절대 경로이므로 `{{.Path}}`와 `{{.AbsPath}}`는 모두 테스트 파일의 절대 경로이고, `{{.DirPath}}`와 `{{.DirAbsPath}}`는 모두 감시 폴더의 절대 경로입니다. `{{.FileName}}`은 테스트 파일 이름, `{{.ExtName}}`은 `.txt`, `{{.Event}}`는 `C`·`U`·`D`입니다.
+- `<변수>`는 `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`입니다.
+- 설정의 감시 경로가 절대 경로이므로 `{{.Path}}`와 `{{.AbsPath}}`는 모두 테스트 파일의 절대 경로이고, `{{.DirPath}}`와 `{{.DirAbsPath}}`는 모두 감시 폴더의 절대 경로입니다.
+- `{{.FileName}}`은 테스트 파일 이름, `{{.ExtName}}`은 `.txt`, `{{.Event}}`는 `C`·`U`·`D`입니다.
 
-테스트 파일 이름은 `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`입니다. 이 이름에는 sh, cmd, powershell이 명령을 잇거나 치환하는 문법이 들어 있어, 셸이 값을 명령으로 해석하면 `pwned`로 시작하는 폴더가 생기고 cmd가 값을 다시 펼치면 `%OS%`가 바뀝니다. 종료 뒤 실행 폴더와 감시 폴더에 `pwned`로 시작하는 항목이 없어야 합니다.
+- 테스트 파일 이름은 `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`입니다.
+- 이 이름에는 sh, cmd, powershell이 명령을 잇거나 치환하는 문법이 들어 있어, 셸이 값을 명령으로 해석하면 `pwned`로 시작하는 폴더가 생기고 cmd가 값을 다시 펼치면 `%OS%`가 바뀝니다.
+- 종료 뒤 실행 폴더와 감시 폴더에 `pwned`로 시작하는 항목이 없어야 합니다.
 
-watcher는 종료 신호를 받은 뒤 10초 안에 종료 코드 0으로 끝나야 합니다.
+- watcher는 종료 신호를 받은 뒤 10초 안에 종료 코드 0으로 끝나야 합니다.
 
 ## 설정
 
@@ -60,7 +65,9 @@ sequenceDiagram
 
 ## 실행
 
-저장소 루트에서 실행합니다. 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+- 저장소 루트에서 실행합니다.
+
+차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestGoldenPath$' ./e2e/scenarios
@@ -68,7 +75,8 @@ go run ./e2e/linux -- -run '^TestGoldenPath$'
 make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 ```
 
-UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
+- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 

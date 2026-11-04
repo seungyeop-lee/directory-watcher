@@ -2,7 +2,8 @@
 
 🇺🇸 [English](process-lifecycle.md) | 🇰🇷 한국어
 
-중단 모드(`interruptible: true`)에서 실제 부모·자식·손자 프로세스로 된 hook이 파일 생성으로 교체될 때, 이전 세대가 정상 완료한 뒤에 새 세대가 시작되는지 확인합니다. watcher를 종료할 때 현재 세대가 정상 완료한 뒤 종료 hook이 실행되는지도 확인합니다.
+- 중단 모드(`interruptible: true`)에서 실제 부모·자식·손자 프로세스로 된 hook이 파일 생성으로 교체될 때, 이전 세대가 정상 완료한 뒤에 새 세대가 시작되는지 확인합니다.
+- watcher를 종료할 때 현재 세대가 정상 완료한 뒤 종료 hook이 실행되는지도 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -58,7 +59,9 @@ sequenceDiagram
 
 ## 실행
 
-저장소 루트에서 실행합니다. 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+- 저장소 루트에서 실행합니다.
+
+차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestProcessLifecycle$' ./e2e/scenarios
@@ -66,7 +69,8 @@ go run ./e2e/linux -- -run '^TestProcessLifecycle$'
 make e2e-windows ARGS="-- -run '^TestProcessLifecycle$'"
 ```
 
-UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
+- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 

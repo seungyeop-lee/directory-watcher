@@ -2,11 +2,18 @@
 
 🇺🇸 English | 🇰🇷 [한국어](README.ko.md)
 
-These runs build the watcher and the Go helper programs from the actual current source and check file events, hook records, and process termination. macOS local, Linux Docker, and Windows runs execute the same Go E2E scenarios in `e2e/scenarios`. The Windows-only harness check `TestCleanupReportsLockedResources` is in the `e2e/harness` package, so it runs with `go test ./...`, not with `make e2e-local`. What each scenario checks and where its code is are in [Scenarios and their supporting code](docs/harness.md#scenarios-and-their-supporting-code).
+- These runs build the watcher and the Go helper programs from the actual current source and check file events, hook records, and process termination.
+- macOS local, Linux Docker, and Windows runs execute the same Go E2E scenarios in `e2e/scenarios`.
+- The Windows-only harness check `TestCleanupReportsLockedResources` is in the `e2e/harness` package, so it runs with `go test ./...`, not with `make e2e-local`.
+- What each scenario checks and where its code is are in [Scenarios and their supporting code](docs/harness.md#scenarios-and-their-supporting-code).
 
 ## Setup and run
 
-Run these from the repository root. Local runs need Go at or above the version in `go.mod`. Linux runs also need the Docker CLI and a running Linux Docker engine. Java and Gradle are not used.
+- Local runs need Go at or above the version in `go.mod`.
+- Linux runs also need the Docker CLI and a running Linux Docker engine.
+- Java and Gradle are not used.
+
+Run these from the repository root.
 
 ```sh
 make e2e-local
@@ -19,7 +26,9 @@ To run on a UTM Windows VM from a Mac, finish the prerequisites in [Running E2E 
 DW_E2E_UTM_VM=Windows-E2E make e2e-windows-all
 ```
 
-On success, each test shows `PASS` and the command exits with 0. Failures and timeouts are reported as a non-zero exit code. The default Linux image is `golang:1.27-bookworm`; specify another Go image with `go run ./e2e/linux -image=<image>`.
+- On success, each test shows `PASS` and the command exits with 0.
+- Failures and timeouts are reported as a non-zero exit code.
+- The default Linux image is `golang:1.27-bookworm`; specify another Go image with `go run ./e2e/linux -image=<image>`.
 
 ### Selecting and repeating specific scenarios
 
@@ -30,7 +39,10 @@ go run ./e2e/linux -- -count=3 -run '^TestGoldenPath$'
 go run ./e2e/linux -- -count=3 -run '^TestProcessLifecycle$'
 ```
 
-Every run specifies `-count` so that the Go test result cache is not used. The Linux runner appends the passed arguments after its default `-count=1`, so the repeat counts above apply. Set the time limit for the whole container as in `go run ./e2e/linux -deadline=10m -- -run TestProcessLifecycle`. Set the time limit for the Go tests themselves with `-timeout=2m` after `--`.
+- Every run specifies `-count` so that the Go test result cache is not used.
+- The Linux runner appends the passed arguments after its default `-count=1`, so the repeat counts above apply.
+- Set the time limit for the whole container as in `go run ./e2e/linux -deadline=10m -- -run TestProcessLifecycle`.
+- Set the time limit for the Go tests themselves with `-timeout=2m` after `--`.
 
 ## Detailed documents
 

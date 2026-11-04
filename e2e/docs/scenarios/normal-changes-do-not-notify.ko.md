@@ -2,7 +2,7 @@
 
 🇺🇸 [English](normal-changes-do-not-notify.md) | 🇰🇷 한국어
 
-`global.lifeCycle.onError`를 설정한 상태에서 일반 변경과 debounce에 의한 대체가 일어나도 유실 알림이 실행되지 않는지 `noWait` 두 값으로 확인합니다.
+- `global.lifeCycle.onError`를 설정한 상태에서 일반 변경과 debounce에 의한 대체가 일어나도 유실 알림이 실행되지 않는지 `noWait` 두 값으로 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -51,7 +51,9 @@ sequenceDiagram
 
 ## 실행
 
-저장소 루트에서 실행합니다. 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+- 저장소 루트에서 실행합니다.
+
+차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestNormalChangesDoNotNotify$' ./e2e/scenarios
@@ -59,7 +61,8 @@ go run ./e2e/linux -- -run '^TestNormalChangesDoNotNotify$'
 make e2e-windows ARGS="-- -run '^TestNormalChangesDoNotNotify$'"
 ```
 
-하위 테스트 하나만 실행하려면 `-run '^TestNormalChangesDoNotNotify$/^noWait=true$'`처럼 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+- 하위 테스트 하나만 실행하려면 `-run '^TestNormalChangesDoNotNotify$/^noWait=true$'`처럼 지정합니다.
+- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 
 ## 관련 코드
 

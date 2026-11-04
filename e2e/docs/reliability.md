@@ -10,17 +10,27 @@ go run ./e2e/linux -- -count=3 -run 'TestFastInflowSlowHook|TestStartHookShutdow
 go test -race ./...
 ```
 
-What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), and [`TestProcessLifecycle`](scenarios/process-lifecycle.md) documents.
+- What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), and [`TestProcessLifecycle`](scenarios/process-lifecycle.md) documents.
 
 ### Scope of the internal tests
 
-Controlled internal tests check, independently of the number of OS notifications, the exact order under noWait, the last valid event under debounce, excluded events, no replacement before cancellation completes, no runs after shutdown, and preservation of the first fatal error. The per-target pending limit is 256 events, with one running generation and one debounce timer. When the queue is full, the watcher exits with a loss error instead of growing the buffer or waiting without bound. Shutdown cancels and cleans up the queue rather than draining it.
+- Controlled internal tests check, independently of the number of OS notifications, the exact order under noWait, the last valid event under debounce, excluded events, no replacement before cancellation completes, no runs after shutdown, and preservation of the first fatal error.
+- The per-target pending limit is 256 events, with one running generation and one debounce timer.
+- When the queue is full, the watcher exits with a loss error instead of growing the buffer or waiting without bound.
+- Shutdown cancels and cleans up the queue rather than draining it.
 
-The controlled-input runner tests keep the real fsnotify watcher and its watch registration and replace only the receive channel. The related tests delete the temporary directory right after `Stop` completes to check that resources are released. `TestNativeWatcherStopReleasesDirectory` handles a real create event through the original channel, then checks the finish hook and directory deletion. `TestFilesystemPredicatesReleaseResources` checks both the existing bool results of the existence and directory predicates and deletion of the file and directory right after the calls.
+- The controlled-input runner tests keep the real fsnotify watcher and its watch registration and replace only the receive channel.
+- The related tests delete the temporary directory right after `Stop` completes to check that resources are released.
+- `TestNativeWatcherStopReleasesDirectory` handles a real create event through the original channel, then checks the finish hook and directory deletion.
+- `TestFilesystemPredicatesReleaseResources` checks both the existing bool results of the existence and directory predicates and deletion of the file and directory right after the calls.
 
 ### Receive boundary checks in OS E2E
 
-OS E2E does not decide the last received path from the order in which files were created. `e2e/harness/hook_records_test.go` checks a boundary where `normal-19.txt` was received after `last.txt`, rejection of empty records and unfinished hooks, and completion per duplicate receipt under noWait. The 120ms quiet period is an observation condition, not a guarantee that the OS will send no further notifications. If a late valid event replaces the isolated change, the test does not treat it as success and fails within the completion wait time limit shared by the batch observation and the isolated change. The time limit is 30 seconds for [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md) and 10 seconds for [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md).
+- OS E2E does not decide the last received path from the order in which files were created.
+- `e2e/harness/hook_records_test.go` checks a boundary where `normal-19.txt` was received after `last.txt`, rejection of empty records and unfinished hooks, and completion per duplicate receipt under noWait.
+- The 120ms quiet period is an observation condition, not a guarantee that the OS will send no further notifications.
+- If a late valid event replaces the isolated change, the test does not treat it as success and fails within the completion wait time limit shared by the batch observation and the isolated change.
+- The time limit is 30 seconds for [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md) and 10 seconds for [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md).
 
 ## Event-loss notification verification
 
@@ -29,9 +39,11 @@ go test -count=1 -v -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNot
 go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify'
 ```
 
-What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) and [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md) documents. How notification descendants are cleaned up on macOS, Linux, and Windows is in [Descendant cleanup by platform](scenarios/event-loss-notification-cli.md#descendant-cleanup-by-platform).
+- What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) and [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md) documents.
+- How notification descendants are cleaned up on macOS, Linux, and Windows is in [Descendant cleanup by platform](scenarios/event-loss-notification-cli.md#descendant-cleanup-by-platform).
 
-The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./internal/config/yaml` actually runs decoded structured commands and checks that environment variables are passed verbatim, the `dir` working directory, and compatibility with existing configurations. The notification's environment variables and its contract of a fixed 5-second run limit and at most 20 seconds of cancellation cleanup follow [Event-loss notification](../../USAGE.md#event-loss-notification).
+- The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./internal/config/yaml` actually runs decoded structured commands and checks that environment variables are passed verbatim, the `dir` working directory, and compatibility with existing configurations.
+- The notification's environment variables and its contract of a fixed 5-second run limit and at most 20 seconds of cancellation cleanup follow [Event-loss notification](../../USAGE.md#event-loss-notification).
 
 ## Kinds of loss verification
 
@@ -42,11 +54,14 @@ The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./int
 
 ### Reproducing the injection smoke test
 
-Reproduce the injection smoke test from the issue report with the commands below. Replace `<issue report directory>` with the path that holds `smoke.sh` and the overlay test file.
+- Reproduce the injection smoke test from the issue report with the commands below.
+
+Replace `<issue report directory>` with the path that holds `smoke.sh` and the overlay test file.
 
 ```sh
 sh <issue report directory>/smoke.sh macos
 sh <issue report directory>/smoke.sh linux
 ```
 
-`TestControlledLossNotificationSmoke` checks the four option combinations and that fatal errors other than loss do not trigger the notification. The script uses a Go overlay and temporary constructor injection and does not modify the repository source.
+- `TestControlledLossNotificationSmoke` checks the four option combinations and that fatal errors other than loss do not trigger the notification.
+- The script uses a Go overlay and temporary constructor injection and does not modify the repository source.

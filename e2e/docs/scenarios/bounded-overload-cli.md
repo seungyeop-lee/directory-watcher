@@ -2,7 +2,8 @@
 
 🇺🇸 English | 🇰🇷 [한국어](bounded-overload-cli.ko.md)
 
-While the start hook is running and the change hook therefore cannot run, the test feeds more valid create events than the queue limit (256). Checks that the watcher then logs the watch target and the cause, exits abnormally on its own, and cleans up the hook process tree.
+- While the start hook is running and the change hook therefore cannot run, the test feeds more valid create events than the queue limit (256).
+- Checks that the watcher then logs the watch target and the cause, exits abnormally on its own, and cleans up the hook process tree.
 
 ## What it checks and success criteria
 
@@ -10,7 +11,8 @@ While the start hook is running and the change hook therefore cannot run, the te
 - The watcher log must contain `dispatch queue full (capacity 256)` together with the quoted watch folder path.
 - The parent, child, and grandchild processes of the start hook must all be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)). This scenario does not check graceful completion judged by `complete` after `signal`.
 
-This saturation is a saturation of the application queue. How it differs from an OS overflow is in [Kinds of loss verification](../reliability.md#kinds-of-loss-verification).
+- This saturation is a saturation of the application queue.
+- How it differs from an OS overflow is in [Kinds of loss verification](../reliability.md#kinds-of-loss-verification).
 
 ## Configuration
 
@@ -38,11 +40,14 @@ sequenceDiagram
     testCode->>startTree: wait for absence (up to 5s)
 ```
 
-Files are created back to back with no interval. The run result is logged as `actual application overload: 300 creates ...` with the elapsed time and the exit result.
+- Files are created back to back with no interval.
+- The run result is logged as `actual application overload: 300 creates ...` with the elapsed time and the exit result.
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestBoundedOverloadCLI$' ./e2e/scenarios
@@ -50,7 +55,8 @@ go run ./e2e/linux -- -run '^TestBoundedOverloadCLI$'
 make e2e-windows ARGS="-- -run '^TestBoundedOverloadCLI$'"
 ```
 
-Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 

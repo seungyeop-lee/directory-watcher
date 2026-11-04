@@ -2,7 +2,8 @@
 
 🇺🇸 English | 🇰🇷 [한국어](start-hook-shutdown-modes.ko.md)
 
-While the start hook runs a real parent, child, and grandchild process tree, a change event and a shutdown signal arrive. Checks, in the four `noWait`·`interruptible` combinations, that the start hook is replaced or kept, and that all processes complete gracefully on shutdown.
+- While the start hook runs a real parent, child, and grandchild process tree, a change event and a shutdown signal arrive.
+- Checks, in the four `noWait`·`interruptible` combinations, that the start hook is replaced or kept, and that all processes complete gracefully on shutdown.
 
 ## What it checks and success criteria
 
@@ -57,11 +58,13 @@ sequenceDiagram
     end
 ```
 
-`during-start.txt` is created as an empty file.
+- `during-start.txt` is created as an empty file.
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestStartHookShutdownModes$' ./e2e/scenarios
@@ -69,7 +72,9 @@ go run ./e2e/linux -- -run '^TestStartHookShutdownModes$'
 make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 ```
 
-To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestStartHookShutdownModes$/^noWait=true$/^interruptible=false$'`. Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestStartHookShutdownModes$/^noWait=true$/^interruptible=false$'`.
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 
 ## Related code
 

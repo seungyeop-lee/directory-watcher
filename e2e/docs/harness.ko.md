@@ -2,7 +2,7 @@
 
 🇺🇸 [English](harness.md) | 🇰🇷 한국어
 
-아래 표와 절차의 경로는 `e2e/` 디렉터리를 기준으로 합니다.
+- 아래 표와 절차의 경로는 `e2e/` 디렉터리를 기준으로 합니다.
 
 ## 책임별 코드 위치
 
@@ -20,7 +20,12 @@
 | `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램 |
 | `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
 
-바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다. 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다. Windows의 `processObserver`는 기록된 PID를 처음 관찰할 때 연 handle을 해당 시나리오의 정리가 끝날 때까지 유지하고, 강제 정리는 그 시나리오의 기록에 있는 `hookrec` handle만 종료합니다. 기록된 프로세스는 모두 `hookrec`이므로, 처음 관찰할 때 이미 이번 실행의 `hookrec`이 아닌 프로그램이 그 PID를 쓰고 있으면 기록된 프로세스는 끝났고 PID가 재사용된 것으로 보고 사라졌다고 판정합니다. 프로그램을 확인하지 못하면 handle을 유지하고 그 handle로 생존을 판정합니다. 따라서 다른 시나리오나 다른 워크트리의 보호 트리는 정리 대상이 아닙니다.
+- 바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다.
+- 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다.
+- Windows의 `processObserver`는 기록된 PID를 처음 관찰할 때 연 handle을 해당 시나리오의 정리가 끝날 때까지 유지하고, 강제 정리는 그 시나리오의 기록에 있는 `hookrec` handle만 종료합니다.
+- 기록된 프로세스는 모두 `hookrec`이므로, 처음 관찰할 때 이미 이번 실행의 `hookrec`이 아닌 프로그램이 그 PID를 쓰고 있으면 기록된 프로세스는 끝났고 PID가 재사용된 것으로 보고 사라졌다고 판정합니다.
+- 프로그램을 확인하지 못하면 handle을 유지하고 그 handle로 생존을 판정합니다.
+- 따라서 다른 시나리오나 다른 워크트리의 보호 트리는 정리 대상이 아닙니다.
 
 ## 시나리오와 지원 코드의 대응
 
@@ -40,7 +45,8 @@
 | `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram` | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 쓰는 기록된 PID의 부재 판정 | `NewScenario`, `AwaitDelayedHooksGone` |
 | `TestDelayedHooksGoneFailsWhileHookRuns` | `harness/process_observer_windows_test.go` | Windows에서 실행 중인 기록된 hook이 있을 때 지연 hook 부재 대기의 실패 | `NewScenario`, `Await`, `DelayedHookBegun`, `AwaitDelayedHooksGone` |
 
-시나리오 이름의 링크는 확인 내용과 성공 조건, 진행 순서 다이어그램, 하위 테스트, 실행 명령을 설명하는 시나리오 문서로 이어집니다. 여러 시나리오에 걸친 수신 경계 판정과 유실 검증의 한계는 [경합·과부하·유실 검증](reliability.ko.md)에, Windows 시나리오의 실행과 CI 확인은 [Windows E2E 실행과 CI 결과 확인](windows.ko.md)에 있습니다.
+- 시나리오 이름의 링크는 확인 내용과 성공 조건, 진행 순서 다이어그램, 하위 테스트, 실행 명령을 설명하는 시나리오 문서로 이어집니다.
+- 여러 시나리오에 걸친 수신 경계 판정과 유실 검증의 한계는 [경합·과부하·유실 검증](reliability.ko.md)에, Windows 시나리오의 실행과 CI 확인은 [Windows E2E 실행과 CI 결과 확인](windows.ko.md)에 있습니다.
 
 ## 새 시나리오 작성
 
@@ -82,4 +88,10 @@ func TestCreateAnotherFile(t *testing.T) {
 
 ## `hookrec` 프로세스 트리와 지연 hook
 
-장시간 프로세스는 `s.Hook("--depth=2")`를 시작·변경 hook에 넣습니다. 부모는 자식, 자식은 손자를 실제로 실행합니다. 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다. 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `AwaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다. 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다. 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다. `--cancel-exit-code=<코드>`를 더하면 `CANCEL`을 기록한 뒤 그 코드로 끝나며, 셸의 `||`처럼 앞 프로그램의 실패로 다음 프로그램을 시작하는 명령 목록에 씁니다.
+- 장시간 프로세스는 `s.Hook("--depth=2")`를 시작·변경 hook에 넣습니다.
+- 부모는 자식, 자식은 손자를 실제로 실행합니다.
+- 세대 식별자는 부모 PID이며 각 프로세스는 `세대|PID|깊이|상태`를 기록합니다.
+- 부모의 `ready`는 자식의 `ready` 뒤에 기록되므로 `AwaitReadyGenerations`는 부모의 `ready`로 세대 전체의 준비를 판정합니다.
+- 종료 신호를 받으면 150ms 처리 지연과 자식의 정상 종료를 기다린 뒤 `complete`를 남깁니다.
+- 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다.
+- `--cancel-exit-code=<코드>`를 더하면 `CANCEL`을 기록한 뒤 그 코드로 끝나며, 셸의 `||`처럼 앞 프로그램의 실패로 다음 프로그램을 시작하는 명령 목록에 씁니다.

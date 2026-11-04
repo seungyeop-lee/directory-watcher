@@ -2,7 +2,9 @@
 
 🇺🇸 English | 🇰🇷 [한국어](fast-inflow-slow-hook.ko.md)
 
-While a change hook that takes 80ms is running, file changes pour in at 10ms intervals. Checks, in the four `noWait`·`interruptible` combinations, that processing reaches the last valid change received. It also checks that excluded files do not run the hook, and that after shutdown no new hook runs and the hook processes are gone.
+- While a change hook that takes 80ms is running, file changes pour in at 10ms intervals.
+- Checks, in the four `noWait`·`interruptible` combinations, that processing reaches the last valid change received.
+- It also checks that excluded files do not run the hook, and that after shutdown no new hook runs and the hook processes are gone.
 
 ## What it checks and success criteria
 
@@ -68,7 +70,9 @@ sequenceDiagram
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestFastInflowSlowHook$' ./e2e/scenarios
@@ -76,7 +80,9 @@ go run ./e2e/linux -- -run '^TestFastInflowSlowHook$'
 make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ```
 
-To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestFastInflowSlowHook$/^noWait=true$/^interruptible=false$'`. Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
+- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestFastInflowSlowHook$/^noWait=true$/^interruptible=false$'`.
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 

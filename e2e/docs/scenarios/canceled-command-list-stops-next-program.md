@@ -2,7 +2,8 @@
 
 🇺🇸 English | 🇰🇷 [한국어](canceled-command-list-stops-next-program.ko.md)
 
-On Windows, a start hook that is a `cmd` command list is canceled while its first program runs. Checks that the next program, which `cmd.exe` starts after the first CTRL+BREAK, also gets CTRL+BREAK and ends.
+- On Windows, a start hook that is a `cmd` command list is canceled while its first program runs.
+- Checks that the next program, which `cmd.exe` starts after the first CTRL+BREAK, also gets CTRL+BREAK and ends.
 
 ## What it checks and success criteria
 
@@ -12,7 +13,7 @@ On Windows, a start hook that is a `cmd` command list is canceled while its firs
 
 ## Configuration
 
-The target `onStartWatch` is one `cmd` command line, `<first> <separator> <second>`. The default shell `cmd` runs it.
+The target `onStartWatch` is one `cmd` command line, `<first> <separator> <second>`, and the default shell `cmd` runs it.
 
 | Program | Command |
 |---|---|
@@ -59,13 +60,16 @@ sequenceDiagram
 
 ## Running
 
-This test runs only on Windows. Run from the repository root on the UTM Windows VM.
+- This test runs only on Windows.
+
+Run from the repository root on the UTM Windows VM.
 
 ```sh
 make e2e-windows ARGS="-- -run '^TestCanceledCommandListStopsNextProgram$'"
 ```
 
-Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 
 ## Related code
 

@@ -2,7 +2,9 @@
 
 🇺🇸 [English](fast-inflow-slow-hook.md) | 🇰🇷 한국어
 
-80ms 걸리는 변경 hook이 실행되는 동안 파일 변경이 10ms 간격으로 몰려 들어올 때, `noWait`·`interruptible` 네 조합에서 마지막으로 수신한 유효 변경까지 처리되는지 확인합니다. 제외 파일이 hook을 실행하지 않는지, 종료 뒤에 hook이 새로 실행되지 않고 hook 프로세스가 사라지는지도 확인합니다.
+- 80ms 걸리는 변경 hook이 실행되는 동안 파일 변경이 10ms 간격으로 몰려 들어옵니다.
+- 이때 `noWait`·`interruptible` 네 조합에서 마지막으로 수신한 유효 변경까지 처리되는지 확인합니다.
+- 제외 파일이 hook을 실행하지 않는지, 종료 뒤에 hook이 새로 실행되지 않고 hook 프로세스가 사라지는지도 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -68,7 +70,9 @@ sequenceDiagram
 
 ## 실행
 
-저장소 루트에서 실행합니다. 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+- 저장소 루트에서 실행합니다.
+
+차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestFastInflowSlowHook$' ./e2e/scenarios
@@ -76,7 +80,9 @@ go run ./e2e/linux -- -run '^TestFastInflowSlowHook$'
 make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ```
 
-하위 테스트 하나만 실행하려면 `-run '^TestFastInflowSlowHook$/^noWait=true$/^interruptible=false$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다. UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다. 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
+- 하위 테스트 하나만 실행하려면 `-run '^TestFastInflowSlowHook$/^noWait=true$/^interruptible=false$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
+- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+- 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 ## 관련 코드
 

@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](normal-changes-do-not-notify.ko.md)
 
-With `global.lifeCycle.onError` configured, checks for both values of `noWait` that the loss notification does not run on normal changes or on replacement by debounce.
+- With `global.lifeCycle.onError` configured, checks for both values of `noWait` that the loss notification does not run on normal changes or on replacement by debounce.
 
 ## What it checks and success criteria
 
@@ -51,7 +51,9 @@ sequenceDiagram
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestNormalChangesDoNotNotify$' ./e2e/scenarios
@@ -59,7 +61,8 @@ go run ./e2e/linux -- -run '^TestNormalChangesDoNotNotify$'
 make e2e-windows ARGS="-- -run '^TestNormalChangesDoNotNotify$'"
 ```
 
-To run a single subtest, specify it as in `-run '^TestNormalChangesDoNotNotify$/^noWait=true$'`. Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run a single subtest, specify it as in `-run '^TestNormalChangesDoNotNotify$/^noWait=true$'`.
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
 
 ## Related code
 

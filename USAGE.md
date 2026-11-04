@@ -2,7 +2,7 @@
 
 🇺🇸 English | 🇰🇷 [한국어](USAGE.ko.md)
 
-This guide assumes you have installed Directory Watcher as described in the [README](README.md#installation).
+- This guide assumes you have installed Directory Watcher as described in the [README](README.md#installation).
 
 ## Command-line options
 
@@ -33,11 +33,17 @@ docker run --rm \
 - Hooks run inside the container. Mount each directory that a hook's `dir` names at the same path, as in `-v "$PWD/<dir>:/<dir>"`; otherwise the hook's commands fail. `dir: .` is `/` in the container.
 - Hook commands can use only the tools in the image. The image is based on Alpine Linux and includes `bash`, `curl`, `git`, `jq`, `make`, and `openssh-client`.
 
-**Known issue: delete events with bind mounts.** When you delete files on the host in a directory that is bind-mounted into a container, the delete event may not always be detected. This is a known issue with the underlying file system notification library (fsnotify). For details, see [fsnotify/fsnotify#592](https://github.com/fsnotify/fsnotify/issues/592).
+- **Known issue: delete events with bind mounts.** When you delete files on the host in a directory that is bind-mounted into a container, the delete event may not always be detected.
+  - This is a known issue with the underlying file system notification library (fsnotify).
+  - For details, see [fsnotify/fsnotify#592](https://github.com/fsnotify/fsnotify/issues/592).
 
 ## config.yml
 
-The `config.yml` file defines the directories to watch and the commands to run for changes in each directory. You can also define commands to run when watching starts or stops. For a practical example, see [`config.example.yml`](config.example.yml). [`directory-watcher.schema.json`](directory-watcher.schema.json) describes the same format as a JSON schema. Running `make run` from the repository root first creates the folders this example watches and then starts the watcher with the example.
+- The `config.yml` file defines the directories to watch and the commands to run for changes in each directory.
+- You can also define commands to run when watching starts or stops.
+- For a practical example, see [`config.example.yml`](config.example.yml).
+- [`directory-watcher.schema.json`](directory-watcher.schema.json) describes the same format as a JSON schema.
+- Running `make run` from the repository root first creates the folders this example watches and then starts the watcher with the example.
 
 ```yaml
 shell: [ shell that runs hook commands (sh, cmd, powershell), default is sh on Unix and cmd on Windows ]
@@ -78,25 +84,35 @@ watchTargets:
       interruptible: [ whether to stop the currently running command and execute a new command, default is false ]
 ```
 
-For each change, global `onBeforeChange`, the target's `onChange`, and global `onAfterChange` run in that order. The commands of a hook run one after another. If a command fails, the remaining commands of that run are skipped, including the later hooks of the same change. The failure is logged as an `[ERROR]` line, which the default log level shows:
+- For each change, global `onBeforeChange`, the target's `onChange`, and global `onAfterChange` run in that order.
+- The commands of a hook run one after another.
+- If a command fails, the remaining commands of that run are skipped, including the later hooks of the same change.
+
+The failure is logged as an `[ERROR]` line, which the default log level shows:
 
 ```text
 <target> hook command failed, skipping remaining commands: command <command>: <error>
 ```
 
-`<target>` is the last element of the target's `path`. The form of `<command>` is in [Shell that runs hook commands](#shell-that-runs-hook-commands). A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
+- `<target>` is the last element of the target's `path`.
+- The form of `<command>` is in [Shell that runs hook commands](#shell-that-runs-hook-commands).
+- A command stopped because a new change cancelled its run (`interruptible: true`) or because watching stopped is not a failure and is not logged.
 
-If a command of global `onStartWatch` or global `onFinishWatch` fails, the remaining commands of that hook are skipped. The failure is logged as an `[ERROR]` line without the target or hook name:
+- If a command of global `onStartWatch` or global `onFinishWatch` fails, the remaining commands of that hook are skipped.
+
+The failure is logged as an `[ERROR]` line without the target or hook name:
 
 ```text
 command <command>: <error>
 ```
 
-Watching still starts after a global `onStartWatch` failure. A global `onFinishWatch` failure does not change the exit code: it stays 0 after a shutdown signal and 1 after a fatal error.
+- Watching still starts after a global `onStartWatch` failure.
+- A global `onFinishWatch` failure does not change the exit code: it stays 0 after a shutdown signal and 1 after a fatal error.
 
 ### Shell that runs hook commands
 
-Every hook command runs in the shell selected by `shell`: global hooks, target hooks, `onError`, structured `cmd`, and each entry of a command list. Quotes, variable expansion, command substitution, `&&`, and redirection follow that shell's rules, and a command that ends with a nonzero exit code is a failure.
+- Every hook command runs in the shell selected by `shell`: global hooks, target hooks, `onError`, structured `cmd`, and each entry of a command list.
+- Quotes, variable expansion, command substitution, `&&`, and redirection follow that shell's rules, and a command that ends with a nonzero exit code is a failure.
 
 | `shell` | How it runs | Available on | Reference that replaces `{{.Path}}` |
 |---|---|---|---|
@@ -104,7 +120,8 @@ Every hook command runs in the shell selected by `shell`: global hooks, target h
 | `cmd` | `cmd.exe /d /v:on /s /c "<command>"` | Windows | `!DW_PATH_ARG!` |
 | `powershell` | `powershell.exe -NoProfile -NonInteractive -Command <command>` (Windows PowerShell) | Windows | `${env:DW_PATH_ARG}` |
 
-Without `shell`, hooks run in `sh` on Unix and in `cmd` on Windows. If the value is not in the list, or if `cmd` or `powershell` is selected on Unix, the watcher runs no hook, prints `Error: unknown shell "bash": must be one of sh, cmd, powershell` or `Error: shell "cmd" runs only on Windows`, and exits with code 1.
+- Without `shell`, hooks run in `sh` on Unix and in `cmd` on Windows.
+- If the value is not in the list, or if `cmd` or `powershell` is selected on Unix, the watcher runs no hook, prints `Error: unknown shell "bash": must be one of sh, cmd, powershell` or `Error: shell "cmd" runs only on Windows`, and exits with code 1.
 
 ```yaml
 shell: powershell
@@ -115,12 +132,16 @@ watchTargets:
         - Write-Output "changed: {{.Path}}"
 ```
 
-A configuration file is meant for one OS, so write its hooks in the syntax of that OS's shell. To use the watcher on several OSes, keep a configuration file per OS or call an OS-specific script from the hook. To run a single hook in another shell, wrap it in the command yourself, as in `bash -c "..."`.
+- A configuration file is meant for one OS, so write its hooks in the syntax of that OS's shell.
+- To use the watcher on several OSes, keep a configuration file per OS or call an OS-specific script from the hook.
+- To run a single hook in another shell, wrap it in the command yourself, as in `bash -c "..."`.
 
 - `cmd` runs with delayed expansion (`/v:on`), so a `!` in a command is read as part of a `!name!` variable reference, and an unpaired `!` is removed.
 - Windows PowerShell 5.1 has no `&&`. To run a command only after the previous one succeeded, write `command1; if ($?) { command2 }`.
 
-The `<command>` in a failure log shows how the shell was run together with the command after template variables were replaced with references. For a command with template variables, `(with values: ...)` follows with the command that has the values written in place of the variables, so you can see which file the command failed on. This command is only logged, never run.
+- The `<command>` in a failure log shows how the shell was run together with the command after template variables were replaced with references.
+  - For a command with template variables, `(with values: ...)` follows with the command that has the values written in place of the variables, so you can see which file the command failed on.
+  - This command is only logged, never run.
 
 ```text
 command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit status 1
@@ -133,7 +154,10 @@ command /bin/sh -c cat "$DW_PATH" (with values: cat test/dir2/b.txt): exit statu
 | O   | Specified dir location                    | Specified dir location  |
 | X   | Program execution location                | Specified path location |
 
-Just before a command runs, its working directory is checked. If the working directory does not exist or is not a directory, the command does not run and the remaining commands of that hook are skipped, as for any other failed command. The failure log then carries the working directory in place of `<error>`, in the form below. In the failure log of global `onError`, `onError notification failed: ` is followed by `command <command>: ` and this text.
+- Just before a command runs, its working directory is checked.
+- If the working directory does not exist or is not a directory, the command does not run and the remaining commands of that hook are skipped, as for any other failed command.
+- The failure log then carries the working directory in place of `<error>`, in the form below.
+  - In the failure log of global `onError`, `onError notification failed: ` is followed by `command <command>: ` and this text.
 
 ```text
 working directory <working directory>: <cause>
@@ -151,21 +175,30 @@ working directory <working directory>: <cause>
 | {{.DirAbsPath}} | `DW_DIR_ABS_PATH`    | Absolute path of the directory where the event occurred | /Users/example/directory-watcher/test/dir2                   |
 | {{.Event}}      | `DW_EVENT`           | Event type (C: create, U: update, D: delete)            | C                                                            |
 
-The watcher puts each value in the environment variable of the table and replaces the variable in the command with a shell reference that reads that environment variable. The reference for each shell is in the table of [Shell that runs hook commands](#shell-that-runs-hook-commands). File names never enter the command string, so a name that contains `;`, `&`, or `$(...)` never runs as a command.
+- The watcher puts each value in the environment variable of the table and replaces the variable in the command with a shell reference that reads that environment variable.
+- The reference for each shell is in the table of [Shell that runs hook commands](#shell-that-runs-hook-commands).
+- File names never enter the command string, so a name that contains `;`, `&`, or `$(...)` never runs as a command.
 
-Write variables outside quotes. A variable outside quotes is passed as one argument, even when its value contains spaces. Inside quotes, variables behave as follows:
+- Write variables outside quotes.
+- A variable outside quotes is passed as one argument, even when its value contains spaces.
+
+Inside quotes, variables behave as follows:
 
 - In `sh`, inside single quotes as in `'{{.Path}}'`, the literal text `"$DW_PATH"` is passed instead of the value.
 - In `sh` and `cmd`, inside double quotes as in `"{{.Path}}"`, the reference ends up outside quotes, so the value can be split into several arguments at spaces.
 - `powershell` expands the value inside double quotes as well, as in `"changed: {{.Path}}"`, and keeps the literal text `${env:DW_PATH_ARG}` inside single quotes.
 
-The references of `cmd` and `powershell` read an environment variable whose name ends in `_ARG`, such as `DW_PATH_ARG`. It holds the value changed so that the program reads the original value from its command line, and the original value stays in the environment variable without the suffix, such as `DW_PATH`. When a value that ends in `\`, such as `C:\`, is wrapped in double quotes, the program reads the closing quote as a literal character, so the trailing `\` is doubled.
+- The references of `cmd` and `powershell` read an environment variable whose name ends in `_ARG`, such as `DW_PATH_ARG`.
+  - That variable holds the value changed so that the program reads the original value from its command line, and the original value stays in the environment variable without the suffix, such as `DW_PATH`.
+- When a value that ends in `\`, such as `C:\`, is wrapped in double quotes, the program reads the closing quote as a literal character, so the trailing `\` is doubled.
 
 - `cmd` wraps the value in double quotes and doubles the trailing `\`. Built-in `cmd` commands such as `echo` show these quotes and backslashes as they are.
 - `powershell` doubles the trailing `\` only when Windows PowerShell 5.1 wraps the argument in double quotes, that is, when the value contains whitespace. A value with whitespace that ends in `\` then shows one extra `\` at its end in a cmdlet or a string.
 - Windows PowerShell 5.1 does not pass an empty string argument to a program. In `powershell`, an empty value outside quotes, such as `{{.ExtName}}` of a file without an extension, leaves the program with one argument fewer.
 
-If `path` is a link to a folder, the folder it points to is watched. The variables above then hold paths based on the fully resolved path instead of `path`. `exclude` patterns exclude the same locations in the linked folder.
+- If `path` is a link to a folder, the folder it points to is watched.
+  - The variables above then hold paths based on the fully resolved path instead of `path`.
+  - `exclude` patterns exclude the same locations in the linked folder.
 
 ## waitMillisecond and noWait
 
@@ -175,7 +208,9 @@ If `path` is a link to a folder, the folder it points to is watched. The variabl
 
 ## Event-loss notification
 
-`global.lifeCycle.onError` is optional and uses the same command list and structured `dir`/`cmd` format as other hooks. It runs at most once per watcher run, only when the first fatal error is an event loss: a target's dispatch queue is full (`dispatch queue full`) or the OS reports an event overflow. Other fatal errors, normal termination, and debounce replacement do not notify.
+- `global.lifeCycle.onError` is optional and uses the same command list and structured `dir`/`cmd` format as other hooks.
+- It runs at most once per watcher run, only when the first fatal error is an event loss: a target's dispatch queue is full (`dispatch queue full`) or the OS reports an event overflow.
+- Other fatal errors, normal termination, and debounce replacement do not notify.
 
 Error context is passed as environment variables, never interpolated into command templates:
 
@@ -187,11 +222,19 @@ Error context is passed as environment variables, never interpolated into comman
 | `DW_ERROR_MESSAGE` | Complete fatal error message, in the form `watch target "<target>": <cause>` |
 | `DW_ERROR_POSSIBLE_LOSS` | `true` (possible loss, not a lost-event count) |
 
-The notification command also runs in the configured shell, so read the environment variables with that shell's syntax: for example `printf '%s\n' "$DW_ERROR_MESSAGE"` in `sh`, `echo !DW_ERROR_MESSAGE!` in `cmd`, and `Write-Output $env:DW_ERROR_MESSAGE` in `powershell`. In `cmd`, use `!DW_ERROR_MESSAGE!` rather than `%DW_ERROR_MESSAGE%`, which lets a `&` in the value split the command. File-event template variables are not available for this hook. A structured `dir` selects its working directory; without it, the command uses the program execution directory.
+- The notification command also runs in the configured shell, so read the environment variables with that shell's syntax: for example `printf '%s\n' "$DW_ERROR_MESSAGE"` in `sh`, `echo !DW_ERROR_MESSAGE!` in `cmd`, and `Write-Output $env:DW_ERROR_MESSAGE` in `powershell`.
+  - In `cmd`, use `!DW_ERROR_MESSAGE!` rather than `%DW_ERROR_MESSAGE%`, which lets a `&` in the value split the command.
+- File-event template variables are not available for this hook.
+- A structured `dir` selects its working directory; without it, the command uses the program execution directory.
 
-After the first fatal error, no new run of normal hooks starts on any target. The notification has an independent, fixed 5-second execution timeout, followed by up to 20 seconds of cancellation cleanup (at most 25 seconds total), regardless of normal-hook cancellation. A notification failure or timeout is logged and never replaces the original fatal error; the CLI still exits nonzero for that original error. Normal finish hooks still run after cancellation, with their existing behavior.
+- After the first fatal error, no new run of normal hooks starts on any target.
+- The notification has an independent, fixed 5-second execution timeout, followed by up to 20 seconds of cancellation cleanup (at most 25 seconds total), regardless of normal-hook cancellation.
+- A notification failure or timeout is logged and never replaces the original fatal error; the CLI still exits nonzero for that original error.
+- Normal finish hooks still run after cancellation, with their existing behavior.
 
-After each notification command completes, fails, or times out, the processes it started that are still running are ended within the same cleanup limit. On Windows, if the watcher cannot prepare a notification command so that these processes can be ended, that command does not run and the failure is logged. Processes started by normal hooks are ended only when the hook is canceled ([Overload and shutdown](#overload-and-shutdown)).
+- After each notification command completes, fails, or times out, the processes it started that are still running are ended within the same cleanup limit.
+  - On Windows, if the watcher cannot prepare a notification command so that these processes can be ended, that command does not run and the failure is logged.
+- Processes started by normal hooks are ended only when the hook is canceled ([Overload and shutdown](#overload-and-shutdown)).
 
 ## Overload and shutdown
 
@@ -205,7 +248,7 @@ After each notification command completes, fails, or times out, the processes it
 - What the Windows E2E checks about stopping canceled hooks is listed in [Windows E2E](e2e/docs/windows.md#hook-cancellation-checks).
 - Filesystem actions do not map one-to-one to notifications. Linux reports an OS event overflow, which stops processing like a full dispatch queue; macOS does not report one. Application bounds do not guarantee detection of every OS-level loss. See [E2E scenarios and limits](e2e/docs/reliability.md#race-and-overload-verification).
 
-The order of these steps is drawn in the [README diagrams](README.md#how-it-works).
+- The order of these steps is drawn in the [README diagrams](README.md#how-it-works).
 
 ## Default exclusion
 
@@ -214,10 +257,10 @@ The order of these steps is drawn in the [README diagrams](README.md#how-it-work
 
 ## Excluding paths with exclude
 
-`option.exclude` lists path patterns. A file or folder that matches is not watched:
-
-- A matched folder and everything below it are not added to the watch list, whether the folder existed when watching started or was created later. Excluding a large folder such as `node_modules` adds no watches for anything in it.
-- Creating, modifying, or deleting a matched file does not run hooks.
+- `option.exclude` lists path patterns.
+- A file or folder that matches is not watched:
+  - A matched folder and everything below it are not added to the watch list, whether the folder existed when watching started or was created later. Excluding a large folder such as `node_modules` adds no watches for anything in it.
+  - Creating, modifying, or deleting a matched file does not run hooks.
 
 ```yaml
 watchTargets:
@@ -236,11 +279,14 @@ watchTargets:
 - `!` also cannot watch a name that [default exclusion](#default-exclusion) excludes.
 - Quote each pattern. Unquoted, YAML reads a value that starts with `*` or `!` as its own syntax.
 
-If a pattern is malformed, the watcher runs no hook, prints an error such as `Error: watchTargets[0].option.exclude[1]: invalid pattern "[a"`, and exits with code 1.
+- If a pattern is malformed, the watcher runs no hook, prints an error such as `Error: watchTargets[0].option.exclude[1]: invalid pattern "[a"`, and exits with code 1.
 
 ### Stopping a hook from rerunning itself
 
-When a hook writes a file inside the target's `path`, that write is a change too, so the hook runs again, writes again, and keeps running. Add the path the hook writes to `exclude`. In this example, `onChange` writes `site/build.log`, and `exclude: ['build.log']` stops that write from running the hook:
+- When a hook writes a file inside the target's `path`, that write is a change too, so the hook runs again, writes again, and keeps running.
+- Add the path the hook writes to `exclude`.
+
+In this example, `onChange` writes `site/build.log`, and `exclude: ['build.log']` stops that write from running the hook:
 
 ```yaml
 watchTargets:
@@ -254,11 +300,13 @@ watchTargets:
         - 'build.log'
 ```
 
-With `interruptible: false`, other files changed while the hook runs still run the hook after it finishes.
+- With `interruptible: false`, other files changed while the hook runs still run the hook after it finishes.
 
 ### Moving from excludeDir and excludeSuffix
 
-Version 3 removed `excludeDir` and `excludeSuffix`. If a target's `option` still has either, the watcher runs no hook, prints the error below, and exits with code 1:
+- Version 3 removed `excludeDir` and `excludeSuffix`.
+
+If a target's `option` still has either, the watcher runs no hook, prints the error below, and exits with code 1:
 
 ```text
 Error: watchTargets[0].option.excludeDir is no longer supported; use option.exclude (see USAGE "Moving from excludeDir and excludeSuffix")
@@ -281,7 +329,8 @@ For a target with `path: 'site'`:
 
 ## Overlapping target paths
 
-When two watch targets have the same `path`, or one target's `path` is a parent folder of the other's, both targets watch the overlapping folders. The watcher runs such a config without an error or warning.
+- When two watch targets have the same `path`, or one target's `path` is a parent folder of the other's, both targets watch the overlapping folders.
+- The watcher runs such a config without an error or warning.
 
 - One change in an overlapping folder runs the hooks of every target that watches that folder.
 - For example, when you watch both `src` and `src/api`, creating `src/api/a.txt` runs the `onChange` of both targets.
@@ -291,7 +340,9 @@ When two watch targets have the same `path`, or one target's `path` is a parent 
 - Each target adds the overlapping folders to its own watch list, so they use OS watch resources, such as inotify watches on Linux or open files on macOS, once per target.
 - When one target's hook writes a file inside another target's `path`, that write runs the other target's hooks.
 
-To keep a parent target from watching a child target's folder, add that folder to the parent target's `exclude`. With the config below, a change in `src/api` runs only the `src/api` target's hooks, and the `src` target does not add `src/api` to its watch list:
+- To keep a parent target from watching a child target's folder, add that folder to the parent target's `exclude`.
+
+With the config below, a change in `src/api` runs only the `src/api` target's hooks, and the `src` target does not add `src/api` to its watch list:
 
 ```yaml
 watchTargets:
@@ -302,7 +353,7 @@ watchTargets:
   - path: src/api
 ```
 
-The pattern is relative to the parent target's `path`, so write `api/**`, not `src/api/**`.
+- The pattern is relative to the parent target's `path`, so write `api/**`, not `src/api/**`.
 
 ## Limitations on folder event detection
 

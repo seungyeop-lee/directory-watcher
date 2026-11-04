@@ -2,7 +2,8 @@
 
 🇺🇸 English | 🇰🇷 [한국어](README.ko.md)
 
-Directory Watcher runs the commands you define when files are created, modified, or deleted in the directories you watch. Use it to rebuild or test code as you edit it, restart a development server when its sources change, or back up files when they change.
+- Directory Watcher runs the commands you define when files are created, modified, or deleted in the directories you watch.
+- Use it to rebuild or test code as you edit it, restart a development server when its sources change, or back up files when they change.
 
 ## Features
 
@@ -47,7 +48,11 @@ Directory Watcher runs the commands you define when files are created, modified,
 
 ### Homebrew
 
-This works on macOS and Linux and needs Homebrew 5.1.14 or later. With an older Homebrew, installing the cask fails with `Unexpected method 'postflight_steps'`. Check the version with `brew --version`, and if it is older, update Homebrew first:
+- This works on macOS and Linux.
+- It needs Homebrew 5.1.14 or later.
+- With an older Homebrew, installing the cask fails with `Unexpected method 'postflight_steps'`.
+
+Check the version with `brew --version`, and if it is older, update Homebrew first:
 
 ```shell
 brew update
@@ -59,7 +64,9 @@ Then install the cask:
 brew install --cask seungyeop-lee/tap/directory-watcher
 ```
 
-If you installed version 2.x with `brew install seungyeop-lee/tap/directory-watcher`, you have the Homebrew formula, which no longer gets new versions. Uninstall it, then install the cask:
+- If you installed version 2.x with `brew install seungyeop-lee/tap/directory-watcher`, you have the Homebrew formula, which no longer gets new versions.
+
+Uninstall the formula, then install the cask:
 
 ```shell
 brew uninstall --formula directory-watcher
@@ -92,7 +99,9 @@ docker run --rm \
   ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
 ```
 
-The container's working directory is `/`, so `path: src` in `config.yml` refers to the mounted `/src`. Hooks run inside the container, so the files and tools they use must be available there. For a known issue with bind mounts, see [Running with Docker](USAGE.md#running-with-docker).
+- The container's working directory is `/`, so `path: src` in `config.yml` refers to the mounted `/src`.
+- Hooks run inside the container, so the files and tools they use must be available there.
+- For a known issue with bind mounts, see [Running with Docker](USAGE.md#running-with-docker).
 
 ### In Dockerfile
 
@@ -102,7 +111,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 ### Releases
 
-Download the executable from the [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest).
+- Download the executable from the [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest).
 
 ## Getting started
 
@@ -133,7 +142,9 @@ Download the executable from the [releases page](https://github.com/seungyeop-le
 
 ## How it works
 
-Global `onStartWatch` runs first. Then each watch target starts on its own and handles its changes independently of the other targets:
+- Global `onStartWatch` runs first.
+
+Then each watch target starts on its own and handles its changes independently of the other targets:
 
 ```mermaid
 flowchart TD
@@ -207,8 +218,9 @@ flowchart TD
 
 ## Development checks
 
-See the [E2E guide](e2e/README.md) for automated macOS, Linux, and Windows checks against the current worktree and instructions for adding scenarios.
+- See the [E2E guide](e2e/README.md) for automated macOS, Linux, and Windows checks against the current worktree and instructions for adding scenarios.
 
 ## License
 
-This project is licensed under the [GPL-3.0 License](LICENSE). See the license file for details.
+- This project is licensed under the [GPL-3.0 License](LICENSE).
+- See the license file for details.

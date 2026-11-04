@@ -2,11 +2,12 @@
 
 🇺🇸 English | 🇰🇷 [한국어](golden-path.ko.md)
 
-Creates, updates, and deletes one file whose name contains characters that shells interpret, and checks that the global and target hooks each run once in the defined order, receive the correct values for the 7 event variables, and never run the file name as a command.
+- Creates, updates, and deletes one file whose name contains characters that shells interpret, and checks that the global and target hooks each run once in the defined order, receive the correct values for the 7 event variables, and never run the file name as a command.
 
 ## What it checks and success criteria
 
-After the watcher shuts down gracefully, the full set of lines in `records.log` must exactly match the order below. A missing line, an extra line, or a different order fails the test.
+- After the watcher shuts down gracefully, the full set of lines in `records.log` must exactly match the order below.
+- A missing line, an extra line, or a different order fails the test.
 
 1. `GLOBAL:onStartWatch`
 2. `TARGET:onStartWatch`
@@ -14,11 +15,15 @@ After the watcher shuts down gracefully, the full set of lines in `records.log` 
 4. `TARGET:onFinishWatch`
 5. `GLOBAL:onFinishWatch`
 
-`<variables>` is `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`. The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of the test file, and `{{.DirPath}}` and `{{.DirAbsPath}}` are both the absolute path of the watch folder. `{{.FileName}}` is the test file name, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
+- `<variables>` is `{{.Path}},{{.AbsPath}},{{.FileName}},{{.ExtName}},{{.DirPath}},{{.DirAbsPath}},{{.Event}}`.
+- The watch path in the configuration is absolute, so `{{.Path}}` and `{{.AbsPath}}` are both the absolute path of the test file, and `{{.DirPath}}` and `{{.DirAbsPath}}` are both the absolute path of the watch folder.
+- `{{.FileName}}` is the test file name, `{{.ExtName}}` is `.txt`, and `{{.Event}}` is `C`, `U`, or `D`.
 
-The test file name is `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`. It contains the syntax that sh, cmd, and powershell use to chain or substitute commands, so a shell that reads the value as a command creates a folder whose name starts with `pwned`, and cmd changes `%OS%` if it expands the value again. After shutdown, neither the run folder nor the watch folder may contain an entry whose name starts with `pwned`.
+- The test file name is `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt`.
+- It contains the syntax that sh, cmd, and powershell use to chain or substitute commands, so a shell that reads the value as a command creates a folder whose name starts with `pwned`, and cmd changes `%OS%` if it expands the value again.
+- After shutdown, neither the run folder nor the watch folder may contain an entry whose name starts with `pwned`.
 
-The watcher must exit with exit code 0 within 10 seconds of receiving the shutdown signal.
+- The watcher must exit with exit code 0 within 10 seconds of receiving the shutdown signal.
 
 ## Configuration
 
@@ -60,7 +65,9 @@ sequenceDiagram
 
 ## Running
 
-Run from the repository root. The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+- Run from the repository root.
+
+The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestGoldenPath$' ./e2e/scenarios
@@ -68,7 +75,8 @@ go run ./e2e/linux -- -run '^TestGoldenPath$'
 make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 ```
 
-Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`. To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 
 ## Related code
 
