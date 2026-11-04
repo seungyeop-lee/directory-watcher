@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -135,10 +134,6 @@ func documentedOptionDefaults(doc string, phrase *regexp.Regexp) map[string][]st
 }
 
 func TestDocumentedOptionDefaultsMatchSchema(t *testing.T) {
-	example, err := os.ReadFile(exampleConfigFile)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// 기본값 문구는 값으로 시작하고, maxWaitMillisecond처럼 규칙으로 정하는 기본값은 값 뒤에 규칙이 붙으므로
 	// 문구의 첫 낱말만 스키마의 default와 비교한다. 정규식의 \w는 ASCII만 받아서 "1000이고"에서도 1000을 뽑는다.
 	docs := []struct {
@@ -151,7 +146,7 @@ func TestDocumentedOptionDefaultsMatchSchema(t *testing.T) {
 	}{
 		{"USAGE.md config.yml block", usageConfigBlock(t, "USAGE.md"), regexp.MustCompile(`default is "?(\w+)`), true},
 		{"USAGE.ko.md config.yml block", usageConfigBlock(t, "USAGE.ko.md"), regexp.MustCompile(`default는 "?(\w+)`), true},
-		{exampleConfigFile + " comments", string(example), regexp.MustCompile(`# default (\w+)`), false},
+		{exampleConfigFile + " comments", readDoc(t, exampleConfigFile), regexp.MustCompile(`# default (\w+)`), false},
 	}
 	schemaDefaults := schemaOptionDefaults(t)
 	for _, doc := range docs {

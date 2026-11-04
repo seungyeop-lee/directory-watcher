@@ -20,13 +20,15 @@ import (
 
 var usageFiles = []string{"USAGE.md", "USAGE.ko.md"}
 
-func readUsage(t *testing.T, file string) string {
+// readDoc은 저장소 루트의 문서 file을 읽는다.
+// Windows의 git은 줄 끝을 CRLF로 바꿔 받을 수 있으므로, 줄 단위로 맞추는 검사가 OS와 관계없이 같도록 줄 끝을 LF로 바꾼다.
+func readDoc(t *testing.T, file string) string {
 	t.Helper()
 	data, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(data)
+	return strings.ReplaceAll(string(data), "\r\n", "\n")
 }
 
 // markdownTable은 문서의 표 하나다. 칸의 앞뒤 공백은 뺀다.
@@ -91,7 +93,7 @@ func TestUsageListsSameHookVariablesAsCode(t *testing.T) {
 		t.Fatal("CheckTemplates accepted an unknown template variable")
 	}
 	for _, file := range usageFiles {
-		doc := readUsage(t, file)
+		doc := readDoc(t, file)
 		names, rest := matchingRows(doc, regexp.MustCompile(`^\{\{\.(\w+)\}\}$`))
 		var got []string
 		for i, name := range names {
@@ -110,7 +112,7 @@ func TestUsageListsSameHookVariablesAsCode(t *testing.T) {
 func TestUsageListsSameErrorVariablesAsCode(t *testing.T) {
 	want := service.ErrorVariableNames()
 	for _, file := range usageFiles {
-		got, _ := matchingRows(readUsage(t, file), regexp.MustCompile("^`(DW_ERROR_\\w+)`$"))
+		got, _ := matchingRows(readDoc(t, file), regexp.MustCompile("^`(DW_ERROR_\\w+)`$"))
 		if !sameSet(got, want) {
 			t.Errorf("%s DW_ERROR_* table = %q, want %q", file, got, want)
 		}
@@ -120,7 +122,7 @@ func TestUsageListsSameErrorVariablesAsCode(t *testing.T) {
 func TestUsageListsSameQueueWarningVariablesAsCode(t *testing.T) {
 	want := service.QueueWarningVariableNames()
 	for _, file := range usageFiles {
-		got, _ := matchingRows(readUsage(t, file), regexp.MustCompile("^`(DW_QUEUE_\\w+)`$"))
+		got, _ := matchingRows(readDoc(t, file), regexp.MustCompile("^`(DW_QUEUE_\\w+)`$"))
 		if !sameSet(got, want) {
 			t.Errorf("%s DW_QUEUE_* table = %q, want %q", file, got, want)
 		}
@@ -134,7 +136,7 @@ func TestUsageListsSameShellsAsCode(t *testing.T) {
 		t.Fatal("LookupShell accepted an unknown shell")
 	}
 	for _, file := range usageFiles {
-		doc := readUsage(t, file)
+		doc := readDoc(t, file)
 		var got []string
 		for _, table := range markdownTables(doc) {
 			if table.header[0] != "`shell`" {
@@ -188,7 +190,7 @@ func eachRemovedKeyNode(c *yamlconfig.Config, visit func(key string, node *yaml.
 
 func TestRemovedKeyErrorsCiteExistingUsageSections(t *testing.T) {
 	headings := map[string]bool{}
-	for _, m := range regexp.MustCompile(`(?m)^#+ (.+)$`).FindAllStringSubmatch(readUsage(t, "USAGE.md"), -1) {
+	for _, m := range regexp.MustCompile(`(?m)^#+ (.+)$`).FindAllStringSubmatch(readDoc(t, "USAGE.md"), -1) {
 		headings[m[1]] = true
 	}
 	parse := func() yamlconfig.Config {

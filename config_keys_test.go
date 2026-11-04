@@ -113,7 +113,7 @@ func usageConfigKeys(t *testing.T, file string, parents map[string]bool) []strin
 // usageConfigBlock은 USAGE의 "## config.yml" 절에 있는 첫 yaml 블록을 돌려준다.
 func usageConfigBlock(t *testing.T, file string) string {
 	t.Helper()
-	_, section, found := strings.Cut(readUsage(t, file), "\n## config.yml\n")
+	_, section, found := strings.Cut(readDoc(t, file), "\n## config.yml\n")
 	_, block, _ := strings.Cut(section, "```yaml\n")
 	block, _, closed := strings.Cut(block, "\n```")
 	if !found || !closed {
