@@ -2,119 +2,141 @@
 
 🇺🇸 [English](README.md) | 🇰🇷 한국어
 
-- Directory Watcher는 감시하는 디렉터리에서 파일이 생성·수정·삭제되거나 폴더가 생성·삭제되면 미리 정해 둔 명령을 실행하는 프로그램입니다.
-- 코드를 고칠 때마다 빌드나 테스트를 다시 실행하거나, 소스가 바뀌면 개발 서버를 재시작하거나, 파일이 바뀔 때 백업을 만드는 작업을 자동화할 수 있습니다.
+- Directory Watcher는 파일이 바뀌면 `config.yml` 하나에 적어 둔 명령을 실행합니다. 테스트 실행, 다시 빌드하기, 개발 서버 재시작은 물론이고 감시를 멈출 때의 정리 작업까지 맡길 수 있습니다.
+
+<!-- hero GIF 자리: 시연 GIF와 그 제작 파일은 promo/에 둔다. -->
+
+## 30초 예제
+
+다음 `config.yml`은 Go 서버의 코드가 바뀌면 서버를 재시작하고, 프론트엔드 소스가 바뀌면 프론트엔드를 다시 빌드합니다.
+
+```yaml
+watchTargets:
+  - path: server
+    lifeCycle:
+      onStartWatch:
+        - go run .
+      onChange:
+        - go run .
+    option:
+      run:
+        interrupt: oldest
+  - path: web/src
+    lifeCycle:
+      onChange:
+        - dir: web
+          cmd: npm run build
+```
+
+- 이 `config.yml`이 있는 디렉터리에서 `directory-watcher`를 실행합니다.
+- 감시를 시작하면 서버가 시작되고, `server` 아래에서 파일을 저장할 때마다 서버를 멈췄다가 다시 시작합니다.
+- `web/src` 아래에서 파일을 저장하면, 여러 파일이 한꺼번에 바뀌어도 `npm run build`가 한 번 실행됩니다.
+- Ctrl+C를 누르면 서버를 멈춘 뒤 watcher도 끝납니다.
 
 ## 기능
 
-### 파일이 바뀌면 명령 실행하기
+### 저장할 때마다 개발 서버를 안전하게 재시작하기
 
-- 여러 디렉터리를 한 번에 감시합니다. 감시 대상마다 `onChange` 명령을 따로 정하고, 전역 `onBeforeChange`와 `onAfterChange` 명령은 모든 대상의 `onChange` 앞뒤에 실행됩니다.
-- 반응할 파일 이벤트(생성, 수정, 삭제)와 폴더 이벤트(생성, 삭제)를 고르고, 경로 패턴으로 파일과 폴더를 감시에서 빼거나 하위 디렉터리를 감시하지 않게 할 수 있습니다.
-- 바뀐 파일이나 폴더의 경로, 이름, 확장자, 디렉터리, 이벤트 종류, 폴더인지 여부를 [템플릿 변수](USAGE.ko.md#실행-명령에서-쓸-수-있는-변수)로 명령에 넘깁니다.
-- `mkdir -p`, 폴더 옮겨 오기, `rm -rf`처럼 폴더가 안의 내용과 함께 생기거나 사라지면, hook은 파일마다 이벤트를 받지 않고 맨 위 폴더의 이벤트 하나를 받습니다. 자세한 내용은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)를 확인하세요.
-- 감시 대상의 경로가 겹치면, 겹치는 폴더의 변경 하나에 대상마다 hook이 실행됩니다. 자세한 내용은 [감시 대상의 경로가 겹칠 때](USAGE.ko.md#감시-대상의-경로가-겹칠-때)를 확인하세요.
+- 파일을 저장할 때마다 실행 중인 서버와 그 서버가 띄운 프로세스를 멈추고, 서버가 끝나기를 기다린 뒤에야 서버를 다시 시작하므로, 이전 서버와 새 서버가 동시에 실행되지 않습니다.
+- 위의 30초 예제가 이 방식으로 서버를 재시작합니다. 자세한 내용은 [run으로 hook 실행하기](USAGE.ko.md#run으로-hook-실행하기)를 확인하세요.
 
-### 몰려드는 변경 다루기
+### 파일 수백 개가 한꺼번에 바뀌어도 한 번만 실행하기
 
-- 기본 동작에서는 이벤트가 몰려도, 마지막 이벤트 뒤 `hookBatch.waitMillisecond`(기본 100ms)가 지나거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000ms)가 지나면 가장 나중에 바뀐 경로의 최종 변화로 hook을 한 번만 실행합니다.
-- `hookBatch.deliver: lastPerPath`로 설정하면 바뀐 경로마다 hook을 한 번씩 실행합니다. `hookBatch.deliver: each`로 설정하면 이벤트마다 hook을 실행하며, 이벤트를 받은 순서를 지킵니다. `hookBatch.waitMillisecond: 0`이면 기다리지 않고 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](USAGE.ko.md#hookbatch로-기다리고-합치기)에 있습니다.
-- 대상마다 대기 실행을 최대 `queue.size`(기본 2048)개까지 보관합니다. 대기열이 가득 차면 대기열을 늘리지 않고 watcher를 멈춥니다.
-- `run.concurrency`를 1보다 크게 설정하면 대상은 그 수만큼 실행을 동시에 돌립니다. 실행은 이벤트가 생긴 순서대로 시작하지만 끝나는 순서는 보장하지 않습니다. 자세한 내용은 [run으로 hook 실행하기](USAGE.ko.md#run으로-hook-실행하기)에 있습니다.
+- 포매터를 돌리거나 브랜치를 바꿔서 파일 수백 개가 바뀌어도, 명령은 파일마다 실행되지 않고 몰려든 변경 전체에 대해 한 번 실행됩니다.
+- 명령은 마지막 변경 뒤 100ms가 지나면 실행되고, 변경이 계속 이어지면 첫 변경 뒤 1초가 지났을 때 실행됩니다.
+- 바뀐 파일마다 한 번씩 실행하거나 이벤트마다 실행하도록 바꿀 수도 있습니다. 자세한 내용은 [hookBatch로 기다리고 합치기](USAGE.ko.md#hookbatch로-기다리고-합치기)를 확인하세요.
 
-### 오래 실행되는 프로세스 재시작하기
+### 폴더째 생기거나 사라지면 폴더 이벤트 하나로 받기
 
-- 기본값 `run.concurrency: 1`에서 `run.interrupt: oldest`로 설정하면 새 변경이 생겼을 때 실행 중인 명령을 취소하고, 그 명령이 끝나기를 기다린 뒤 변경 명령을 다시 실행합니다. 스스로 끝나지 않는 서버 같은 프로세스에 사용합니다.
-- watcher를 멈추면 실행 중인 명령을 취소한 뒤 종료 명령을 실행합니다.
+- 폴더가 안의 내용과 함께 생기거나 사라지면, 명령은 안에 든 파일마다 이벤트를 받지 않고 맨 위 폴더의 이벤트 하나를 받습니다.
 
-### 시작·종료 명령 실행하기
+| 동작 | 명령이 받는 이벤트 |
+|---|---|
+| `mkdir -p src/a/b/c` | `src/a`의 폴더 생성 이벤트 하나 |
+| 파일 300개가 든 `src/pkg`를 `rm -rf`로 삭제 | `src/pkg`의 폴더 삭제 이벤트 하나 |
 
-- `onStartWatch`와 `onFinishWatch`는 감시를 시작하고 끝낼 때 실행되며, 전역과 감시 대상별로 각각 정할 수 있습니다.
+- 감시하는 디렉터리 안으로 폴더를 옮겨 오거나 밖으로 옮겨 낼 때도 같습니다. 자세한 내용은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)를 확인하세요.
 
-### 이벤트 유실 가능성 알림 받기
+### 감시를 시작하고 끝낼 때 준비·정리 명령 실행하기
 
-- 대상의 대기열이 가득 차거나 OS가 이벤트 overflow를 보고하면, 선택 항목인 전역 `onError` 명령이 한 번 실행됩니다. 오류 정보는 `DW_ERROR_*` 환경 변수로 전달됩니다. 자세한 내용은 [이벤트 유실 알림](USAGE.ko.md#이벤트-유실-알림)을 확인하세요.
-- 대기열이 가득 차기 전에도, 대상의 대기 실행이 `queue.size`의 70%와 90%에 닿거나 다시 내려가면 선택 항목인 전역 `onQueueWarning` 명령이 실행됩니다. 경고 정보는 `DW_QUEUE_*` 환경 변수로 전달됩니다. 자세한 내용은 [대기열 용량과 경고](USAGE.ko.md#대기열-용량과-경고)를 확인하세요.
+- 감시를 시작할 때와 끝낼 때 각각 명령을 실행할 수 있습니다. 예를 들어 감시를 시작할 때 데이터베이스 컨테이너를 띄우고, Ctrl+C를 누르면 그 컨테이너를 지웁니다.
 
-## 요구 사항
+```yaml
+global:
+  lifeCycle:
+    onStartWatch:
+      - docker compose up -d db
+    onFinishWatch:
+      - docker compose down
+```
 
-- macOS 또는 Linux. 이 두 환경에서 정상 작동하는 것을 확인했습니다.
-- Windows. 아래 경고의 제약이 있습니다.
-- Go 1.27 이상. `go install`로 설치할 때만 필요합니다.
+- 감시 대상마다 시작 명령과 종료 명령을 따로 둘 수도 있습니다.
+- 오류 때문에 watcher가 멈출 때도 종료 명령은 실행됩니다.
 
-> [!WARNING]
-> Windows에서는 다음을 주의하세요.
-> - PowerShell이나 명령 프롬프트에서는 출력이 제대로 보이지 않을 수 있습니다. 이때는 Git Bash에서 실행하세요.
-> - watcher가 hook을 멈출 때, CTRL+BREAK로 끝나지 않는 hook 프로세스는 20초가 지나서야 강제로 끝냅니다. 이런 hook은 일부 `powershell` hook을 포함해 교체와 종료가 최대 20초 늦어질 수 있습니다. 자세한 내용은 [과부하와 종료](USAGE.ko.md#과부하와-종료)에 있습니다.
+### 변경을 놓쳤을 수 있으면 알림 받기
+
+- 명령이 처리하는 속도보다 변경이 빠르게 쌓이거나 OS가 이벤트를 버렸다고 보고하면, watcher는 밀린 작업을 끝없이 쌓지 않고 멈춘 뒤 미리 정해 둔 알림 명령을 한 번 실행합니다. 자세한 내용은 [이벤트 유실 알림](USAGE.ko.md#이벤트-유실-알림)을 확인하세요.
+- 대상의 밀린 작업이 한도의 70%와 90%에 닿으면 그보다 먼저 경고하는 명령도 따로 둘 수 있습니다. 자세한 내용은 [대기열 용량과 경고](USAGE.ko.md#대기열-용량과-경고)를 확인하세요.
+
+### 실행 파일 하나로 어디서나 설치하기
+
+- Directory Watcher는 실행 파일 하나로 되어 있어서 Homebrew, Scoop, `go install`로 설치하거나 게시된 Docker 이미지로 실행할 수 있습니다. 자세한 내용은 [설치](#설치)를 확인하세요.
+
+직접 만드는 이미지에 넣으려면 게시된 이미지에서 실행 파일을 복사합니다.
+
+```dockerfile
+COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
+```
+
+### 그 밖의 기능
+
+| 기능 | 사용 안내 |
+|---|---|
+| 여러 디렉터리를 감시하고, 디렉터리마다 명령을 따로 정하기 | [`config.yml`](USAGE.ko.md#configyml) |
+| 바뀐 파일의 경로, 이름, 확장자, 이벤트 종류를 명령에 넘기기. 파일 이름이 명령으로 실행되는 일은 없습니다. | [실행 명령에서 쓸 수 있는 변수](USAGE.ko.md#실행-명령에서-쓸-수-있는-변수) |
+| 명령을 실행할 파일 이벤트와 폴더 이벤트 고르기 | [폴더 이벤트](USAGE.ko.md#폴더-이벤트) |
+| 경로 패턴으로 파일과 폴더를 감시에서 빼기. `.git`처럼 이름이 `.`이나 `_`로 시작하면 기본으로 빠집니다. | [exclude로 경로 제외하기](USAGE.ko.md#exclude로-경로-제외하기), [기본 제외 규칙](USAGE.ko.md#기본-제외-규칙) |
+| 한 대상의 여러 변경을 동시에 실행하기 | [run으로 hook 실행하기](USAGE.ko.md#run으로-hook-실행하기) |
+| `sh`, `cmd`, Windows PowerShell에서 명령 실행하기 | [hook 명령을 실행하는 셸](USAGE.ko.md#hook-명령을-실행하는-셸) |
+| 경로가 겹치는 대상 감시하기. 변경 하나에 대상마다 명령이 실행됩니다. | [감시 대상의 경로가 겹칠 때](USAGE.ko.md#감시-대상의-경로가-겹칠-때) |
 
 ## 설치
 
-### Homebrew
+> [!NOTE]
+> Homebrew cask를 설치하려면 Homebrew 5.1.14 이상이 필요합니다. Homebrew 업데이트와 2.x 버전 formula에서 옮겨 오는 방법은 [Homebrew로 설치하기](USAGE.ko.md#homebrew로-설치하기)에 있습니다.
 
-- macOS와 Linux에서 설치합니다.
-- cask를 설치하려면 Homebrew 5.1.14 이상이 필요합니다.
-- 그보다 낮은 버전에서는 `Unexpected method 'postflight_steps'` 오류로 설치가 실패합니다.
+패키지 관리자로 설치합니다.
 
-`brew --version`으로 버전을 확인하고, 5.1.14보다 낮으면 먼저 Homebrew를 업데이트합니다.
-
-```shell
-brew update
-```
-
-그다음 cask를 설치합니다.
-
-```shell
+```sh
+# macOS or Linux
 brew install --cask seungyeop-lee/tap/directory-watcher
-```
 
-- 2.x 버전을 `brew install seungyeop-lee/tap/directory-watcher`로 설치했다면 Homebrew formula로 설치된 것이고, formula는 더 이상 새 버전을 받지 않습니다.
-
-formula를 지운 뒤 cask로 설치합니다.
-
-```shell
-brew uninstall --formula directory-watcher
-brew install --cask seungyeop-lee/tap/directory-watcher
-```
-
-### Scoop
-
-Windows에서 설치합니다.
-
-```shell
+# Windows using scoop
 scoop bucket add seungyeop-lee https://github.com/seungyeop-lee/scoop-bucket
 scoop install seungyeop-lee/directory-watcher
 ```
 
-### `go install`
+또는 `config.yml`과 감시할 디렉터리를 마운트해 Docker로 실행합니다.
 
-```shell
-go install github.com/seungyeop-lee/directory-watcher/v3@latest
-```
-
-### Docker로 실행
-
-게시된 이미지에 `config.yml`과 감시할 폴더를 마운트해 실행합니다.
-
-```shell
+```sh
 docker run --rm \
   -v "$PWD/config.yml:/config.yml" \
   -v "$PWD/src:/src" \
   ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
 ```
 
-- 컨테이너의 작업 폴더가 `/`이므로 `config.yml`의 `path: src`는 마운트한 `/src`를 가리킵니다.
-- hook은 컨테이너 안에서 실행되므로, hook이 쓰는 파일과 도구가 컨테이너에 있어야 합니다.
-- bind mount의 알려진 이슈는 [Docker로 실행하기](USAGE.ko.md#docker로-실행하기)에 있습니다.
+- 이때 hook은 컨테이너 안에서 실행됩니다. hook이 쓸 수 있는 경로와 도구, bind mount의 알려진 이슈는 [Docker로 실행하기](USAGE.ko.md#docker로-실행하기)에 있습니다.
+- 직접 만드는 이미지에 실행 파일을 넣는 방법은 [직접 만드는 이미지에 넣기](USAGE.ko.md#직접-만드는-이미지에-넣기)에 있습니다.
 
-### Dockerfile에서 설치
+또는 실행 파일을 내려받습니다.
 
-```dockerfile
-COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
+- [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에 macOS, Linux, Windows용 실행 파일이 있습니다.
+
+또는 `go`로 바로 설치합니다. Go 1.27 이상이 필요합니다.
+
+```sh
+go install github.com/seungyeop-lee/directory-watcher/v3@latest
 ```
-
-### 릴리스 파일
-
-- [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest)에서 실행 파일을 내려받습니다.
 
 ## 시작하기
 
@@ -141,95 +163,12 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 - **hook의 결과 파일:** hook이 `path` 안에 쓴 파일도 변경이므로, hook이 다시 실행되며 끝없이 반복됩니다. 그 파일을 감시 대상의 `watch.exclude`에 적습니다. 예를 들어 `onChange`가 `src/build.log`에 쓰면 `option.watch` 아래에 `exclude: ['build.log']`를 적습니다. 자세한 내용은 [hook이 자기 결과로 다시 실행되지 않게 하기](USAGE.ko.md#hook이-자기-결과로-다시-실행되지-않게-하기)를 확인하세요.
 - **멈추기:** Ctrl+C를 누르거나 SIGTERM을 보냅니다. watcher는 실행 중인 명령을 취소하고 종료 명령을 실행한 뒤 끝납니다.
-- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 명령줄 옵션, Docker로 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 폴더 이벤트, 경로 제외, 겹치는 감시 경로, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
+- **더 알아보기:** [사용 안내](USAGE.ko.md)에서 Homebrew로 설치하기, 명령줄 옵션, Docker로 실행하기, Windows에서 실행하기, `config.yml` 전체 사양, 명령 실행 위치, 템플릿 변수, 폴더 이벤트, 경로 제외, 겹치는 감시 경로, 이벤트 유실 알림, 과부하·종료·폴더 이벤트의 제약, 변경을 처리하는 순서를 그린 다이어그램을 다룹니다. 더 많은 설정을 담은 예시는 [`config.example.yml`](config.example.yml)에 있습니다.
 
-## 동작 다이어그램
+## 요구 사항
 
-- 전역 `onStartWatch`가 가장 먼저 실행됩니다.
-
-그 뒤 감시 대상마다 따로 시작하고, 각 대상은 다른 대상과 관계없이 자기 변경을 처리합니다.
-
-```mermaid
-flowchart TD
-    globalStart["전역 onStartWatch"]
-    subgraph eachTarget["감시 대상마다 독립적으로"]
-        watchDirs["대상 디렉터리 감시 시작"]
-        targetStart["대상 onStartWatch"]
-        receiveEvent(("이벤트 수신"))
-        excludeCheck{"제외된 경로인가?"}
-        collectChoice{"폴더 생성·삭제이거나<br>하위 폴더 안의 파일 삭제인가?"}
-        collectFolder["대상의 이벤트를 모으고<br>폴더 안의 이벤트는 흡수"]
-        waitChoice{"hookBatch.waitMillisecond가<br>0인가?"}
-        collectHook["hookBatch.waitMillisecond 동안 이벤트가 없거나<br>hookBatch.maxWaitMillisecond가 지날 때까지 모음"]
-        mergeRuns["hookBatch.deliver에 따라 실행으로 합치고<br>watch.fileEvent나 watch.dirEvent에서 고른 종류만 남김"]
-        queueEvent{"대상의 queue.size 크기<br>대기열에 자리가 있는가?"}
-        queueWarning["전역 onQueueWarning,<br>이벤트 처리와 따로 실행"]
-        interruptChoice{"run.interrupt가 취소할<br>실행을 고르는가?"}
-        cancelPrevious["그 실행을 취소하고<br>끝나기를 기다림"]
-        waitSlot["run.concurrency의 자리가 비고<br>대상 onStartWatch가 끝날 때까지 대기"]
-        runChange["전역 onBeforeChange → onChange<br>→ 전역 onAfterChange"]
-    end
-    fatalStop(["치명적 오류: 다음 다이어그램"])
-
-    globalStart --> watchDirs
-    watchDirs --> targetStart
-    targetStart --> receiveEvent
-    receiveEvent -->|"제외되지 않은 새 디렉터리는<br>감시 목록에 추가"| excludeCheck
-    excludeCheck -->|"예: 무시"| receiveEvent
-    excludeCheck -->|"아니오"| collectChoice
-    collectChoice -->|"예, 또는 이미 모으는 중"| collectFolder
-    collectChoice -->|"아니오"| waitChoice
-    collectFolder -->|"dirBatch.waitMillisecond 동안 이벤트 없음,<br>또는 dirBatch.maxWaitMillisecond 지남"| waitChoice
-    waitChoice -->|"아니오"| collectHook
-    waitChoice -->|"예: 이벤트마다 따로"| mergeRuns
-    collectHook --> mergeRuns
-    mergeRuns -->|"실행 없음: 무시"| receiveEvent
-    mergeRuns -->|"실행마다"| queueEvent
-    queueEvent -->|"아니오"| fatalStop
-    queueEvent -.->|"대기 실행이 70%나 90%에 닿거나<br>80%나 60% 아래로 내려감"| queueWarning
-    queueEvent -->|"예"| interruptChoice
-    interruptChoice -->|"예: samePath는 같은 경로,<br>oldest는 자리가 다 찼을 때"| cancelPrevious
-    interruptChoice -->|"아니오"| waitSlot
-    cancelPrevious --> waitSlot
-    waitSlot --> runChange
-    runChange -->|"다음 이벤트"| receiveEvent
-```
-
-- 명령이 실행되는 동안에도 이벤트를 계속 받아 모으므로, `hookBatch`가 기다리는 시간이 끝날 때마다 그때 만든 실행이 대기열에 들어갑니다.
-- 대기열에 자리가 없는 실행은 곧바로 watcher를 멈추며, 폴더 이벤트를 위해 모은 이벤트에서 만든 실행도 같습니다. 폴더 이벤트의 약속과 모으는 시간은 [폴더 이벤트](USAGE.ko.md#폴더-이벤트)에 있습니다.
-- 실행은 시작할 때까지 대기열에서 기다리므로, 대상 `onStartWatch`나 `run.concurrency`개의 실행이 도는 동안 만든 실행은 대기열에 남습니다. `run.interrupt: oldest`에서는 실행 중인 대상 `onStartWatch`도 첫 실행이 취소합니다.
-- 한 번의 실행에 속한 명령은 차례대로 실행되며, 실패한 명령이 나오면 그 실행을 멈춥니다. 이 실패는 `[ERROR]` 로그로 남습니다. 자세한 내용은 사용 안내의 [`config.yml`](USAGE.ko.md#configyml)을 확인하세요.
-
-종료 신호와 치명적 오류는 모두 전체 감시 대상을 멈춘 뒤 종료 명령을 실행합니다.
-
-```mermaid
-flowchart TD
-    shutdownSignal(("SIGINT 또는 SIGTERM"))
-    fatalError(("대상의 치명적 오류:<br>대기열 포화, OS overflow,<br>watcher 오류, 없는 경로"))
-    stopTargets["모든 대상: 새 명령 시작을 멈추고<br>실행 중인 명령 취소"]
-    targetFinish["대상마다: 대기 중인 변경을 버리고<br>실행 중인 명령이 끝나기를 기다린 뒤<br>감시를 시작한 대상이면 onFinishWatch 실행"]
-    lossCheck{"이벤트 유실 가능성?<br>대기열 포화 또는 OS overflow"}
-    errorHook["전역 onError 한 번<br>5초 실행 제한, 이어서 최대 20초 정리"]
-    globalFinish["전역 onFinishWatch"]
-    exitCheck{"치명적 오류가 있었는가?"}
-    exitSuccess(("종료 코드 0"))
-    exitFailure(("종료 코드 1"))
-
-    shutdownSignal --> stopTargets
-    fatalError --> stopTargets
-    stopTargets --> targetFinish
-    stopTargets -->|"치명적 오류 뒤"| lossCheck
-    lossCheck -->|"예"| errorHook
-    lossCheck -->|"아니오"| globalFinish
-    targetFinish --> globalFinish
-    errorHook --> globalFinish
-    globalFinish --> exitCheck
-    exitCheck -->|"아니오"| exitSuccess
-    exitCheck -->|"예"| exitFailure
-```
-
-- 대상 종료 명령은 `onError`가 실행되는 동안에도 실행될 수 있습니다. 전역 `onFinishWatch`는 두 쪽이 모두 끝나기를 기다립니다.
-- 종료 명령에는 별도의 실행 제한 시간이 없습니다.
+- macOS 또는 Linux. 이 두 환경에서 정상 작동하는 것을 확인했습니다.
+- Windows. 콘솔 출력과 일부 hook을 멈추는 속도에 제약이 있습니다. 자세한 내용은 [Windows에서 실행하기](USAGE.ko.md#windows에서-실행하기)를 확인하세요.
 
 ## 개발 검증
 

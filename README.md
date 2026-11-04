@@ -2,119 +2,141 @@
 
 🇺🇸 English | 🇰🇷 [한국어](README.ko.md)
 
-- Directory Watcher runs the commands you define when files are created, modified, or deleted, or folders are created or deleted, in the directories you watch.
-- Use it to rebuild or test code as you edit it, restart a development server when its sources change, or back up files when they change.
+- Directory Watcher runs the commands you describe in one `config.yml` when files change: run tests, rebuild, restart your dev server, and clean up when you stop.
+
+<!-- Hero GIF placeholder: the demo GIF and the files that make it go in promo/. -->
+
+## 30-second example
+
+This `config.yml` restarts a Go server when its code changes and rebuilds the frontend when its sources change:
+
+```yaml
+watchTargets:
+  - path: server
+    lifeCycle:
+      onStartWatch:
+        - go run .
+      onChange:
+        - go run .
+    option:
+      run:
+        interrupt: oldest
+  - path: web/src
+    lifeCycle:
+      onChange:
+        - dir: web
+          cmd: npm run build
+```
+
+- Run `directory-watcher` in the directory that holds this `config.yml`.
+- The server starts when watching starts, and each save under `server` stops it and starts it again.
+- A save under `web/src` runs `npm run build` once, even when many files change together.
+- Ctrl+C stops the server and then the watcher.
 
 ## Features
 
-### Run commands when files change
+### Restart your dev server safely on every save
 
-- Watch several directories at once. Each watch target has its own `onChange` commands, and the global `onBeforeChange` and `onAfterChange` commands run before and after every target's `onChange`.
-- Choose which file events (create, update, delete) and folder events (create, delete) to react to, exclude files and folders from watching with path patterns, or skip subdirectories.
-- Pass the changed file's or folder's path, name, extension, directory, event type, and whether it is a folder to a command with [template variables](USAGE.md#variables-in-commands).
-- When a folder appears or disappears together with its contents, as with `mkdir -p`, moving a folder in, or `rm -rf`, the hook receives one event for the top folder instead of one per file. See [Folder events](USAGE.md#folder-events).
-- When watch targets' paths overlap, one change in an overlapping folder runs the hooks of each target. See [Overlapping target paths](USAGE.md#overlapping-target-paths).
+- Each save stops the running server and the processes it started, waits for the server to exit, and only then starts it again, so the old and new servers never run at the same time.
+- The 30-second example above restarts its server this way. See [Running hooks with run](USAGE.md#running-hooks-with-run).
 
-### Handle bursts of changes
+### Run once when hundreds of files change at once
 
-- By default, a burst of events runs the hook once, for the final change of the path that changed last, `hookBatch.waitMillisecond` (100 ms by default) after the last event and at most `hookBatch.maxWaitMillisecond` (1000 ms by default) after the first.
-- With `hookBatch.deliver: lastPerPath`, the hook runs once for each changed path. With `hookBatch.deliver: each`, it runs for every event, in the order the events were received. `hookBatch.waitMillisecond: 0` runs the hook without waiting. See [Waiting and merging with hookBatch](USAGE.md#waiting-and-merging-with-hookbatch).
-- Each target holds at most `queue.size` (2048 by default) pending runs. Instead of growing without bound, the watcher stops when a target's queue is full.
-- With `run.concurrency` above 1, a target runs that many runs at the same time. They start in the order their events happened but can end in any order. See [Running hooks with run](USAGE.md#running-hooks-with-run).
+- When a formatter or a branch switch changes hundreds of files, your command runs once for the whole burst instead of once per file.
+- The command runs 100 ms after the last change, or 1 second after the first change if changes keep coming.
+- You can also run it once for each changed file or once for each event. See [Waiting and merging with hookBatch](USAGE.md#waiting-and-merging-with-hookbatch).
 
-### Restart long-running processes
+### Get one event when a whole folder appears or disappears
 
-- With `run.interrupt: oldest` and the default `run.concurrency: 1`, a new change cancels the running commands, waits for them to exit, and then runs the change commands again. Use it for servers and other processes that do not exit on their own.
-- When you stop the watcher, it cancels running commands and then runs the finish commands.
+- When a folder appears or disappears together with its contents, your command receives one event for the top folder instead of one for every file inside.
 
-### Run setup and cleanup commands
+| Action | What your command receives |
+|---|---|
+| `mkdir -p src/a/b/c` | One folder-created event for `src/a` |
+| `rm -rf src/pkg` with 300 files inside | One folder-deleted event for `src/pkg` |
 
-- `onStartWatch` and `onFinishWatch` run when watching starts and stops, both globally and for each target.
+- Moving a folder in or out of a watched directory works the same way. See [Folder events](USAGE.md#folder-events).
 
-### Get notified when events may be lost
+### Run setup and cleanup when watching starts and stops
 
-- When a target's queue fills up or the OS reports an event overflow, the optional global `onError` command runs once, with the details in `DW_ERROR_*` environment variables. See [Event-loss notification](USAGE.md#event-loss-notification).
-- Before a queue fills up, the optional global `onQueueWarning` command runs when the pending runs of a target reach 70% and 90% of `queue.size` and when they fall back, with the details in `DW_QUEUE_*` environment variables. See [Queue size and warnings](USAGE.md#queue-size-and-warnings).
+- Commands can run when watching starts and again when it stops, such as starting a database container and removing it when you press Ctrl+C.
 
-## Requirements
+```yaml
+global:
+  lifeCycle:
+    onStartWatch:
+      - docker compose up -d db
+    onFinishWatch:
+      - docker compose down
+```
 
-- macOS or Linux. The program has been verified to work correctly on these systems.
-- Windows, with the limits below.
-- Go 1.27 or later, only if you install with `go install`.
+- Each watch target can have its own start and finish commands as well.
+- The finish commands also run when the watcher stops because of an error.
 
-> [!WARNING]
-> On Windows:
-> - Output may not display correctly in PowerShell or Command Prompt. Run the watcher in Git Bash instead.
-> - When the watcher stops a hook, it ends the hook's processes that do not exit on CTRL+BREAK only 20 seconds later, so replacing or stopping such a hook, including some `powershell` hooks, can take up to 20 seconds. See [Overload and shutdown](USAGE.md#overload-and-shutdown).
+### Find out when changes may have been missed
+
+- When changes pile up faster than your commands can handle, or the OS reports that it dropped events, the watcher stops instead of growing its backlog without limit and runs a notification command of your choice once. See [Event-loss notification](USAGE.md#event-loss-notification).
+- Another command of your choice can warn you earlier, when a target's backlog reaches 70% and 90% of its limit. See [Queue size and warnings](USAGE.md#queue-size-and-warnings).
+
+### Install one executable anywhere
+
+- Directory Watcher is a single executable that you can install with Homebrew, Scoop, or `go install`, or run from the published Docker image. See [Installation](#installation).
+
+To add it to an image you build, copy it from the published image:
+
+```dockerfile
+COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
+```
+
+### Also in Directory Watcher
+
+| Feature | Usage guide |
+|---|---|
+| Watch several directories, each with its own commands | [`config.yml`](USAGE.md#configyml) |
+| Pass the changed file's path, name, extension, or event type to a command, without file names ever running as commands | [Variables in commands](USAGE.md#variables-in-commands) |
+| Choose which file and folder events run commands | [Folder events](USAGE.md#folder-events) |
+| Exclude files and folders with path patterns; names that start with `.` or `_`, such as `.git`, are skipped by default | [Excluding paths with exclude](USAGE.md#excluding-paths-with-exclude), [Default exclusion](USAGE.md#default-exclusion) |
+| Run several changes of one target at the same time | [Running hooks with run](USAGE.md#running-hooks-with-run) |
+| Run commands in `sh`, `cmd`, or Windows PowerShell | [Shell that runs hook commands](USAGE.md#shell-that-runs-hook-commands) |
+| Watch overlapping paths, where one change runs the commands of each target | [Overlapping target paths](USAGE.md#overlapping-target-paths) |
 
 ## Installation
 
-### Homebrew
+> [!NOTE]
+> The Homebrew cask needs Homebrew 5.1.14 or later. For updating Homebrew and moving from the version 2.x formula, see [Installing with Homebrew](USAGE.md#installing-with-homebrew).
 
-- This works on macOS and Linux.
-- It needs Homebrew 5.1.14 or later.
-- With an older Homebrew, installing the cask fails with `Unexpected method 'postflight_steps'`.
+Use a package manager:
 
-Check the version with `brew --version`, and if it is older, update Homebrew first:
-
-```shell
-brew update
-```
-
-Then install the cask:
-
-```shell
+```sh
+# macOS or Linux
 brew install --cask seungyeop-lee/tap/directory-watcher
-```
 
-- If you installed version 2.x with `brew install seungyeop-lee/tap/directory-watcher`, you have the Homebrew formula, which no longer gets new versions.
-
-Uninstall the formula, then install the cask:
-
-```shell
-brew uninstall --formula directory-watcher
-brew install --cask seungyeop-lee/tap/directory-watcher
-```
-
-### Scoop
-
-On Windows:
-
-```shell
+# Windows using scoop
 scoop bucket add seungyeop-lee https://github.com/seungyeop-lee/scoop-bucket
 scoop install seungyeop-lee/directory-watcher
 ```
 
-### `go install`
+Or, use Docker, mounting `config.yml` and the directory to watch:
 
-```shell
-go install github.com/seungyeop-lee/directory-watcher/v3@latest
-```
-
-### Run with Docker
-
-Mount `config.yml` and the directory to watch into the published image:
-
-```shell
+```sh
 docker run --rm \
   -v "$PWD/config.yml:/config.yml" \
   -v "$PWD/src:/src" \
   ghcr.io/seungyeop-lee/directory-watcher:latest -c /config.yml
 ```
 
-- The container's working directory is `/`, so `path: src` in `config.yml` refers to the mounted `/src`.
-- Hooks run inside the container, so the files and tools they use must be available there.
-- For a known issue with bind mounts, see [Running with Docker](USAGE.md#running-with-docker).
+- Hooks then run inside the container. See [Running with Docker](USAGE.md#running-with-docker) for the paths and tools they can use and a known issue with bind mounts.
+- To add the executable to an image you build, see [Adding the watcher to your own image](USAGE.md#adding-the-watcher-to-your-own-image).
 
-### In Dockerfile
+Or, download it:
 
-```dockerfile
-COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
+- The [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest) has the executable for macOS, Linux, and Windows.
+
+Or, just install it with `go`, which needs Go 1.27 or later:
+
+```sh
+go install github.com/seungyeop-lee/directory-watcher/v3@latest
 ```
-
-### Releases
-
-- Download the executable from the [releases page](https://github.com/seungyeop-lee/directory-watcher/releases/latest).
 
 ## Getting started
 
@@ -141,95 +163,12 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 - **Hook output:** a file that a hook writes inside `path` is a change too, so the hook runs again and keeps rerunning. Add that file to the target's `watch.exclude`: if `onChange` writes `src/build.log`, add `exclude: ['build.log']` under `option.watch`. See [Stopping a hook from rerunning itself](USAGE.md#stopping-a-hook-from-rerunning-itself).
 - **Stop:** press Ctrl+C or send SIGTERM. The watcher cancels running commands, runs the finish commands, and exits.
-- **More:** the [usage guide](USAGE.md) covers command-line options, running with Docker, the full `config.yml` format, where commands run, template variables, folder events, excluding paths, overlapping target paths, event-loss notification, and the limits of overload, shutdown, and folder events. For a fuller example, see [`config.example.yml`](config.example.yml).
+- **More:** the [usage guide](USAGE.md) covers installing with Homebrew, command-line options, running with Docker, running on Windows, the full `config.yml` format, where commands run, template variables, folder events, excluding paths, overlapping target paths, event-loss notification, the limits of overload, shutdown, and folder events, and diagrams of how the watcher handles changes. For a fuller example, see [`config.example.yml`](config.example.yml).
 
-## How it works
+## Requirements
 
-- Global `onStartWatch` runs first.
-
-Then each watch target starts on its own and handles its changes independently of the other targets:
-
-```mermaid
-flowchart TD
-    globalStart["global onStartWatch"]
-    subgraph eachTarget["Each watch target, independently"]
-        watchDirs["Start watching the target directory"]
-        targetStart["target onStartWatch"]
-        receiveEvent(("Event received"))
-        excludeCheck{"Excluded path?"}
-        collectChoice{"Folder created or deleted,<br>or file deleted in a subfolder?"}
-        collectFolder["Collect the target's events<br>and absorb those inside the folder"]
-        waitChoice{"hookBatch.waitMillisecond<br>is 0?"}
-        collectHook["Collect events until hookBatch.waitMillisecond<br>passes with no event or hookBatch.maxWaitMillisecond ends"]
-        mergeRuns["Merge them into runs by hookBatch.deliver,<br>keeping types chosen in watch.fileEvent or watch.dirEvent"]
-        queueEvent{"Room in the target's queue<br>of queue.size runs?"}
-        queueWarning["global onQueueWarning,<br>apart from event handling"]
-        interruptChoice{"Does run.interrupt pick<br>running runs to cancel?"}
-        cancelPrevious["Cancel them and wait<br>for them to exit"]
-        waitSlot["Wait until a slot of run.concurrency is free<br>and target onStartWatch has ended"]
-        runChange["global onBeforeChange → onChange<br>→ global onAfterChange"]
-    end
-    fatalStop(["Fatal error: see the next diagram"])
-
-    globalStart --> watchDirs
-    watchDirs --> targetStart
-    targetStart --> receiveEvent
-    receiveEvent -->|"a new directory that is not excluded<br>joins the watch list"| excludeCheck
-    excludeCheck -->|"yes: ignore"| receiveEvent
-    excludeCheck -->|"no"| collectChoice
-    collectChoice -->|"yes, or already collecting"| collectFolder
-    collectChoice -->|"no"| waitChoice
-    collectFolder -->|"dirBatch.waitMillisecond with no event,<br>or dirBatch.maxWaitMillisecond"| waitChoice
-    waitChoice -->|"no"| collectHook
-    waitChoice -->|"yes: each event on its own"| mergeRuns
-    collectHook --> mergeRuns
-    mergeRuns -->|"no run: ignore"| receiveEvent
-    mergeRuns -->|"each run"| queueEvent
-    queueEvent -->|"no"| fatalStop
-    queueEvent -.->|"pending runs reach 70% or 90%,<br>or fall below 80% or 60%"| queueWarning
-    queueEvent -->|"yes"| interruptChoice
-    interruptChoice -->|"yes: samePath for the same path,<br>oldest when every slot is taken"| cancelPrevious
-    interruptChoice -->|"no"| waitSlot
-    cancelPrevious --> waitSlot
-    waitSlot --> runChange
-    runChange -->|"next event"| receiveEvent
-```
-
-- Events keep being received and collected while commands run, so each `hookBatch` wait that ends adds its runs to the queue.
-- A run that finds no room stops the watcher at once, including runs made from events collected for folder events. See [Folder events](USAGE.md#folder-events) for what the folder events promise and how long they are collected.
-- A run waits in the queue until it starts, so runs made while target `onStartWatch` or `run.concurrency` runs are running wait there. With `run.interrupt: oldest`, the first run also cancels a running target `onStartWatch`.
-- The commands of one run execute one after another, and the run stops at the first command that fails. The failure is logged as an `[ERROR]` line; see [`config.yml`](USAGE.md#configyml) in the usage guide.
-
-A shutdown signal and a fatal error both stop every target before the finish commands run:
-
-```mermaid
-flowchart TD
-    shutdownSignal(("SIGINT or SIGTERM"))
-    fatalError(("Fatal error in a target:<br>queue full, OS overflow,<br>watcher error, missing path"))
-    stopTargets["All targets: stop starting new commands<br>and cancel running ones"]
-    targetFinish["Each target: discard pending changes,<br>wait for running commands to exit,<br>then run target onFinishWatch if watching started"]
-    lossCheck{"Possible event loss?<br>queue full or OS overflow"}
-    errorHook["global onError, once<br>5 s limit, then up to 20 s of cleanup"]
-    globalFinish["global onFinishWatch"]
-    exitCheck{"Fatal error?"}
-    exitSuccess(("Exit code 0"))
-    exitFailure(("Exit code 1"))
-
-    shutdownSignal --> stopTargets
-    fatalError --> stopTargets
-    stopTargets --> targetFinish
-    stopTargets -->|"after a fatal error"| lossCheck
-    lossCheck -->|"yes"| errorHook
-    lossCheck -->|"no"| globalFinish
-    targetFinish --> globalFinish
-    errorHook --> globalFinish
-    globalFinish --> exitCheck
-    exitCheck -->|"no"| exitSuccess
-    exitCheck -->|"yes"| exitFailure
-```
-
-- Target finish commands may run while `onError` is still running. Global `onFinishWatch` waits for both.
-- Finish commands have no time limit of their own.
+- macOS or Linux. The watcher has been verified to work correctly on these systems.
+- Windows, with limits on console output and on how quickly some hooks stop. See [Running on Windows](USAGE.md#running-on-windows).
 
 ## Development checks
 
