@@ -43,7 +43,7 @@ watchTargets:
         dirEvent: CD # default CD; none turns folder events off
       hookBatch:
         waitMillisecond: 1000 # default 100; 0 does not wait
-        maxWaitMillisecond: 3000 # default 1000; not less than waitMillisecond
+        maxWaitMillisecond: 3000 # default 1000, or waitMillisecond if larger; not less than waitMillisecond
         deliver: lastPerPath # default last; last, lastPerPath, or each
       queue:
         size: 4096 # default 2048; more pending runs stop the watcher

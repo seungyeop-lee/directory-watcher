@@ -232,9 +232,19 @@ func TestGroupedOptionsBuildOption(t *testing.T) {
 			}),
 		},
 		{
-			name:   "max wait equal to wait",
-			option: "{hookBatch: {waitMillisecond: 1000}}",
-			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond = 1000 }),
+			name:   "hookBatch max wait follows a wait above its default",
+			option: "{hookBatch: {waitMillisecond: 2000}}",
+			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond, o.MaxWaitMillisecond = 2000, 2000 }),
+		},
+		{
+			name:   "dirBatch max wait follows a wait above its default",
+			option: "{dirBatch: {waitMillisecond: 2000}}",
+			want:   with(func(o *domain.WatchTargetsOption) { o.DirEventWait, o.DirEventMaxWait = 2000, 2000 }),
+		},
+		{
+			name:   "max wait keeps its default for a wait below it",
+			option: "{dirBatch: {waitMillisecond: 500}, hookBatch: {waitMillisecond: 500}}",
+			want:   with(func(o *domain.WatchTargetsOption) { o.WaitMillisecond, o.DirEventWait = 500, 500 }),
 		},
 		{
 			name:   "queue of one",
@@ -289,14 +299,24 @@ func TestInvalidHookBatchOptionStopsBuild(t *testing.T) {
 	}{
 		{name: "unknown deliver", option: "deliver: latest", want: `option.hookBatch.deliver: unknown value "latest"; use last, lastPerPath, or each`},
 		{name: "empty deliver", option: "deliver: ''", want: `option.hookBatch.deliver: unknown value ""; use last, lastPerPath, or each`},
-		{name: "max wait below wait", option: "{waitMillisecond: 500, maxWaitMillisecond: 200}", want: "option.hookBatch: maxWaitMillisecond 200 is less than waitMillisecond 500"},
-		{name: "default max wait below wait", option: "waitMillisecond: 2000", want: "option.hookBatch: maxWaitMillisecond 1000 is less than waitMillisecond 2000"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      hookBatch:\n        " + tt.option + "\n"
 			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
 			if want := "watchTargets[1]." + tt.want; err == nil || err.Error() != want {
+				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestMaxWaitBelowWaitStopsBuild(t *testing.T) {
+	for _, group := range []string{"dirBatch", "hookBatch"} {
+		t.Run(group, func(t *testing.T) {
+			data := "watchTargets:\n  - path: other\n  - path: site\n    option:\n      " + group + ": {waitMillisecond: 500, maxWaitMillisecond: 200}\n"
+			_, err := configyaml.NewConfig([]byte(data)).BuildCommandSet()
+			if want := "watchTargets[1].option." + group + ": maxWaitMillisecond 200 is less than waitMillisecond 500"; err == nil || err.Error() != want {
 				t.Fatalf("BuildCommandSet error = %v, want %q", err, want)
 			}
 		})

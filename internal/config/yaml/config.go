@@ -233,10 +233,13 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 	if fileEvent.IsNone() && dirEvent.IsNone() {
 		return domain.WatchTargetsOption{}, errors.New("option.watch: fileEvent and dirEvent are both none; onChange would never run")
 	}
-	wait := converter.NewMillisecondConverter(c.HookBatch.WaitMillisecond, defaultWaitMillisecond).Convert()
-	maxWait := converter.NewMillisecondConverter(c.HookBatch.MaxWaitMillisecond, defaultMaxWaitMillisecond).Convert()
-	if maxWait < wait {
-		return domain.WatchTargetsOption{}, fmt.Errorf("option.hookBatch: maxWaitMillisecond %d is less than waitMillisecond %d", maxWait, wait)
+	dirWait, dirMaxWait, err := buildBatchWait("dirBatch", c.DirBatch.WaitMillisecond, c.DirBatch.MaxWaitMillisecond)
+	if err != nil {
+		return domain.WatchTargetsOption{}, err
+	}
+	wait, maxWait, err := buildBatchWait("hookBatch", c.HookBatch.WaitMillisecond, c.HookBatch.MaxWaitMillisecond)
+	if err != nil {
+		return domain.WatchTargetsOption{}, err
 	}
 	deliver, err := converter.NewDeliverConverter(c.HookBatch.Deliver).Convert()
 	if err != nil {
@@ -268,9 +271,21 @@ func (c WatchTargetsOptionConfig) BuildOption() (domain.WatchTargetsOption, erro
 		WatchSubDir:        converter.NewWatchSubDirConverter(c.Watch.SubDir).Convert(),
 		WatchFileEvent:     fileEvent,
 		WatchDirEvent:      dirEvent,
-		DirEventWait:       converter.NewMillisecondConverter(c.DirBatch.WaitMillisecond, defaultWaitMillisecond).Convert(),
-		DirEventMaxWait:    converter.NewMillisecondConverter(c.DirBatch.MaxWaitMillisecond, defaultMaxWaitMillisecond).Convert(),
+		DirEventWait:       dirWait,
+		DirEventMaxWait:    dirMaxWait,
 		QueueSize:          queueSize,
 		Run:                domain.RunPolicy{Concurrency: concurrency, Interrupt: interrupt},
 	}, nil
+}
+
+// buildBatchWait는 dirBatch와 hookBatch에 같은 규칙을 적용한다. maxWaitMillisecond를 적지 않으면
+// waitMillisecond만 늘려 적어도 시작되도록 기본값 1000과 waitMillisecond 중 큰 값을 쓴다. 직접 적은
+// maxWaitMillisecond가 waitMillisecond보다 작으면 오류를 낸다.
+func buildBatchWait(group string, waitConfig, maxWaitConfig *config.Millisecond) (wait, maxWait domain.Millisecond, err error) {
+	wait = converter.NewMillisecondConverter(waitConfig, defaultWaitMillisecond).Convert()
+	maxWait = converter.NewMillisecondConverter(maxWaitConfig, max(defaultMaxWaitMillisecond, config.Millisecond(wait))).Convert()
+	if maxWait < wait {
+		return 0, 0, fmt.Errorf("option.%s: maxWaitMillisecond %d is less than waitMillisecond %d", group, maxWait, wait)
+	}
+	return wait, maxWait, nil
 }

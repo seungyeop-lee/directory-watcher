@@ -85,10 +85,10 @@ watchTargets:
         dirEvent: [ hook을 실행할 폴더 이벤트 (C: 생성 또는 옮겨 옴, D: 삭제 또는 옮겨 나감) 또는 none, default는 "CD" ]
       dirBatch: # 폴더 이벤트를 만들려고 이벤트를 모으는 방식
         waitMillisecond: [ 모은 폴더 이벤트를 보내기 전에 마지막 이벤트 뒤로 기다리는 시간, 0이면 모으지 않음, default는 100 ]
-        maxWaitMillisecond: [ 폴더 이벤트를 모으는 가장 긴 시간, default는 1000 ]
+        maxWaitMillisecond: [ 폴더 이벤트를 모으는 가장 긴 시간, waitMillisecond보다 작을 수 없음, default는 1000이고 waitMillisecond가 더 크면 그 값 ]
       hookBatch: # 이벤트를 기다려 모은 뒤 hook 실행으로 합치는 방식
         waitMillisecond: [ 모은 이벤트로 실행을 만들기 전에 마지막 이벤트 뒤로 기다리는 시간, 0이면 기다리지 않음, default는 100 ]
-        maxWaitMillisecond: [ 이벤트를 모으는 가장 긴 시간, waitMillisecond보다 작을 수 없음, default는 1000 ]
+        maxWaitMillisecond: [ 이벤트를 모으는 가장 긴 시간, waitMillisecond보다 작을 수 없음, default는 1000이고 waitMillisecond가 더 크면 그 값 ]
         deliver: [ 모은 이벤트로 만드는 실행 (last, lastPerPath, each), default는 last ]
       queue: # hook 실행을 기다리는 대기열
         size: [ 기다릴 수 있는 실행의 최대 수, 1 이상, default는 2048 ]
@@ -265,7 +265,7 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 | `watchSubDir: false` | `watch: {subDir: false}` |
 | `waitMillisecond: 500` | `hookBatch: {waitMillisecond: 500}` |
 | `waitMillisecond: 0` | `waitMillisecond`를 적지 않습니다. 버전 3에서 `0`은 기본값 100이 아니라 기다리지 않음을 뜻합니다 |
-| `waitMillisecond: 3000`처럼 1000보다 큰 `waitMillisecond` | `hookBatch: {waitMillisecond: 3000, maxWaitMillisecond: 3000}`. `maxWaitMillisecond`는 기본값이 1000이고 `waitMillisecond`보다 작을 수 없습니다 |
+| `waitMillisecond: 3000`처럼 1000보다 큰 `waitMillisecond` | `hookBatch: {waitMillisecond: 3000}`. `maxWaitMillisecond`를 적지 않으면 가장 긴 대기 시간이 1000이 아니라 `waitMillisecond`와 같아집니다 |
 | `noWait: true` | `hookBatch: {waitMillisecond: 0, deliver: each}` |
 | `noWait: false` | `noWait`를 적지 않습니다 |
 | `excludeDir`, `excludeSuffix` | `watch.exclude`, [excludeDir와 excludeSuffix에서 옮기기](#excludedir와-excludesuffix에서-옮기기)를 따릅니다 |
@@ -276,7 +276,7 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 - 버전 2의 `noWait: false`는 기다리는 동안 받은 마지막 이벤트 하나로 hook을 실행했습니다. 버전 3의 기본값 `deliver: last`는 가장 나중에 바뀐 경로의 최종 변화로 hook을 실행합니다. 자세한 내용은 [hookBatch로 기다리고 합치기](#hookbatch로-기다리고-합치기)에 있습니다.
   - 한 번 기다리는 동안 만들었다가 지운 파일은 버전 2에서 `D`로 hook을 실행했고, 버전 3에서는 hook을 실행하지 않습니다.
   - watcher가 생성 이벤트를 놓친 파일은 `U`가 아니라 `C`로 hook에 갑니다.
-- 버전 2는 이벤트가 계속 오는 동안 계속 기다렸습니다. 버전 3은 첫 이벤트부터 늦어도 `hookBatch.maxWaitMillisecond`(기본 1000)가 지나면 hook을 실행합니다.
+- 버전 2는 이벤트가 계속 오는 동안 계속 기다렸습니다. 버전 3은 첫 이벤트부터 늦어도 `hookBatch.maxWaitMillisecond`(기본 1000, `hookBatch.waitMillisecond`가 더 크면 그 값)가 지나면 hook을 실행합니다.
 - 버전 2는 hook이 실행되는 동안 들어온 이벤트를 OS에 남겨 두었습니다. 버전 3은 그동안에도 이벤트를 읽고, 대상마다 hook을 기다리는 실행을 최대 `queue.size`(기본 2048)개까지 둡니다. 들어갈 자리가 없는 실행이 생기면 watcher를 멈춥니다. 자세한 내용은 [대기열 용량과 경고](#대기열-용량과-경고)에 있습니다.
 
 ## 이름 바꾸기와 옮기기
@@ -305,11 +305,11 @@ Error: watchTargets[0].option.watchSubDir is no longer supported; use option.wat
 
 ## hookBatch로 기다리고 합치기
 
-- watcher는 감시 대상의 이벤트를 모으다가, `hookBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000)가 지나면 모은 이벤트로 hook 실행을 만듭니다.
+- watcher는 감시 대상의 이벤트를 모으다가, `hookBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없거나 첫 이벤트부터 `hookBatch.maxWaitMillisecond`(기본 1000, `hookBatch.waitMillisecond`가 더 크면 그 값)가 지나면 모은 이벤트로 hook 실행을 만듭니다.
 - hook이 도는 동안에도 이벤트를 계속 모읍니다. 기다리는 시간이 끝날 때마다 그때 만든 실행을 감시 대상의 대기열에 넣고, 다른 때 만든 실행끼리는 합치지 않습니다.
 - `hookBatch.waitMillisecond: 0`이면 기다리지 않고 이벤트 하나마다 따로 실행을 만들며, `maxWaitMillisecond`는 쓰이지 않습니다.
 
-`maxWaitMillisecond`가 `waitMillisecond`보다 작거나 `deliver`가 아래 값이 아니면, watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
+직접 적은 `maxWaitMillisecond`가 `waitMillisecond`보다 작거나 `deliver`가 아래 값이 아니면, watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
 ```text
 Error: watchTargets[0].option.hookBatch: maxWaitMillisecond 1000 is less than waitMillisecond 3000
@@ -601,9 +601,10 @@ hook은 다음 약속에 기댈 수 있습니다.
 ### 폴더 이벤트를 모으는 시간
 
 - 폴더가 생기거나 사라지면 watcher는 그 감시 대상의 이벤트를 모으고, `dirBatch.waitMillisecond`(기본 100) 동안 새 이벤트가 없으면 모은 이벤트를 보냅니다.
-- 이벤트가 계속 오면 첫 이벤트부터 `dirBatch.maxWaitMillisecond`(기본 1000)가 지났을 때 그때까지 모은 이벤트를 보냅니다. 그 뒤에 그 폴더 안에서 생긴 이벤트는 흡수하지 않고 따로 hook에 갑니다.
+- 이벤트가 계속 오면 첫 이벤트부터 `dirBatch.maxWaitMillisecond`(기본 1000, `dirBatch.waitMillisecond`가 더 크면 그 값)가 지났을 때 그때까지 모은 이벤트를 보냅니다. 그 뒤에 그 폴더 안에서 생긴 이벤트는 흡수하지 않고 따로 hook에 갑니다.
 - 감시 대상의 하위 폴더 안에서 파일을 지워도 이벤트를 모으기 시작합니다. 폴더를 통째로 지우면 폴더 안의 파일을 지운 이벤트가 폴더의 이벤트보다 먼저 오기 때문입니다. 그래서 `hookBatch.waitMillisecond: 0`에서도 이런 삭제와 그 뒤의 이벤트는 최대 `dirBatch.waitMillisecond`만큼 늦게 hook에 갑니다.
 - `dirBatch.waitMillisecond: 0`이면 이벤트를 모으지 않으므로, hook은 생기거나 사라진 폴더 안의 파일과 하위 폴더의 이벤트도 받습니다.
+- 직접 적은 `dirBatch.maxWaitMillisecond`가 `dirBatch.waitMillisecond`보다 작으면, watcher는 hook을 하나도 실행하지 않고 `Error: watchTargets[0].option.dirBatch: maxWaitMillisecond 200 is less than waitMillisecond 500` 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 
 `watch.fileEvent`나 `watch.dirEvent`가 빈 값이거나 받지 않는 글자를 담았거나 둘 다 `none`이면, watcher는 hook을 하나도 실행하지 않고 다음과 같은 오류를 출력한 뒤 종료 코드 1로 끝납니다.
 

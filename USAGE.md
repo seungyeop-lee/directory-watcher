@@ -85,10 +85,10 @@ watchTargets:
         dirEvent: [ folder events that run the hook (C: create or move in, D: delete or move away), or none, default is "CD" ]
       dirBatch: # collecting events into folder events
         waitMillisecond: [ quiet time after the last event before collected folder events are sent, 0 turns collecting off, default is 100 ]
-        maxWaitMillisecond: [ longest time folder events are collected, default is 1000 ]
+        maxWaitMillisecond: [ longest time folder events are collected, not less than waitMillisecond, default is 1000 or waitMillisecond if larger ]
       hookBatch: # waiting for events and merging them into runs of the hook
         waitMillisecond: [ quiet time after the last event before the collected events become runs, 0 does not wait, default is 100 ]
-        maxWaitMillisecond: [ longest time events are collected, not less than waitMillisecond, default is 1000 ]
+        maxWaitMillisecond: [ longest time events are collected, not less than waitMillisecond, default is 1000 or waitMillisecond if larger ]
         deliver: [ runs made from the collected events (last, lastPerPath, each), default is last ]
       queue: # runs waiting for the hook
         size: [ most runs that can wait, at least 1, default is 2048 ]
@@ -262,7 +262,7 @@ Move each version 2 option as follows:
 | `watchSubDir: false` | `watch: {subDir: false}` |
 | `waitMillisecond: 500` | `hookBatch: {waitMillisecond: 500}` |
 | `waitMillisecond: 0` | No `waitMillisecond`: in version 3, `0` means no waiting instead of the default 100 |
-| `waitMillisecond` above 1000, such as `waitMillisecond: 3000` | `hookBatch: {waitMillisecond: 3000, maxWaitMillisecond: 3000}`, because `maxWaitMillisecond` defaults to 1000 and cannot be less than `waitMillisecond` |
+| `waitMillisecond` above 1000, such as `waitMillisecond: 3000` | `hookBatch: {waitMillisecond: 3000}`: without `maxWaitMillisecond`, the longest wait is the same as `waitMillisecond` instead of 1000 |
 | `noWait: true` | `hookBatch: {waitMillisecond: 0, deliver: each}` |
 | `noWait: false` | No `noWait` |
 | `excludeDir`, `excludeSuffix` | `watch.exclude`, as described in [Moving from excludeDir and excludeSuffix](#moving-from-excludedir-and-excludesuffix) |
@@ -273,7 +273,7 @@ Move each version 2 option as follows:
 - With `noWait: false`, version 2 ran the hook once with the last event received in the wait. Version 3 defaults to `deliver: last`, which runs the hook with the final change of the path that changed last, as described in [Waiting and merging with hookBatch](#waiting-and-merging-with-hookbatch).
   - A file created and deleted within one wait ran the hook with `D` in version 2 and runs no hook in version 3.
   - A file whose create event the watcher missed reaches the hook as `C` instead of `U`.
-- Version 2 kept waiting while events kept arriving. Version 3 runs the hook at most `hookBatch.maxWaitMillisecond` (default 1000) after the first event.
+- Version 2 kept waiting while events kept arriving. Version 3 runs the hook at most `hookBatch.maxWaitMillisecond` (default 1000, or `hookBatch.waitMillisecond` if larger) after the first event.
 - Version 2 left events that arrived while a hook ran waiting in the OS. Version 3 keeps reading them and holds at most `queue.size` (default 2048) runs per target waiting for the hook. A run that does not fit stops the watcher, as described in [Queue size and warnings](#queue-size-and-warnings).
 
 ## Renamed and moved files
@@ -302,11 +302,11 @@ The hook receives these events for each action:
 
 ## Waiting and merging with hookBatch
 
-- The watcher collects the events of a target and turns them into runs of the hook once no event has arrived for `hookBatch.waitMillisecond` (default 100), or `hookBatch.maxWaitMillisecond` (default 1000) after the first event.
+- The watcher collects the events of a target and turns them into runs of the hook once no event has arrived for `hookBatch.waitMillisecond` (default 100), or `hookBatch.maxWaitMillisecond` (default 1000, or `hookBatch.waitMillisecond` if larger) after the first event.
 - Collecting goes on while a hook runs. Each wait that ends puts its runs in the target's queue, and runs from different waits are never merged.
 - With `hookBatch.waitMillisecond: 0`, the watcher does not wait: each event becomes runs on its own, and `maxWaitMillisecond` is not used.
 
-If `maxWaitMillisecond` is less than `waitMillisecond`, or `deliver` is not one of the values below, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
+If a written `maxWaitMillisecond` is less than `waitMillisecond`, or `deliver` is not one of the values below, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
 
 ```text
 Error: watchTargets[0].option.hookBatch: maxWaitMillisecond 1000 is less than waitMillisecond 3000
@@ -593,9 +593,10 @@ A hook can rely on the following:
 ### Collecting folder events
 
 - After a folder is created or deleted, the watcher collects the events of the target and sends them once no event has arrived for `dirBatch.waitMillisecond` (default 100).
-- When events keep arriving, the watcher sends what it has collected `dirBatch.maxWaitMillisecond` (default 1000) after the first event. Events inside the folder after that reach the hook on their own and are not absorbed.
+- When events keep arriving, the watcher sends what it has collected `dirBatch.maxWaitMillisecond` (default 1000, or `dirBatch.waitMillisecond` if larger) after the first event. Events inside the folder after that reach the hook on their own and are not absorbed.
 - Deleting a file inside a subfolder of the target also starts collecting, because deleting a whole folder reports the files inside it before the folder. Even with `hookBatch.waitMillisecond: 0`, such a deletion and the events after it reach the hook up to `dirBatch.waitMillisecond` later.
 - With `dirBatch.waitMillisecond: 0`, the watcher does not collect, so the hook also receives the events of the files and subfolders inside a folder that is created or deleted.
+- If a written `dirBatch.maxWaitMillisecond` is less than `dirBatch.waitMillisecond`, the watcher runs no hook, prints an error such as `Error: watchTargets[0].option.dirBatch: maxWaitMillisecond 200 is less than waitMillisecond 500`, and exits with code 1.
 
 If `watch.fileEvent` or `watch.dirEvent` is empty, has a letter it does not accept, or both are `none`, the watcher runs no hook, prints an error such as the one below, and exits with code 1:
 

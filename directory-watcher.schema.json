@@ -102,7 +102,7 @@
                   },
                   "maxWaitMillisecond": {
                     "type": "integer",
-                    "description": "Longest time in milliseconds that folder events are collected.",
+                    "description": "Longest time in milliseconds that folder events are collected. It cannot be less than waitMillisecond. If omitted, it is 1000, or waitMillisecond if that is larger.",
                     "default": 1000,
                     "minimum": 0
                   }
@@ -121,7 +121,7 @@
                   },
                   "maxWaitMillisecond": {
                     "type": "integer",
-                    "description": "Longest time in milliseconds that events are collected. It cannot be less than waitMillisecond.",
+                    "description": "Longest time in milliseconds that events are collected. It cannot be less than waitMillisecond. If omitted, it is 1000, or waitMillisecond if that is larger.",
                     "default": 1000,
                     "minimum": 0
                   },
