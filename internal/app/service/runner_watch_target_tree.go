@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"iter"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,8 +34,6 @@ type watchTree struct {
 	logger  helper.Logger
 	// stop은 감시 루프가 끝났음을 알린다. pumpEvents를 본다.
 	stop <-chan struct{}
-	// receive는 retireWatcher가 예전 watcher의 남은 이벤트를 넘길 곳이다.
-	receive func(ev fsnotify.Event) error
 
 	// root는 감시 목록에 넣는 감시 대상 폴더의 경로다. path가 폴더 링크이면 링크를 푼 경로다. add가 정한다.
 	root    string
@@ -63,14 +62,13 @@ type retiredWatcher struct {
 }
 
 // newWatchTree는 watcher로 path를 감시하는 watchTree를 만든다. watcher가 nil이면 감시하지 않는다.
-func newWatchTree(path domain.Path, option domain.WatchOption, watcher *fsnotify.Watcher, stop <-chan struct{}, logger helper.Logger, receive func(ev fsnotify.Event) error) *watchTree {
+func newWatchTree(path domain.Path, option domain.WatchOption, watcher *fsnotify.Watcher, stop <-chan struct{}, logger helper.Logger) *watchTree {
 	t := &watchTree{
 		path:           path,
 		subDir:         option.SubDir,
 		exclude:        option.Exclude,
 		logger:         logger,
 		stop:           stop,
-		receive:        receive,
 		watcher:        watcher,
 		watchedDirs:    map[string]map[string]entryInfo{},
 		entryPaths:     map[fileID]string{},
@@ -261,6 +259,9 @@ func (t *watchTree) isExcluded(name string) bool {
 	return ok && t.exclude.Excludes(filepath.ToSlash(rel))
 }
 
+// fileID는 파일을 장치와 inode로 가리킨다. 이름을 바꿔도 그대로다.
+type fileID struct{ dev, ino uint64 }
+
 // entryInfo는 감시 중인 폴더 안에 있는 항목 하나의 기록이다.
 type entryInfo struct {
 	// id는 kqueue에서만 채운다. renamedFrom을 본다.
@@ -300,10 +301,29 @@ func (t *watchTree) isDir(name string) bool {
 	return err == nil && info.IsDir()
 }
 
-// entryPath는 kqueue에서 fileID가 id인 항목을 기록한 경로를 돌려준다.
-func (t *watchTree) entryPath(id fileID) (string, bool) {
-	path, ok := t.entryPaths[id]
-	return path, ok
+// renamedFrom은 kqueue에서 path에 새로 생긴 항목이 감시 중인 폴더 안의 다른 항목의 이름을 바꾼 것이면 그
+// 옛 경로를 돌려준다. 같은 장치와 inode의 항목이 옛 경로에 더는 없으면 이름을 바꾼 것으로 본다.
+func (t *watchTree) renamedFrom(path string) (string, bool) {
+	if !kqueueOS {
+		return "", false
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", false
+	}
+	id, ok := fileIDOf(info)
+	if !ok {
+		return "", false
+	}
+	old, ok := t.entryPaths[id]
+	if !ok || old == path {
+		return "", false
+	}
+	// 하드 링크를 만들면 옛 경로에 같은 파일이 그대로 있다.
+	if oldInfo, err := os.Lstat(old); err == nil && os.SameFile(info, oldInfo) {
+		return "", false
+	}
+	return old, true
 }
 
 // markWatched는 감시 목록에 넣은 폴더 dir을 watchedDirs에 적는다. dir 안의 항목은 addEntry가 적는다.
@@ -416,10 +436,7 @@ func (t *watchTree) isUnreleased(name string) bool {
 // 알릴 때 부른다.
 func (t *watchTree) releaseLeakedWatches() error {
 	t.leakCheck = nil
-	if err := t.rebuildIfLeaked(); err != nil {
-		return err
-	}
-	return t.retireWatcher()
+	return t.rebuildIfLeaked()
 }
 
 // rebuildIfLeaked는 watcher의 감시 목록에 watchedDirs 밖의 폴더가 있거나 같은 폴더가 두 번 있으면
@@ -444,7 +461,7 @@ func (t *watchTree) rebuildIfLeaked() error {
 }
 
 // rebuildWatcher는 watchedDirs의 폴더만 감시하는 새 watcher로 갈아 끼우고 예전 watcher를 닫는다. 예전
-// watcher가 이미 받은 이벤트는 retireWatcher가 넘기도록 t.retiring에 둔다.
+// watcher가 이미 받은 이벤트는 retireWatcher가 돌려주도록 t.retiring에 둔다.
 //
 // fsnotify의 Windows 구현은 감시 대상 밖으로 옮긴 폴더의 감시를 경로로 찾아 풀므로, 옛 경로에 그 폴더가 없으면
 // Remove가 실패하고 감시가 watcher를 닫을 때까지 남는다. 남은 감시만 풀 방법이 없어 watcher를 통째로 바꾼다.
@@ -455,7 +472,7 @@ func (t *watchTree) rebuildWatcher() error {
 	}
 	nextEvents, nextErrors := pumpEvents(next, t.stop)
 	for dir := range t.watchedDirs {
-		// 사이에 지워진 폴더의 Remove 이벤트는 예전 watcher가 retireWatcher에서 넘긴다.
+		// 사이에 지워진 폴더의 Remove 이벤트는 retireWatcher가 예전 watcher의 이벤트로 돌려준다.
 		if err := next.Add(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			_ = next.Close()
 			return err
@@ -479,30 +496,33 @@ func (t *watchTree) rebuildWatcher() error {
 	return nil
 }
 
-// retireWatcher는 rebuildWatcher가 닫은 예전 watcher가 닫히기 전까지 받은 이벤트를 receive로 넘긴다.
+// retireWatcher는 rebuildWatcher가 닫은 예전 watcher가 닫히기 전까지 받은 이벤트를 차례로 돌려준다. 다 돌려주거나
+// 감시 루프가 순회를 멈추면, 그 watcher에서 감시를 풀지 못한 폴더의 기록을 지운다.
 //
 // 새 watcher는 폴더를 모두 넣은 뒤에 생긴 변경만 받으므로, 그 전의 변경은 예전 watcher의 이벤트로 넘긴다.
 // 새 watcher에 폴더를 넣은 뒤 예전 watcher를 닫기까지 생긴 변경은 hook에 두 번 갈 수 있다.
 //
-// handleEvent가 rebuildWatcher를 부를 수 있으므로, 감시 루프의 select에서 handleEvent로 이벤트를 넘기는 case는
-// 모두 끝에 이 함수를 부른다. 그래야 예전 watcher의 이벤트가 새 watcher의 다음 이벤트보다 먼저 간다.
-func (t *watchTree) retireWatcher() error {
-	old := t.retiring
-	if old == nil {
-		return nil
-	}
-	t.retiring = nil
-	defer func() {
-		for _, dir := range old.unreleased {
-			delete(t.unreleasedDirs, dir)
+// handleEvent와 releaseLeakedWatches가 rebuildWatcher를 부를 수 있으므로, 감시 루프의 select에서 둘을 부르는
+// case는 모두 끝에 이 함수가 돌려준 이벤트를 넘긴다. 그래야 예전 watcher의 이벤트가 새 watcher의 다음 이벤트보다
+// 먼저 간다.
+func (t *watchTree) retireWatcher() iter.Seq[fsnotify.Event] {
+	return func(yield func(fsnotify.Event) bool) {
+		old := t.retiring
+		if old == nil {
+			return
 		}
-	}()
-	for ev := range old.events {
-		if err := t.receive(ev); err != nil {
-			return err
+		t.retiring = nil
+		defer func() {
+			for _, dir := range old.unreleased {
+				delete(t.unreleasedDirs, dir)
+			}
+		}()
+		for ev := range old.events {
+			if !yield(ev) {
+				return
+			}
 		}
 	}
-	return nil
 }
 
 // pumpEvents는 Windows에서 w의 이벤트와 오류를 쉬지 않고 받아 두었다가 돌려주는 채널로 차례로 넘기고, 다른

@@ -11,7 +11,7 @@ import (
 )
 
 // treeFixture는 감시 대상 root를 실제 watcher로 감시하는 watchTree를 둔다. 감시 루프 없이 handleEvent가 부르는
-// 메서드를 직접 부르고, retireWatcher가 넘기는 이벤트는 버린다.
+// 메서드를 직접 부른다.
 type treeFixture struct {
 	t    *testing.T
 	root string
@@ -31,7 +31,7 @@ func newTreeFixtureAt(t *testing.T, path string, option domain.WatchOption) *tre
 	}
 	stop := make(chan struct{})
 	f := &treeFixture{t: t, root: path}
-	f.tree = newWatchTree(domain.Path(path), option, watcher, stop, newMockLogger(), func(fsnotify.Event) error { return nil })
+	f.tree = newWatchTree(domain.Path(path), option, watcher, stop, newMockLogger())
 	t.Cleanup(func() {
 		close(stop)
 		f.tree.close()
@@ -255,6 +255,9 @@ func TestWatchTreeReleaseLeakedWatches(t *testing.T) {
 			events := f.tree.Events()
 			if err := f.tree.releaseLeakedWatches(); err != nil {
 				t.Fatal(err)
+			}
+			// 감시 루프처럼 갈아 끼운 예전 watcher의 이벤트를 다 받는다.
+			for range f.tree.retireWatcher() {
 			}
 			f.assertWatchList(".", "d")
 			if replaced := f.tree.Events() != events; replaced != leaked {

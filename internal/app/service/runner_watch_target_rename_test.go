@@ -298,9 +298,9 @@ func TestRetiredWatcherEventsPrecedeNextEventAfterHoldTimeout(t *testing.T) {
 	}
 	retired, retiredErrors := controlledSource(r)
 	holdTimeout := make(chan time.Time)
-	r.held = []fsnotify.Event{{Name: dir, Op: fsnotify.Create}}
-	r.renameSource = filepath.Join(target, "old")
-	r.holdTimeout = holdTimeout
+	r.renamePairer.held = []fsnotify.Event{{Name: dir, Op: fsnotify.Create}}
+	r.renamePairer.source = filepath.Join(target, "old")
+	r.renamePairer.timeout = holdTimeout
 	r.tree.unreleasedDirs[dir] = struct{}{}
 	changed, result := startRunner(t, r, nil)
 

@@ -3,12 +3,12 @@ package service
 import (
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"runtime"
 	"slices"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
@@ -36,18 +36,12 @@ type watchTargetRunner struct {
 	path domain.Path
 	// watching은 감시를 시작했는지를 나타낸다. Run이 done을 닫기 전에만 쓰므로 Stop은 done을 기다린 뒤 읽는다.
 	watching bool
-	// held는 receive가 아직 handleEvent로 넘기지 않은 이벤트다. 맨 앞이 kqueue에서 이름을 바꾼 항목의
-	// Create이면 renameSource에 옛 경로를 두고, holdTimeout에 그 Rename을 기다리는 시간이 끝남을 알린다.
-	held         []fsnotify.Event
-	renameSource string
-	holdTimeout  <-chan time.Time
-	// selfRenames는 inotify에서 자신의 Rename이 한 번 더 올 수 있는, 옮긴 폴더의 옛 경로와 옮긴 때다.
-	selfRenames map[string]time.Time
 
-	tree        *watchTree
-	dirBatcher  *dirBatcher
-	hookBatcher *hookBatcher
-	dispatcher  *dispatcher
+	tree         *watchTree
+	renamePairer *renamePairer
+	dirBatcher   *dirBatcher
+	hookBatcher  *hookBatcher
+	dispatcher   *dispatcher
 
 	logger     helper.Logger
 	initErr    error
@@ -77,12 +71,12 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 		hookBatcher: newHookBatcher(commandSet.Option),
 		dispatcher:  newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
 		logger:      logger,
-		selfRenames: map[string]time.Time{},
 		initErr:     err,
 		stop:        stop,
 		done:        make(chan struct{}),
 	}
-	result.tree = newWatchTree(commandSet.Path, commandSet.Option.Watch, watcher, stop, logger, result.receive)
+	result.tree = newWatchTree(commandSet.Path, commandSet.Option.Watch, watcher, stop, logger)
+	result.renamePairer = newRenamePairer(result.tree.renamedFrom, logger)
 	result.dirBatcher = newDirBatcher(commandSet.Option.DirBatch, result.hookBatcher, result.tree.reAddUnder)
 	return result
 }
@@ -112,15 +106,18 @@ func (r *watchTargetRunner) Run() error {
 		select {
 		case <-r.stop:
 			return nil
-		case <-r.holdTimeout:
-			if err := r.releaseHeld(); err != nil {
+		case <-r.renamePairer.Timeout():
+			if err := r.handleAll(r.renamePairer.release()); err != nil {
 				return r.exitError(err)
 			}
-			if err := r.tree.retireWatcher(); err != nil {
+			if err := r.receiveRetired(); err != nil {
 				return r.exitError(err)
 			}
 		case <-r.tree.LeakCheck():
 			if err := r.tree.releaseLeakedWatches(); err != nil {
+				return r.exitError(err)
+			}
+			if err := r.receiveRetired(); err != nil {
 				return r.exitError(err)
 			}
 		case <-r.dirBatcher.Due():
@@ -141,7 +138,7 @@ func (r *watchTargetRunner) Run() error {
 			if err := r.receive(ev); err != nil {
 				return r.exitError(err)
 			}
-			if err := r.tree.retireWatcher(); err != nil {
+			if err := r.receiveRetired(); err != nil {
 				return r.exitError(err)
 			}
 		case err, ok := <-r.tree.Errors():
@@ -169,6 +166,31 @@ func (r *watchTargetRunner) exitError(err error) error {
 	return &FatalError{Path: r.path, Cause: err}
 }
 
+// receive는 fsnotify 이벤트 ev를 renamePairer에 넘기고, 짝을 맞춰 돌려받은 이벤트를 handleEvent로 넘긴다.
+func (r *watchTargetRunner) receive(ev fsnotify.Event) error {
+	return r.handleAll(r.renamePairer.receive(ev))
+}
+
+// receiveRetired는 watchTree가 갈아 끼운 예전 watcher의 남은 이벤트를 receive로 넘긴다.
+func (r *watchTargetRunner) receiveRetired() error {
+	for ev := range r.tree.retireWatcher() {
+		if err := r.receive(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// handleAll은 renamePairer가 돌려준 이벤트 events를 차례로 handleEvent로 넘긴다.
+func (r *watchTargetRunner) handleAll(events iter.Seq[fsnotify.Event]) error {
+	for ev := range events {
+		if err := r.handleEvent(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // handleEvent는 fsnotify 이벤트 ev를 감시 목록과 기록에 반영하고, 제외되지 않은 파일과 폴더의 생성, 수정,
 // 삭제이면 dirBatcher로 넘긴다. 넘기는 이벤트에는 반영하기 전에 경로가 기록에 있었는지를 함께 적는다.
 func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
@@ -185,7 +207,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	var isDir, existed bool
 	switch {
 	case ev.Op.Has(fsnotify.Create):
-		delete(r.selfRenames, ev.Name)
+		r.renamePairer.forgetSelfRename(ev.Name)
 		if r.tree.isUnreleasedDir(ev.Name) {
 			// 같은 경로에 새로 생긴 폴더와 풀지 못한 옛 폴더의 감시는 같은 경로로 이벤트를 알리므로, 새 폴더를
 			// 감시하기 전에 옛 감시를 없앤다.
@@ -205,7 +227,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		}
 		ev.Op = fsnotify.Create
 	case ev.Op.Has(fsnotify.Remove) || ev.Op.Has(fsnotify.Rename):
-		if r.isSelfRename(ev) {
+		if r.renamePairer.isSelfRename(ev) {
 			return nil
 		}
 		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 기록에 적어 둔 폴더인지로 판단한다.
@@ -213,7 +235,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		wasDir, existed = r.tree.recorded(ev.Name)
 		isDir = r.tree.unwatchTree(ev.Name) || wasDir
 		if isDir && inotifyOS && ev.Op.Has(fsnotify.Rename) {
-			r.addSelfRename(ev.Name)
+			r.renamePairer.addSelfRename(ev.Name)
 		}
 		// 이름을 바꾸거나 옮긴 파일의 옛 경로는 지운 파일처럼 사라졌으므로 삭제로 알린다.
 		ev.Op = fsnotify.Remove
