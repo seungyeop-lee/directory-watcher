@@ -39,33 +39,9 @@ func (o fixedValueOption) name() string {
 	return o.key[strings.LastIndex(o.key, ".")+1:]
 }
 
-// schemaProperties는 스키마의 속성을 모두 키 경로별로 모은다. 목록 안의 키는 목록 키 바로 아래 키로 센다(watchTargets.path).
-func schemaProperties(t *testing.T) map[string]map[string]any {
-	t.Helper()
-	root := readSchema(t)
-	definitions, _ := root["definitions"].(map[string]any)
-	found := map[string]map[string]any{}
-	var walk func(node map[string]any, parent string)
-	walk = func(node map[string]any, parent string) {
-		if ref, ok := node["$ref"].(string); ok {
-			node, _ = definitions[strings.TrimPrefix(ref, "#/definitions/")].(map[string]any)
-		}
-		if items, ok := node["items"].(map[string]any); ok {
-			node = items
-		}
-		properties, _ := node["properties"].(map[string]any)
-		for name, property := range properties {
-			key := joinKey(parent, name)
-			found[key] = property.(map[string]any)
-			walk(found[key], key)
-		}
-	}
-	walk(root, "")
-	return found
-}
-
 func TestSchemaFixedValuesMatchCode(t *testing.T) {
-	properties := schemaProperties(t)
+	properties := map[string]map[string]any{}
+	eachSchemaProperty(t, func(_, key string, property map[string]any) { properties[key] = property })
 	var restricted, covered []string
 	for key, property := range properties {
 		_, hasEnum := property["enum"]

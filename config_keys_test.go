@@ -3,7 +3,6 @@ package main
 import (
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	yamlconfig "github.com/seungyeop-lee/directory-watcher/v3/internal/config/yaml"
@@ -35,30 +34,15 @@ func configKeys() (keys []string, parents map[string]bool) {
 }
 
 // schemaKeys는 스키마에서 parents에 든 키 아래의 속성 이름을 키 경로로 모은다.
-// hook 명령의 dir, cmd처럼 yaml 태그가 하위 키를 정하지 않는 값의 속성은 모으지 않는다.
+// hook 명령의 dir, cmd는 스키마의 anyOf 안에 있어서 eachSchemaProperty가 넘기지 않으므로 모이지 않는다.
 func schemaKeys(t *testing.T, parents map[string]bool) []string {
 	t.Helper()
-	root := readSchema(t)
-	definitions, _ := root["definitions"].(map[string]any)
 	var keys []string
-	var walk func(node map[string]any, parent string)
-	walk = func(node map[string]any, parent string) {
-		if ref, ok := node["$ref"].(string); ok {
-			node, _ = definitions[strings.TrimPrefix(ref, "#/definitions/")].(map[string]any)
-		}
-		if items, ok := node["items"].(map[string]any); ok {
-			node = items
-		}
-		properties, _ := node["properties"].(map[string]any)
-		for name, property := range properties {
-			key := joinKey(parent, name)
+	eachSchemaProperty(t, func(parent, key string, _ map[string]any) {
+		if parents[parent] {
 			keys = append(keys, key)
-			if parents[key] {
-				walk(property.(map[string]any), key)
-			}
 		}
-	}
-	walk(root, "")
+	})
 	return keys
 }
 

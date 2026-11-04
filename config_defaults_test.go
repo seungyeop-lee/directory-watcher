@@ -23,29 +23,14 @@ import (
 // option 아래 키 경로와 default 값으로 모은다.
 func schemaOptionDefaults(t *testing.T) map[string]any {
 	t.Helper()
-	option := schemaProperty(readSchema(t), "watchTargets")
-	option = schemaProperty(option["items"].(map[string]any), "option")
 	defaults := map[string]any{}
-	var walk func(node map[string]any, parent string)
-	walk = func(node map[string]any, parent string) {
-		properties, _ := node["properties"].(map[string]any)
-		for name, property := range properties {
-			property := property.(map[string]any)
-			key := joinKey(parent, name)
-			if value, ok := property["default"]; ok {
-				defaults[key] = value
-			}
-			walk(property, key)
+	eachSchemaProperty(t, func(_, key string, property map[string]any) {
+		key, found := strings.CutPrefix(key, "watchTargets.option.")
+		if value, ok := property["default"]; found && ok {
+			defaults[key] = value
 		}
-	}
-	walk(option, "")
+	})
 	return defaults
-}
-
-func schemaProperty(node map[string]any, name string) map[string]any {
-	properties, _ := node["properties"].(map[string]any)
-	property, _ := properties[name].(map[string]any)
-	return property
 }
 
 // optionKeysWithCodeDefault는 yamlconfig.WatchTargetsOptionConfig에서 포인터로 받는 키를 option 아래 키 경로로 모은다.

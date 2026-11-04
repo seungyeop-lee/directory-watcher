@@ -86,6 +86,32 @@ func readSchema(t *testing.T) map[string]any {
 	return root
 }
 
+// eachSchemaProperty는 스키마의 속성을 위에서부터 돌며, 속성마다 위 키의 경로, 키 경로, 속성 노드를 visit에 넘긴다.
+// 키 경로는 eachYAMLField와 같이 위 키부터 점으로 잇고, 목록 안의 키는 목록 키 바로 아래 키로 센다(watchTargets.path).
+// $ref, items, properties만 따라가고 anyOf, oneOf, allOf, additionalProperties 안의 속성은 넘기지 않는다.
+func eachSchemaProperty(t *testing.T, visit func(parent, key string, property map[string]any)) {
+	t.Helper()
+	root := readSchema(t)
+	definitions, _ := root["definitions"].(map[string]any)
+	var walk func(node map[string]any, parent string)
+	walk = func(node map[string]any, parent string) {
+		if ref, ok := node["$ref"].(string); ok {
+			node, _ = definitions[strings.TrimPrefix(ref, "#/definitions/")].(map[string]any)
+		}
+		if items, ok := node["items"].(map[string]any); ok {
+			node = items
+		}
+		properties, _ := node["properties"].(map[string]any)
+		for name, property := range properties {
+			property := property.(map[string]any)
+			key := joinKey(parent, name)
+			visit(parent, key, property)
+			walk(property, key)
+		}
+	}
+	walk(root, "")
+}
+
 var yamlKeyLine = regexp.MustCompile(`^( *)(- )?(\w+):`)
 
 // eachYAMLKey는 yaml 문서에서 키를 적은 줄마다 위 키의 경로, 키 경로, 줄을 visit에 넘긴다.
