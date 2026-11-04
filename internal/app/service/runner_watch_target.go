@@ -61,24 +61,16 @@ type watchTargetRunner struct {
 	// 때를 알린다. collect를 본다.
 	batch    *eventBatch
 	batchDue <-chan time.Time
-	// hookBatch는 hook에 넘기려고 기다리는 동안 받은 이벤트이고, 기다리지 않을 때는 nil이다. hookBatchDue는
-	// hookBatch로 실행을 만들 때를 알린다. batchForHook을 본다.
-	hookBatch    *changeBatch
-	hookBatchDue <-chan time.Time
 	// retiring은 rebuildWatcher가 갈아 끼운 뒤 아직 닫지 않은 예전 watcher다. retireWatcher를 본다.
 	retiring *retiredWatcher
 
-	dispatcher *dispatcher
+	hookBatcher *hookBatcher
+	dispatcher  *dispatcher
 
-	subDir           bool
-	exclude          domain.ExcludePatterns
-	fileEvent        domain.WatchEvent
-	dirEvent         domain.WatchEvent
-	dirBatchWait     time.Duration
-	dirBatchMaxWait  time.Duration
-	hookBatchWait    time.Duration
-	hookBatchMaxWait time.Duration
-	deliver          domain.Deliver
+	subDir          bool
+	exclude         domain.ExcludePatterns
+	dirBatchWait    time.Duration
+	dirBatchMaxWait time.Duration
 
 	logger      helper.Logger
 	watcher     *fsnotify.Watcher
@@ -107,26 +99,22 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 	stop := make(chan struct{})
 
 	result := &watchTargetRunner{
-		path:             commandSet.Path,
-		dispatcher:       newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
-		subDir:           commandSet.Option.Watch.SubDir,
-		exclude:          commandSet.Option.Watch.Exclude,
-		fileEvent:        commandSet.Option.Watch.FileEvent,
-		dirEvent:         commandSet.Option.Watch.DirEvent,
-		dirBatchWait:     commandSet.Option.DirBatch.WaitMillisecond.Duration(),
-		dirBatchMaxWait:  commandSet.Option.DirBatch.MaxWaitMillisecond.Duration(),
-		hookBatchWait:    commandSet.Option.HookBatch.WaitMillisecond.Duration(),
-		hookBatchMaxWait: commandSet.Option.HookBatch.MaxWaitMillisecond.Duration(),
-		deliver:          commandSet.Option.HookBatch.Deliver,
-		logger:           logger,
-		watcher:          watcher,
-		watchedDirs:      map[string]map[string]entryInfo{},
-		entryPaths:       map[fileID]string{},
-		selfRenames:      map[string]time.Time{},
-		unreleasedDirs:   map[string]struct{}{},
-		initErr:          err,
-		stop:             stop,
-		done:             make(chan struct{}),
+		path:            commandSet.Path,
+		hookBatcher:     newHookBatcher(commandSet.Option),
+		dispatcher:      newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
+		subDir:          commandSet.Option.Watch.SubDir,
+		exclude:         commandSet.Option.Watch.Exclude,
+		dirBatchWait:    commandSet.Option.DirBatch.WaitMillisecond.Duration(),
+		dirBatchMaxWait: commandSet.Option.DirBatch.MaxWaitMillisecond.Duration(),
+		logger:          logger,
+		watcher:         watcher,
+		watchedDirs:     map[string]map[string]entryInfo{},
+		entryPaths:      map[fileID]string{},
+		selfRenames:     map[string]time.Time{},
+		unreleasedDirs:  map[string]struct{}{},
+		initErr:         err,
+		stop:            stop,
+		done:            make(chan struct{}),
 	}
 	if watcher != nil {
 		result.watchEvents, result.watchErrors = pumpEvents(watcher, result.stop)
@@ -175,8 +163,8 @@ func (r *watchTargetRunner) Run() error {
 			if err := r.flushBatch(); err != nil {
 				return r.exitError(err)
 			}
-		case <-r.hookBatchDue:
-			if err := r.flushHookBatch(); err != nil {
+		case <-r.hookBatcher.Due():
+			if err := r.dispatcher.enqueue(r.hookBatcher.flush()); err != nil {
 				return r.exitError(err)
 			}
 		case ev, ok := <-r.watchEvents:
@@ -287,14 +275,6 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		return nil
 	}
 	return r.collect(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed})
-}
-
-// listens는 e가 fileEvent나 dirEvent에서 고른 이벤트 종류인지 판단한다.
-func (r *watchTargetRunner) listens(e domain.Event) bool {
-	if e.IsDir {
-		return r.dirEvent.Has(e.Operation)
-	}
-	return r.fileEvent.Has(e.Operation)
 }
 
 func (r *watchTargetRunner) addDir() error {

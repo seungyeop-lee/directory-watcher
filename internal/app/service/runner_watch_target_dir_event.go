@@ -71,7 +71,7 @@ func (r *watchTargetRunner) opensBatch(e domain.Event) bool {
 	return fsnotify.Op(e.Operation) == fsnotify.Remove && filepath.Dir(e.Path.String()) != r.watchRoot
 }
 
-// collect는 e를 batchForHook으로 넘긴다. 폴더 이벤트를 모으는 동안에는 e도 묶음에 넣어, 감시 대상의 이벤트가
+// collect는 e를 passOn으로 넘긴다. 폴더 이벤트를 모으는 동안에는 e도 묶음에 넣어, 감시 대상의 이벤트가
 // 생긴 순서대로 hook에 가게 한다. dirBatchWait가 0이면 폴더 이벤트를 모으지 않는다.
 //
 // 묶음은 마지막 이벤트 뒤 dirBatchWait 동안 이벤트가 없거나, 첫 이벤트부터 dirBatchMaxWait가 지나면 flushBatch가
@@ -102,7 +102,8 @@ func (r *watchTargetRunner) flushBatch() error {
 	return nil
 }
 
-// passOn은 폴더 이벤트 모으기를 마친 e를 batchForHook으로 넘긴다.
+// passOn은 폴더 이벤트 모으기를 마친 e를 hookBatcher에 넘기고, hookBatcher가 곧바로 돌려준 실행을 dispatcher의
+// 대기열에 넣는다.
 //
 // fsnotify의 kqueue 구현은 새 폴더의 감시 등록을 내부 재등록으로 덮어쓸 수 있다(reAddDirs 참고). 그래서 생긴
 // 폴더의 이벤트를 넘기기 전에 그 아래의 감시 폴더를 다시 감시 목록에 넣어, hook이 폴더 생성을 받은 뒤 그 안에서
@@ -113,7 +114,7 @@ func (r *watchTargetRunner) passOn(e change) error {
 			return err
 		}
 	}
-	return r.batchForHook(e)
+	return r.dispatcher.enqueue(r.hookBatcher.add(e))
 }
 
 // watchedDirsUnder는 감시 목록에 넣은 폴더 가운데 dir과 그 아래에 있는 폴더를 돌려준다.

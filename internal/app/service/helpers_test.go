@@ -164,6 +164,21 @@ func writeFile(t *testing.T, path string) {
 	}
 }
 
+// describeRun은 hook이 받는 실행 run을 root 기준 상대 경로로 "C a.txt"처럼 쓴다. 폴더는 "C d/"처럼 경로 끝에
+// /를 붙인다.
+func describeRun(t *testing.T, root string, run domain.Event) string {
+	t.Helper()
+	rel, err := filepath.Rel(root, run.Path.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel = filepath.ToSlash(rel)
+	if run.IsDir {
+		rel += "/"
+	}
+	return run.Operation.String() + " " + rel
+}
+
 // renameFixture는 감시 대상 target 안에 src와 dst 폴더를, target 밖에 outside 폴더를 둔다.
 type renameFixture struct {
 	t       *testing.T

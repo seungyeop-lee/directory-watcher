@@ -23,30 +23,57 @@ type changeBatch struct {
 	start time.Time
 }
 
-// batchForHook은 e를 hook에 넘길 실행으로 만든다. hookBatchWait가 0이면 e 하나로 곧바로 실행을 만들어 dispatcher의
-// 대기열에 넣는다.
+// hookBatcher는 hook에 넘길 변경을 한 번 기다리는 동안 모으고, 기다리는 시간이 끝나면 deliver에 따라 실행으로
+// 합친다. 감시 루프의 고루틴에서만 부른다.
 //
-// hookBatchWait가 0이 아니면 e를 모으고, 마지막 이벤트 뒤 hookBatchWait 동안 이벤트가 없거나 첫 이벤트부터
-// hookBatchMaxWait가 지나면 flushHookBatch가 모은 이벤트로 실행을 만든다. 대기열에 넣기 전에 모으므로 hook이 도는
-// 동안에도 기다리는 시간이 끝날 때마다 실행이 대기열에 쌓이고, 다른 때 만든 실행끼리는 합치지 않는다.
-func (r *watchTargetRunner) batchForHook(e change) error {
-	if r.hookBatchWait == 0 {
-		return r.dispatcher.enqueue(r.runsOf([]change{e}))
+// 마지막 변경 뒤 wait 동안 변경이 없거나 첫 변경부터 maxWait가 지나면 Due가 알린다. 감시 루프는 그때 flush로 실행을
+// 받아 dispatcher의 대기열에 넣는다. 대기열에 넣기 전에 모으므로 hook이 도는 동안에도 기다리는 시간이 끝날 때마다
+// 실행이 대기열에 쌓이고, 다른 때 만든 실행끼리는 합치지 않는다.
+type hookBatcher struct {
+	wait      time.Duration
+	maxWait   time.Duration
+	deliver   domain.Deliver
+	fileEvent domain.WatchEvent
+	dirEvent  domain.WatchEvent
+	// batch는 기다리는 동안 받은 변경이고, 기다리지 않을 때는 nil이다. due는 batch로 실행을 만들 때를 알린다.
+	batch *changeBatch
+	due   <-chan time.Time
+}
+
+func newHookBatcher(option domain.WatchTargetsOption) *hookBatcher {
+	return &hookBatcher{
+		wait:      option.HookBatch.WaitMillisecond.Duration(),
+		maxWait:   option.HookBatch.MaxWaitMillisecond.Duration(),
+		deliver:   option.HookBatch.Deliver,
+		fileEvent: option.Watch.FileEvent,
+		dirEvent:  option.Watch.DirEvent,
+	}
+}
+
+// add는 변경 c를 받는다. wait가 0이면 c 하나로 만든 실행을 곧바로 돌려주고, 아니면 c를 모으고 nil을 돌려준다.
+func (b *hookBatcher) add(c change) []domain.Event {
+	if b.wait == 0 {
+		return b.runsOf([]change{c})
 	}
 	now := time.Now()
-	if r.hookBatch == nil {
-		r.hookBatch = &changeBatch{start: now}
+	if b.batch == nil {
+		b.batch = &changeBatch{start: now}
 	}
-	r.hookBatch.changes = append(r.hookBatch.changes, e)
-	r.hookBatchDue = time.After(min(r.hookBatchWait, r.hookBatch.start.Add(r.hookBatchMaxWait).Sub(now)))
+	b.batch.changes = append(b.batch.changes, c)
+	b.due = time.After(min(b.wait, b.batch.start.Add(b.maxWait).Sub(now)))
 	return nil
 }
 
-// flushHookBatch는 모은 이벤트로 만든 실행을 dispatcher의 대기열에 넣는다.
-func (r *watchTargetRunner) flushHookBatch() error {
-	batch := r.hookBatch
-	r.hookBatch, r.hookBatchDue = nil, nil
-	return r.dispatcher.enqueue(r.runsOf(batch.changes))
+// Due는 flush를 부를 때를 알리는 채널을 돌려준다. 모은 변경이 없으면 nil 채널이라 알리지 않는다.
+func (b *hookBatcher) Due() <-chan time.Time {
+	return b.due
+}
+
+// flush는 모은 변경으로 만든 실행을 돌려주고, 다음 변경부터 새로 기다린다.
+func (b *hookBatcher) flush() []domain.Event {
+	batch := b.batch
+	b.batch, b.due = nil, nil
+	return b.runsOf(batch.changes)
 }
 
 // runsOf는 한 번 기다리는 동안 모은 changes를 deliver에 따라 실행으로 합친다. fileEvent와 dirEvent에서
@@ -55,11 +82,11 @@ func (r *watchTargetRunner) flushHookBatch() error {
 // each는 이벤트마다 실행을 만든다. last와 lastPerPath는 경로마다 finalChange로 최종 변화를 계산하고, 경로가
 // 마지막으로 바뀐 순서대로 둔다. last는 그 가운데 마지막 실행 하나만 남기고, lastPerPath는 최종 변화가 D인 폴더
 // 아래 경로의 D를 뺀다.
-func (r *watchTargetRunner) runsOf(changes []change) []domain.Event {
+func (b *hookBatcher) runsOf(changes []change) []domain.Event {
 	var runs []domain.Event
-	if r.deliver == domain.DeliverEach {
+	if b.deliver == domain.DeliverEach {
 		for _, c := range changes {
-			if r.listens(c.Event) {
+			if b.listens(c.Event) {
 				runs = append(runs, c.Event)
 			}
 		}
@@ -92,15 +119,15 @@ func (r *watchTargetRunner) runsOf(changes []change) []domain.Event {
 			finals = append(finals, run)
 		}
 	}
-	if r.deliver == domain.DeliverLastPerPath {
+	if b.deliver == domain.DeliverLastPerPath {
 		finals = withoutRemovesUnderRemovedDirs(finals)
 	}
 	for _, run := range finals {
-		if r.listens(run) {
+		if b.listens(run) {
 			runs = append(runs, run)
 		}
 	}
-	if r.deliver == domain.DeliverLast && len(runs) > 1 {
+	if b.deliver == domain.DeliverLast && len(runs) > 1 {
 		runs = runs[len(runs)-1:]
 	}
 	return runs
@@ -146,4 +173,12 @@ func finalChange(existed bool, last domain.Event) (domain.Event, bool) {
 		return domain.Event{}, false
 	}
 	return run, true
+}
+
+// listens는 e가 fileEvent나 dirEvent에서 고른 이벤트 종류인지 판단한다.
+func (b *hookBatcher) listens(e domain.Event) bool {
+	if e.IsDir {
+		return b.dirEvent.Has(e.Operation)
+	}
+	return b.fileEvent.Has(e.Operation)
 }
