@@ -109,7 +109,9 @@ func TestDisplaysReadsTheCountAndRejectsOtherAnswers(t *testing.T) {
 		"other answer": {"echo missing value", 0, true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			u := utm{osascript: fakeCommand(t, "osascript", tc.script), log: io.Discard}
+			// AppleScript로 보낸 요청은 utmctl이 실행 중이면 -600으로 실패한다(utm.runJXA 참고).
+			appleScriptFails := `[ "$1 $2" = "-l JavaScript" ] || { echo "execution error: UTM got an error: Application isn't running. (-600)" >&2; exit 1; }` + "\n"
+			u := utm{osascript: fakeCommand(t, "osascript", appleScriptFails+tc.script), log: io.Discard}
 			got, err := u.displays("vm")
 			if got != tc.want || (err != nil) != tc.wantErr {
 				t.Fatalf("displays = %d, %v; want %d, error %v", got, err, tc.want, tc.wantErr)

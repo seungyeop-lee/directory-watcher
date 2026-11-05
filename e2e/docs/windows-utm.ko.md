@@ -165,6 +165,15 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 - 실행 중에는 UTM 창을 열거나 클릭하지 않습니다.
 - 크래시 보고서는 `~/Library/Logs/DiagnosticReports/UTM-*.ips`에 있습니다.
 
+### UTM이 실행 중인데 AppleScript가 -600으로 실패함
+
+- `utmctl` 프로세스가 하나라도 실행 중이면, AppleScript의 `tell application "UTM"`은 이벤트를 UTM이 아니라 그 `utmctl` 프로세스로 보내 곧바로 `응용 프로그램이 실행 중이 아닙니다. (-600)`(영어 환경에서는 `Application isn't running. (-600)`)로 실패합니다(macOS 27.2, UTM 5.0.8, 2026-11-05).
+  - UTM을 bundle ID나 앱 경로로 가리켜도 결과가 같습니다.
+  - 같은 VM을 쓰는 다른 실행의 `file push` 같은 `utmctl` 요청은 몇 초씩 이어지므로, 동시에 실행하면 이 실패가 자주 나타납니다.
+- 실행기는 JXA(`osascript -l JavaScript`)로 UTM에 이벤트를 보내며, JXA의 이벤트는 `utmctl`이 실행 중이어도 UTM에 도착합니다.
+- [E2E 전용 VM 만들기](#e2e-전용-vm-만들기) 2단계의 AppleScript도 이렇게 실패할 수 있으므로, `pgrep -x utmctl`이 아무것도 출력하지 않을 때 다시 실행합니다.
+- `osascript` 앞에 `AEDebugSends=1`을 붙이면 이벤트마다 대상이 출력되며, `target='psn '[utmctl]`은 이벤트가 `utmctl`로 갔다는 뜻입니다.
+
 ### QEMU가 종료 중에 비정상 종료함
 
 - 종료 요청 뒤 `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips`가 새로 생기면 `down`과 `all`은 VM이 꺼졌더라도 `QEMU aborted while the VM was stopping`으로 실패합니다.

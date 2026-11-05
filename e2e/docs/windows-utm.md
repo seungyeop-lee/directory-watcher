@@ -165,6 +165,15 @@ The following files are left in this directory as UTF-8 text.
 - Do not open or click the UTM window during a run.
 - Crash reports are in `~/Library/Logs/DiagnosticReports/UTM-*.ips`.
 
+### AppleScript fails with -600 while UTM is running
+
+- While any `utmctl` process is running, an AppleScript `tell application "UTM"` sends its events to that `utmctl` process instead of UTM and fails at once with `Application isn't running. (-600)` (macOS 27.2, UTM 5.0.8, 2026-11-05).
+  - Pointing to UTM by bundle ID or app path gives the same result.
+  - `utmctl` requests from other runs on the same VM, such as `file push`, last for seconds, so concurrent runs hit this often.
+- The runner sends its events to UTM with JXA (`osascript -l JavaScript`), whose events reach UTM even while `utmctl` is running.
+- The AppleScript in step 2 of [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm) can fail this way; run it again when `pgrep -x utmctl` prints nothing.
+- Setting `AEDebugSends=1` before `osascript` prints the target of each event; `target='psn '[utmctl]` means the event went to `utmctl`.
+
 ### QEMU aborts during shutdown
 
 - If a new `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips` appears after the shutdown request, `down` and `all` fail with `QEMU aborted while the VM was stopping` even if the VM shut down.

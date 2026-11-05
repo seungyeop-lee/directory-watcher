@@ -171,43 +171,33 @@ func (u utm) start(vm string) error {
 	return nil
 }
 
-// hideMainWindow는 utmctl --hide가 하는 일을 AppleScript로 한다: auto terminate를
-// 끄고 이름이 "UTM"인 창을 닫는다
-// (https://github.com/utmapp/UTM/blob/main/utmctl/UTMCtl.swift). 2026-11-03에는
-// utmctl이 보낸 두 이벤트가 모두 실패해 이벤트마다 OSStatus error -10004를 한 번씩
-// 출력했고, 메인 창은 화면에 남았다. 같은 이벤트를 osascript로 보내자 창이 닫혔다.
-// utmctl의 이벤트가 실패하는 원인은 알려지지 않았다. 두 방법 모두 VM의 디스플레이
-// 창은 닫지 못하며, 디스플레이 장치가 없는 VM만 창 없이 실행된다(up 참고). auto
-// terminate를 꺼 둔 채로 두어, 마지막 창이 닫혀도 UTM이 스스로 종료하지 않게 한다.
+// hideMainWindow는 utmctl --hide가 하는 일을 JXA로 한다: auto terminate를 끄고
+// 이름이 "UTM"인 창을 숨긴다(https://github.com/utmapp/UTM/blob/main/utmctl/UTMCtl.swift).
+// 2026-11-03에는 utmctl이 보낸 두 이벤트가 모두 실패해 이벤트마다 OSStatus error
+// -10004를 한 번씩 출력했고, 메인 창은 화면에 남았다. utmctl의 이벤트가 실패하는
+// 원인은 알려지지 않았다. utmctl은 창을 close로 닫지만, JXA에서 close는 UTM 사전의
+// guest file 명령(GuFiClOs)으로 해석되므로 창의 visible을 끈다. 두 방법 모두 VM의
+// 디스플레이 창은 닫지 못하며, 디스플레이 장치가 없는 VM만 창 없이 실행된다(up
+// 참고). auto terminate를 꺼 둔 채로 두어, 마지막 창이 닫혀도 UTM이 스스로 종료하지
+// 않게 한다.
 func (u utm) hideMainWindow() {
-	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
-	defer cancel()
-	script := `tell application "UTM"
-	set auto terminate to false
-	close (every window whose name is "UTM") saving no
-end tell`
-	if out, err := exec.CommandContext(ctx, u.osascript, "-e", script).CombinedOutput(); err != nil {
+	script := `const app = Application('com.utmapp.UTM')
+app.autoTerminate = false
+app.windows.whose({name: 'UTM'})().forEach(w => { w.visible = false })`
+	if out, err := u.runJXA(script); err != nil {
 		fmt.Fprintf(u.log, "hide the main UTM window: %v %s\n", err, out)
 	}
 }
 
 // displays는 VM 구성에 있는 디스플레이 장치 수를 돌려준다. utmctl은 이 값을 보여
-// 주지 않으므로 UTM의 AppleScript 사전으로 읽는다. 한 줄로 쓴 length of (get
-// displays of (configuration of ...))는 2026-11-03에 error -1700으로 실패했고,
-// 변수를 거쳐 단계별로 읽는 형태는 동작했다. tell은 UTM이 실행 중이 아니면 UTM을
-// 띄우므로, open 뒤에만 호출한다.
+// 주지 않으므로 UTM의 스크립팅 사전으로 읽는다. UTM이 실행 중이 아니면 이벤트가
+// UTM을 띄우므로, open 뒤에만 호출한다.
 func (u utm) displays(vm string) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
-	defer cancel()
-	script := `on run argv
-	set vmID to item 1 of argv
-	tell application "UTM"
-		set cfg to configuration of virtual machine id vmID
-		set ds to displays of cfg
-		return length of ds
-	end tell
-end run`
-	out, err := exec.CommandContext(ctx, u.osascript, "-e", script, vm).CombinedOutput()
+	script := `function run(argv) {
+	const vm = Application('com.utmapp.UTM').virtualMachines.byId(argv[0])
+	return vm.configuration().displays.length
+}`
+	out, err := u.runJXA(script, vm)
 	if err != nil {
 		return 0, fmt.Errorf("read the displays of VM %s: %v %s", vm, err, out)
 	}
@@ -216,6 +206,20 @@ end run`
 		return 0, fmt.Errorf("read the displays of VM %s: unexpected answer %q", vm, out)
 	}
 	return n, nil
+}
+
+// runJXA는 UTM에 이벤트를 보내는 스크립트를 AppleScript가 아니라 JXA(JavaScript for
+// Automation)로 실행한다. AppleScript의 tell application "UTM"은 utmctl 프로세스가
+// 하나라도 실행 중이면 이벤트를 UTM이 아니라 utmctl로 보내, 즉시 error -600
+// (Application isn't running)으로 실패한다. UTM을 bundle ID나 앱 경로로 가리켜도
+// 같았다. 2026-11-05에 AEDebugSends로 확인했을 때, file push가 진행되는 동안
+// AppleScript의 이벤트는 모두 utmctl로 갔고 JXA의 이벤트는 UTM으로 갔다. 같은 VM으로
+// 여러 실행이 동시에 돌면 다른 실행이 보낸 file push 같은 utmctl 요청이 몇 초씩
+// 이어지므로, 이 실패는 동시 실행에서 자주 나타난다.
+func (u utm) runJXA(script string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
+	defer cancel()
+	return exec.CommandContext(ctx, u.osascript, append([]string{"-l", "JavaScript", "-e", script}, args...)...).CombinedOutput()
 }
 
 // await는 utmctl status가 want를 보고할 때까지 상태를 반복해서 확인한다.
@@ -268,7 +272,7 @@ func (u utm) guestAgentReady(vm string) error {
 // 확인한다.
 var utmRunning = func() bool { return exec.Command("pgrep", "-x", "UTM").Run() == nil }
 
-// open은 utmctl이나 AppleScript가 UTM을 띄우게 두지 않고, open -g로 UTM을
+// open은 utmctl이나 JXA 스크립트가 UTM을 띄우게 두지 않고, open -g로 UTM을
 // 백그라운드에서 띄운다. UTM #8006은 macOS 27의 UTM 5.0.8을 utmctl이 띄우면 UTM이
 // 충돌하고 start가 멈춘다고 보고하고, irgo-windows-vm PR #13은 UTM을 띄우고 0.3초
 // 안에 요청을 보내면 start가 응답하지 않는다고 측정했다. 2026-11-03 실험에서는 첫
@@ -297,9 +301,7 @@ func (u utm) open() error {
 // quit은 UTM에 정상 종료를 요청하고 UTM이 끝날 때까지 기다린다. UTM을 강제로
 // 종료하지는 않으며, 호출하는 쪽은 실행 중인 VM이 없을 때만 quit을 호출한다.
 func (u utm) quit() error {
-	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, u.osascript, "-e", `quit app "UTM"`).CombinedOutput(); err != nil {
+	if out, err := u.runJXA(`Application('com.utmapp.UTM').quit()`); err != nil {
 		return fmt.Errorf("quit UTM: %v %s", err, out)
 	}
 	if err := awaitApp(false); err != nil {
