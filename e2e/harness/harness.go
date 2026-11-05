@@ -145,8 +145,15 @@ func (s *Scenario) Write(path string, data []byte) {
 
 func (s *Scenario) Start(config string) {
 	s.t.Helper()
+	s.StartWithin(config, 10*time.Second)
+}
+
+// StartWithin은 Start와 같지만 감시 준비를 timeout만큼 기다린다. watcher는 전역 onStartWatch가 끝난 뒤에
+// 감시를 시작하므로, 이 대기에는 전역 onStartWatch를 실행하는 시간이 들어간다.
+func (s *Scenario) StartWithin(config string, timeout time.Duration) {
+	s.t.Helper()
 	s.Launch(watcherBin, config, "--log-level=DEBUG")
-	s.Await("real filesystem readiness", 10*time.Second, func() bool {
+	s.Await("real filesystem readiness", timeout, func() bool {
 		if s.Exited() {
 			s.t.Fatalf("watcher exited before ready: %v\n%s", s.exit, s.log.String())
 		}

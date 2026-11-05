@@ -13,6 +13,9 @@
 ## 설정
 
 - `goldenConfig`를 재사용하되 `shell: powershell`을 지정하고 hook 명령 앞에 PowerShell 호출 연산자 `&`를 붙입니다.
+- 감시 준비, 대상 시작 hook, 각 이벤트의 전역 변경 후 기록, 종료를 단계마다 최대 60초 기다립니다.
+  - VM에서 병렬로 함께 도는 시나리오가 부하를 주면 Windows PowerShell hook 하나가 끝나기까지 14초 걸렸고, 같은 때 `cmd` hook은 1초 안에 끝났습니다.
+  - 이벤트 하나마다 변경 전·변경·변경 후 hook이 각자 PowerShell 프로세스로 차례로 실행됩니다.
 - [실행 명령에서 쓸 수 있는 변수](../../../docs/guide/configuration.ko.md#실행-명령에서-쓸-수-있는-변수)에 따라 템플릿을 따옴표 밖에 둡니다.
 
 ## 진행 순서
@@ -24,17 +27,17 @@ sequenceDiagram
     participant watcherProc as watcher
     participant hookProc as hookrec
     participant recordFile as records.log
-    testCode->>watcherProc: Start PowerShell configuration
+    testCode->>watcherProc: Start PowerShell configuration, await readiness (60s)
     watcherProc->>hookProc: start hooks
     hookProc->>recordFile: lifecycle labels
     loop create, update, delete
     testCode->>watcherProc: act on goldenFileName
     watcherProc->>hookProc: before, change, after hooks with eight variables
     hookProc->>recordFile: literal event values
-    testCode->>recordFile: await after-change record (10s)
+    testCode->>recordFile: await after-change record (60s)
     end
     testCode->>watcherProc: stop
-    watcherProc-->>testCode: finish hooks and exit 0
+    watcherProc-->>testCode: finish hooks and exit 0 (60s)
     testCode->>recordFile: exact sequence and no injected paths
 ```
 
@@ -53,4 +56,4 @@ make e2e-windows ARGS="-- -run '^TestPowershellEventVariables$'"
 
 - `e2e/scenarios/shell_windows_test.go`에 `TestPowershellEventVariables`를 정의합니다.
 - `e2e/scenarios/helpers_test.go`: `goldenConfig`와 `goldenFileName`은 `TestGoldenPath`와 공유하는 설정과 파일 이름이고, `changeValues`와 `expectedSequence`는 기대 기록을 만듭니다.
-- 테스트는 `e2e/harness`의 `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`를 사용합니다.
+- 테스트는 `e2e/harness`의 `NewScenario`, `StartWithin`, `Write`, `AwaitLine`, `StopWithin`, `Lines`를 사용합니다.

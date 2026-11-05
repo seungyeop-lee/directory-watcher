@@ -13,6 +13,9 @@
 ## Configuration
 
 - The test reuses `goldenConfig` with `shell: powershell` and prefixes hook commands with the PowerShell call operator `&`.
+- The test waits up to 60s for each step: watching readiness, the target start hook, the after-change record of each event, and shutdown.
+  - Under load from scenarios running in parallel on the VM, one Windows PowerShell hook took 14s to finish, while a `cmd` hook at the same time finished within 1s.
+  - Each event runs the before-change, change, and after-change hooks in turn, each in its own PowerShell process.
 - Templates remain outside quotes as specified in [Variables in commands](../../../docs/guide/configuration.md#variables-in-commands).
 
 ## Sequence
@@ -24,17 +27,17 @@ sequenceDiagram
     participant watcherProc as watcher
     participant hookProc as hookrec
     participant recordFile as records.log
-    testCode->>watcherProc: Start PowerShell configuration
+    testCode->>watcherProc: Start PowerShell configuration, await readiness (60s)
     watcherProc->>hookProc: start hooks
     hookProc->>recordFile: lifecycle labels
     loop create, update, delete
     testCode->>watcherProc: act on goldenFileName
     watcherProc->>hookProc: before, change, after hooks with eight variables
     hookProc->>recordFile: literal event values
-    testCode->>recordFile: await after-change record (10s)
+    testCode->>recordFile: await after-change record (60s)
     end
     testCode->>watcherProc: stop
-    watcherProc-->>testCode: finish hooks and exit 0
+    watcherProc-->>testCode: finish hooks and exit 0 (60s)
     testCode->>recordFile: exact sequence and no injected paths
 ```
 
@@ -53,4 +56,4 @@ make e2e-windows ARGS="-- -run '^TestPowershellEventVariables$'"
 
 - `e2e/scenarios/shell_windows_test.go` defines `TestPowershellEventVariables`.
 - `e2e/scenarios/helpers_test.go`: `goldenConfig` and `goldenFileName` are the configuration and file name shared with `TestGoldenPath`, and `changeValues` and `expectedSequence` build the expected records.
-- The test uses `NewScenario`, `Start`, `Write`, `AwaitLine`, `Stop`, and `Lines` from `e2e/harness`.
+- The test uses `NewScenario`, `StartWithin`, `Write`, `AwaitLine`, `StopWithin`, and `Lines` from `e2e/harness`.

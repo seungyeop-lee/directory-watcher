@@ -17,12 +17,17 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
+// powershellHookWait는 TestPowershellEventVariables가 단계마다 기다리는 제한 시간이다. 병렬로 함께 도는 시나리오가
+// VM에 부하를 주면 Windows PowerShell hook 하나가 끝나기까지 14초 걸린 적이 있고(같은 때 cmd hook은 1초 안에 끝났다),
+// 변경 하나를 기다리는 동안에는 변경 전·변경·변경 후 hook 셋이 차례로 PowerShell을 띄운다.
+const powershellHookWait = 60 * time.Second
+
 func TestPowershellEventVariables(t *testing.T) {
 	t.Parallel()
 	s := harness.NewScenario(t)
 	config := "shell: powershell\n" + strings.ReplaceAll(goldenConfig(s), "- '\"", "- '& \"")
-	s.Start(config)
-	s.AwaitLine("start hooks", 10*time.Second, "TARGET:onStartWatch")
+	s.StartWithin(config, powershellHookWait)
+	s.AwaitLine("start hooks", powershellHookWait, "TARGET:onStartWatch")
 	target := filepath.Join(s.Watch, goldenFileName)
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_RDONLY|os.O_EXCL, 0644)
 	if err != nil {
@@ -31,14 +36,14 @@ func TestPowershellEventVariables(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s.AwaitLine("create hooks", 10*time.Second, "GLOBAL:onAfterChange:"+changeValues(target, "C"))
+	s.AwaitLine("create hooks", powershellHookWait, "GLOBAL:onAfterChange:"+changeValues(target, "C"))
 	s.Write(target, []byte("hello"))
-	s.AwaitLine("update hooks", 10*time.Second, "GLOBAL:onAfterChange:"+changeValues(target, "U"))
+	s.AwaitLine("update hooks", powershellHookWait, "GLOBAL:onAfterChange:"+changeValues(target, "U"))
 	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
 	}
-	s.AwaitLine("delete hooks", 10*time.Second, "GLOBAL:onAfterChange:"+changeValues(target, "D"))
-	s.Stop()
+	s.AwaitLine("delete hooks", powershellHookWait, "GLOBAL:onAfterChange:"+changeValues(target, "D"))
+	s.StopWithin(powershellHookWait)
 	want := append(expectedSequence(target), "TARGET:onFinishWatch", "GLOBAL:onFinishWatch")
 	if got := s.Lines(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("PowerShell hook sequence or eight event variables mismatch\nwant: %q\ngot: %q", want, got)
