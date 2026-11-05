@@ -386,6 +386,7 @@ func TestFolderChangeNotifiesTopFolderOnce(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRenameFixture(t)
+			f.holdDirBatch = true
 			if tc.setup != nil {
 				tc.setup(f)
 			}
@@ -401,6 +402,7 @@ func TestFolderChangeNotifiesTopFolderOnce(t *testing.T) {
 // dirEvent가 none이면 폴더 이벤트도, 폴더 이벤트에 흡수된 파일 이벤트도 hook에 가지 않는지 확인한다.
 func TestNoFolderEventStillAbsorbsFileEvents(t *testing.T) {
 	f := newRenameFixture(t)
+	f.holdDirBatch = true
 	f.fill("src/pkg", 5)
 	f.fill("../outside/x", 3)
 	f.startWith(watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent()}))

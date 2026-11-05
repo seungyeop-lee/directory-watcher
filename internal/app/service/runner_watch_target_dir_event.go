@@ -27,6 +27,9 @@ type dirBatcher struct {
 	// batch는 폴더 이벤트를 모으는 동안 받은 변경이고, 모으지 않을 때는 nil이다. due는 batch를 넘길 때를 알린다.
 	batch *eventBatch
 	due   <-chan time.Time
+	// after는 d 뒤에 시각을 보내는 채널을 돌려주고, add가 due를 만들 때 부른다. 테스트는 이 함수를 바꿔 묶음을
+	// 넘기는 때를 정한다.
+	after func(d time.Duration) <-chan time.Time
 }
 
 func newDirBatcher(option domain.DirBatchOption, hookBatcher *hookBatcher, reAddUnder func(dir domain.Path) error) *dirBatcher {
@@ -35,6 +38,7 @@ func newDirBatcher(option domain.DirBatchOption, hookBatcher *hookBatcher, reAdd
 		maxWait:     option.MaxWaitMillisecond.Duration(),
 		hookBatcher: hookBatcher,
 		reAddUnder:  reAddUnder,
+		after:       time.After,
 	}
 }
 
@@ -49,7 +53,7 @@ func (b *dirBatcher) add(c change) ([]domain.Event, error) {
 		b.batch = &eventBatch{start: now}
 	}
 	b.batch.add(c)
-	b.due = time.After(min(b.wait, b.batch.start.Add(b.maxWait).Sub(now)))
+	b.due = b.after(min(b.wait, b.batch.start.Add(b.maxWait).Sub(now)))
 	return nil, nil
 }
 

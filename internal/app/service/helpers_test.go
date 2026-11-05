@@ -237,6 +237,9 @@ type renameFixture struct {
 	phase   int
 	// sentinelDirs는 changes가 표지 파일을 쓰는 폴더다. 감시 대상 기준 상대 경로이고, ""는 감시 대상이다.
 	sentinelDirs []string
+	// holdDirBatch가 true이면 첫 changes의 표지 파일을 감시 루프가 모두 기록할 때까지 dirBatcher가 묶음을 넘기지
+	// 않는다. holdDirBatchUntilSentinels를 본다. runner를 시작하기 전에 정한다.
+	holdDirBatch bool
 }
 
 func newRenameFixture(t *testing.T) *renameFixture {
@@ -310,7 +313,45 @@ func (f *renameFixture) start(exclude domain.ExcludePatterns) {
 
 func (f *renameFixture) startWith(option domain.WatchTargetsOption) {
 	f.runner = NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(f.target), Option: option}, newMockLogger(), process.CommandMode{})
+	if f.holdDirBatch {
+		f.runner.dirBatcher.after = f.holdDirBatchUntilSentinels()
+	}
 	f.changed, f.result = startRunner(f.t, f.runner, nil)
+}
+
+// holdDirBatchUntilSentinels는 dirBatcher의 after를 대신할 함수를 돌려준다. 이 함수는 감시 루프가 다음 changes의
+// 표지 파일을 모두 기록하기 전에는 nil 채널을 돌려주어 dirBatcher가 묶음을 넘기지 않게 하고, 그 뒤로는 time.After와
+// 같다. 그래서 동작이 maxWaitMillisecond보다 오래 걸리거나 동작 중에 이벤트 사이가 waitMillisecond보다 벌어져도,
+// 동작의 이벤트는 표지 파일의 이벤트와 한 묶음에 모인다. Windows CI에서는 파일 300개가 든 폴더를 지우는 동안
+// 이벤트 사이가 100ms를 넘어 묶음이 나뉜 적이 있다.
+//
+// dirBatcher는 감시 루프의 고루틴에서 after를 부르므로, 돌려준 함수가 기록을 읽어도 감시 루프와 겹치지 않는다.
+func (f *renameFixture) holdDirBatchUntilSentinels() func(time.Duration) <-chan time.Time {
+	tree := f.runner.tree
+	var sentinels []string
+	for _, rel := range f.sentinels(f.phase + 1) {
+		sentinels = append(sentinels, f.path(rel))
+	}
+	released := false
+	return func(d time.Duration) <-chan time.Time {
+		released = released || !slices.ContainsFunc(sentinels, func(p string) bool {
+			_, ok := tree.recorded(p)
+			return !ok
+		})
+		if !released {
+			return nil
+		}
+		return time.After(d)
+	}
+}
+
+// sentinels는 phase번째 changes가 쓰는 표지 파일의 감시 대상 기준 상대 경로다.
+func (f *renameFixture) sentinels(phase int) []string {
+	var rels []string
+	for _, dir := range f.sentinelDirs {
+		rels = append(rels, filepath.ToSlash(filepath.Join(dir, fmt.Sprintf("zz-sentinel-%d.txt", phase))))
+	}
+	return rels
 }
 
 // stop은 runner를 멈추고 감시 루프가 끝날 때까지 기다린다. 그 뒤에는 기록을 읽어도 감시 루프와 겹치지 않는다.
@@ -329,10 +370,8 @@ func (f *renameFixture) stop() {
 func (f *renameFixture) changes() []string {
 	f.t.Helper()
 	f.phase++
-	sentinel := fmt.Sprintf("zz-sentinel-%d.txt", f.phase)
 	waiting := map[string]bool{}
-	for _, dir := range f.sentinelDirs {
-		rel := filepath.ToSlash(filepath.Join(dir, sentinel))
+	for _, rel := range f.sentinels(f.phase) {
 		f.write(rel)
 		waiting[rel] = true
 	}
