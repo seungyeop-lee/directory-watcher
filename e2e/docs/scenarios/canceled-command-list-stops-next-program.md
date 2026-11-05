@@ -51,7 +51,7 @@ sequenceDiagram
     first->>recordFile: record CANCEL FIRST
     shell->>second: start
     second->>recordFile: record BEGIN SECOND
-    watcherProc->>shell: CTRL+BREAK again, 100ms after the second program joined
+    watcherProc->>shell: CTRL+BREAK again, 500ms after the second program joined
     second->>recordFile: record CANCEL SECOND
     watcherProc-->>testCode: exit code 0 (wait up to 10s)
     testCode->>recordFile: check CANCEL of both programs and no completion line

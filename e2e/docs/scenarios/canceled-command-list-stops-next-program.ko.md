@@ -51,7 +51,7 @@ sequenceDiagram
     first->>recordFile: CANCEL FIRST 기록
     shell->>second: 시작
     second->>recordFile: BEGIN SECOND 기록
-    watcherProc->>shell: 두 번째 프로그램이 job에 들어오고 100ms 뒤 CTRL+BREAK 다시 보냄
+    watcherProc->>shell: 두 번째 프로그램이 job에 들어오고 500ms 뒤 CTRL+BREAK 다시 보냄
     second->>recordFile: CANCEL SECOND 기록
     watcherProc-->>testCode: 종료 코드 0 (최대 10초 대기)
     testCode->>recordFile: 두 프로그램의 CANCEL과 완료 줄 없음 확인

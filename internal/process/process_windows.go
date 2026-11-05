@@ -20,8 +20,10 @@ import (
 // Go 런타임은 콘솔 제어 처리기를 등록한 뒤 그 처리기가 쓸 스레드를 준비하는데, 그 사이에 CTRL+BREAK를
 // 받은 Go 프로그램은 0xC0000005로 끝난다. UTM의 Windows 11 ARM64 VM에서 cmd.exe로 Go 프로그램을 시작해
 // 재어 보니, 충돌은 cmd.exe가 시작된 뒤 15–36ms에 보낸 신호에서 나왔고 80ms까지는 신호가 Go 프로그램에
-// 닿지 않고 사라지기도 했다. 100ms 이후에 보낸 370번에서는 둘 다 나오지 않았다.
-const minRunBeforeBreak = 100 * time.Millisecond
+// 닿지 않고 사라지기도 했다. 같은 VM을 다른 테스트 실행과 함께 써서 부하가 걸렸을 때는 Go 프로그램이 시작된 뒤
+// 103–116ms에 보낸 신호도 사라져, 그 프로그램이 breakGrace가 지나 강제로 끝날 때까지 남았다. 이때 Go 프로그램이
+// 시작된 뒤 signal.Notify를 마치기까지는 최대 405ms가 걸렸으므로, 그보다 길게 잡았다.
+const minRunBeforeBreak = 500 * time.Millisecond
 
 // maxFirstBreakDelay는 stopJob이 첫 CTRL+BREAK를 늦추는 최대 시간이다. 취소된 명령이 자손을 계속 만들어도 이 시간이 지나면
 // 막 만들어진 프로세스가 있더라도 첫 신호를 보낸다. 빌드 도구처럼 짧은 프로세스를 잇달아 띄우는 hook의 교체가 오래 늦어지지
