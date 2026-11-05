@@ -371,6 +371,84 @@ func TestRunsFromSeparateWaitsAreNotMerged(t *testing.T) {
 	}
 }
 
+// 감시 루프가 waitMillisecond보다 짧은 간격으로 이벤트를 계속 받는 동안에도, hookBatch와 dirBatch가 첫 이벤트부터
+// maxWaitMillisecond가 지나면 실행을 내보내고 그 뒤에 받은 이벤트도 hook에 넘기는지 확인한다.
+func TestMaxWaitSendsRunWhileEventsKeepArriving(t *testing.T) {
+	// wait를 gap보다 넉넉히 길게 잡아, 부하로 이벤트 사이가 조금 벌어져도 wait로 기다리기가 끝나지 않게 한다.
+	const gap, wait, maxWait = 50 * time.Millisecond, 300 * time.Millisecond, 500 * time.Millisecond
+	waitMs, maxWaitMs := domain.Millisecond(wait/time.Millisecond), domain.Millisecond(maxWait/time.Millisecond)
+	dirBatch := watchTargetOption(domain.WatchOption{SubDir: true, FileEvent: domain.WatchAllEvent(), DirEvent: domain.WatchEvent{Create: true, Delete: true}})
+	dirBatch.DirBatch = domain.DirBatchOption{WaitMillisecond: waitMs, MaxWaitMillisecond: maxWaitMs}
+	cases := []struct {
+		name   string
+		option domain.WatchTargetsOption
+		setup  func(t *testing.T, f *controlledFixture)
+		// first는 CREATE로 기다리기를 시작하는 경로이고, inflow는 그 뒤에 gap 간격으로 WRITE를 넣는 경로다. tail은
+		// 실행이 나간 뒤에 CREATE를 넣는 경로다.
+		first, inflow, tail string
+		want                string
+	}{
+		{
+			name:   "hookBatch",
+			option: hookBatchOption(waitMs, maxWaitMs, domain.DeliverLast),
+			setup:  func(t *testing.T, f *controlledFixture) { writeFile(t, f.path("a.txt")) },
+			first:  "a.txt", inflow: "a.txt", tail: "tail.txt",
+			want: "C a.txt",
+		},
+		{
+			name:   "dirBatch",
+			option: dirBatch,
+			setup: func(t *testing.T, f *controlledFixture) {
+				mkdir(t, f.path("n"))
+				writeFile(t, f.path("n/a.txt"))
+			},
+			first: "n/", inflow: "n/a.txt", tail: "n/tail.txt",
+			want: "C n/",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := startControlledRunner(t, t.TempDir(), tc.option, nil)
+			tc.setup(t, f)
+			start := time.Now()
+			f.send(fsnotify.Create, tc.first)
+			lastSent := time.Now()
+			deadline := time.After(5 * time.Second)
+			var run domain.Event
+			for received := false; !received; {
+				select {
+				case run = <-f.runs:
+					received = true
+				case err := <-f.result:
+					t.Fatalf("run stopped: %v", err)
+				case <-deadline:
+					t.Fatal("no run reached the hook while events kept coming")
+				case <-time.After(gap):
+					if since := time.Since(lastSent); since >= wait {
+						t.Fatalf("events paused for %v, not shorter than wait %v", since, wait)
+					}
+					f.send(fsnotify.Write, tc.inflow)
+					lastSent = time.Now()
+				}
+			}
+			elapsed, sinceLast := time.Since(start), time.Since(lastSent)
+			if got := describeRun(t, f.root, run); got != tc.want {
+				t.Fatalf("first run = %q, want %q", got, tc.want)
+			}
+			if sinceLast >= wait {
+				t.Fatalf("run reached the hook %v after the last event, not while events kept coming within wait %v", sinceLast, wait)
+			}
+			// 느린 환경에서 타이머가 늦게 알리는 만큼 여유를 둔다.
+			if elapsed < maxWait || elapsed > maxWait+300*time.Millisecond {
+				t.Fatalf("run reached the hook %v after the first event, want %v to %v", elapsed, maxWait, maxWait+300*time.Millisecond)
+			}
+			writeFile(t, f.path(tc.tail))
+			f.send(fsnotify.Create, tc.tail)
+			awaitHookPath(t, f.runs, f.result, f.path(tc.tail))
+		})
+	}
+}
+
 // 폴더가 안의 내용과 함께 생기거나 사라지면 hook이 맨 위 폴더의 이벤트 하나만 받는지 확인한다. 폴더 안의
 // 파일 300개를 옮겨 오거나 지워도 그 파일들의 이벤트는 대기열에 들어가지 않는다.
 func TestFolderChangeNotifiesTopFolderOnce(t *testing.T) {

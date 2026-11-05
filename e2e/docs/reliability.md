@@ -12,11 +12,11 @@ go test -race ./...
 
 - What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), and [`TestRunInterrupt`](scenarios/run-interrupt.md) documents.
 - The repeated scenarios also include [`TestQueueWarningCLI`](scenarios/queue-warning-cli.md) and [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md).
-- [`TestBatchingOptions`](scenarios/batching-options.md) also repeats final-change ordering and maximum-wait flushes during continued inflow.
+- [`TestBatchingOptions`](scenarios/batching-options.md) also repeats final-change ordering.
 
 ### Scope of the internal tests
 
-- Controlled internal tests check, independently of the number of OS notifications, the exact order under `hookBatch.deliver: each`, the last valid path under `deliver: last`, separate runs for waits that end while a hook runs, excluded events, no replacement before cancellation completes, no runs after shutdown, and preservation of the first fatal error.
+- Controlled internal tests check, independently of the number of OS notifications, the exact order under `hookBatch.deliver: each`, the last valid path under `deliver: last`, separate runs for waits that end while a hook runs, `hookBatch` and `dirBatch` runs sent at the maximum wait while events keep arriving, excluded events, no replacement before cancellation completes, no runs after shutdown, and preservation of the first fatal error.
 - The per-target pending limit is `queue.size` runs (2048 by default), with at most `run.concurrency` runs at a time (1 by default) and one `hookBatch` wait at a time. The tests that fill the queue set a small `queue.size` instead of relying on the default.
 - When the queue is full, the watcher exits with a loss error instead of growing the buffer or waiting for room, including for runs made from events collected for folder events.
 - Shutdown cancels and cleans up the queue rather than draining it.

@@ -12,11 +12,11 @@ go test -race ./...
 
 - 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) 문서에 있습니다.
 - 반복 대상에는 [`TestQueueWarningCLI`](scenarios/queue-warning-cli.ko.md)와 [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md)도 포함됩니다.
-- [`TestBatchingOptions`](scenarios/batching-options.ko.md)의 최종 변경 순서와 지속 유입 중 최대 대기 flush도 반복합니다.
+- [`TestBatchingOptions`](scenarios/batching-options.ko.md)의 최종 변경 순서도 반복합니다.
 
 ### 내부 테스트의 검증 범위
 
-- 제어된 내부 테스트는 OS 알림 개수와 무관하게 `hookBatch.deliver: each`의 정확한 순서, `deliver: last`의 마지막 유효 경로, hook이 도는 동안 끝난 기다림마다 따로 만든 실행, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다.
+- 제어된 내부 테스트는 OS 알림 개수와 무관하게 `hookBatch.deliver: each`의 정확한 순서, `deliver: last`의 마지막 유효 경로, hook이 도는 동안 끝난 기다림마다 따로 만든 실행, 이벤트가 계속 들어오는 동안 최대 대기가 지나 `hookBatch`와 `dirBatch`가 내보낸 실행, 제외 이벤트, 취소 완료 전 교체 금지, 종료 후 실행 금지, 첫 치명 오류 보존을 검사합니다.
 - 대상별 대기 실행 상한은 `queue.size`(기본 2048)개이며, 실행은 한 번에 최대 `run.concurrency`개(기본 1)이고 `hookBatch` 기다림은 한 번에 하나입니다. 대기열을 채우는 테스트는 기본값에 기대지 않고 작은 `queue.size`를 지정합니다.
 - 대기열이 가득 차면 버퍼를 늘리거나 자리가 나기를 기다리지 않고 유실 오류로 종료하며, 폴더 이벤트용으로 모은 이벤트에서 만든 실행도 같습니다.
 - 종료는 대기열을 처리 완료하는 동작이 아니라 취소·정리하는 동작입니다.

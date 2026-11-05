@@ -14,8 +14,9 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
-// TestBatchingOptions의 maxWait 하위 테스트는 수신 간격이 500ms 미만이고 첫 flush가 첫 조작 뒤 1700–3300ms 안에
-// 있기를 요구한다. 이 시간 범위는 다른 시나리오와 CPU를 나눠 쓰면 벗어날 수 있으므로, 하위 테스트까지 병렬로 실행하지 않는다.
+// TestBatchingOptions의 lastPerPath는 모든 변경이 hookBatch 대기 1500ms보다 짧은 간격으로, 첫 변경부터 최대 대기
+// 10000ms 안에 수신되어 한 번의 기다림에 모이기를 요구한다. 다른 시나리오와 CPU를 나눠 쓰면 수신 간격이 벌어져 hook이
+// 일찍 실행되고 기록이 기대와 달라질 수 있으므로, 병렬로 실행하지 않는다.
 func TestBatchingOptions(t *testing.T) {
 	t.Run("lastPerPath", func(t *testing.T) {
 		s := harness.NewScenario(t)
@@ -102,76 +103,6 @@ func TestBatchingOptions(t *testing.T) {
 			t.Fatalf("forwarded creates = %d, received %d", got, want)
 		}
 	})
-
-	for _, kind := range []string{"hookBatch", "dirBatch"} {
-		t.Run(kind+"MaxWait", func(t *testing.T) {
-			const wait, maxWait = 500 * time.Millisecond, 1800 * time.Millisecond
-			s := harness.NewScenario(t)
-			dirWait, dirMax, hookWait, hookMax, deliver := 0, 0, int(wait/time.Millisecond), int(maxWait/time.Millisecond), "last"
-			if kind == "dirBatch" {
-				dirWait, dirMax, hookWait, hookMax, deliver = hookWait, hookMax, 0, 0, "each"
-			}
-			s.Start(batchConfig(s, dirWait, dirMax, hookWait, hookMax, deliver))
-			initial := filepath.Join(s.Watch, "initial.txt")
-			if kind == "dirBatch" {
-				initial = filepath.Join(s.Watch, "created")
-			}
-			started := time.Now()
-			if kind == "dirBatch" {
-				mkdirAll(t, initial)
-			} else {
-				createEmpty(t, initial)
-			}
-			paths := []string{initial}
-			lastReceipt, firstReceipt := time.Time{}, time.Time{}
-			seen, inputs := 0, 0
-			var flushedAt time.Time
-			s.Await("maxWait flush while short-gap inflow continues", maxWait+2*time.Second, func() bool {
-				now := time.Now()
-				path := filepath.Join(s.Watch, fmt.Sprintf("inflow-%04d.txt", inputs))
-				paths = append(paths, path)
-				createEmpty(t, path)
-				inputs++
-				received := batchReceipts(s.Log(), paths, fsnotify.Create)
-				if len(received) > seen {
-					if !lastReceipt.IsZero() && now.Sub(lastReceipt) >= wait {
-						t.Fatalf("received inflow gap %s reached wait %s", now.Sub(lastReceipt), wait)
-					}
-					if firstReceipt.IsZero() {
-						firstReceipt = now
-					}
-					lastReceipt, seen = now, len(received)
-				}
-				lines := s.Lines()
-				flushed := len(lines) > 0
-				if kind == "dirBatch" {
-					flushed = harness.CountRecord(lines, "CHANGE:"+initial) > 0
-				}
-				if !flushed {
-					return false
-				}
-				flushedAt = now
-				if firstReceipt.IsZero() || now.Sub(lastReceipt) >= wait {
-					t.Fatal("flush observed without continued received inflow")
-				}
-				if elapsed := now.Sub(started); elapsed < maxWait-100*time.Millisecond || elapsed > maxWait+1500*time.Millisecond {
-					t.Fatalf("flush after %s, want %s with -100ms/+1500ms scheduling allowance", elapsed, maxWait)
-				}
-				return true
-			})
-			// flush가 입력 중단보다 먼저였고, 그 뒤 이벤트도 독립적으로 실행되는지 확인한다.
-			tail := filepath.Join(s.Watch, "tail.txt")
-			if kind == "dirBatch" {
-				tail = filepath.Join(initial, "tail.txt")
-			}
-			createEmpty(t, tail)
-			paths = append(paths, tail)
-			s.AwaitChangesComplete("CHANGE:", paths, fsnotify.Create, kind == "dirBatch", 10*time.Second)
-			s.AwaitLine("post-flush event forwarded", 5*time.Second, "CHANGE:"+tail)
-			s.Stop()
-			t.Logf("%s: wait=%s maxWait=%s flush=%s inputs-at-flush=%d received-at-flush=%d last-receipt-age=%s", kind, wait, maxWait, flushedAt.Sub(started), inputs, seen, flushedAt.Sub(lastReceipt))
-		})
-	}
 }
 
 func batchConfig(s *harness.Scenario, dirWait, dirMax, hookWait, hookMax int, deliver string) string {
