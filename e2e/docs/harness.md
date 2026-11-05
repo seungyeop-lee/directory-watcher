@@ -10,7 +10,7 @@
 |---|---|
 | `scenarios/main_test.go` | `TestMain` for the scenario package. Hands setup and teardown for the whole test run to `harness.Run` |
 | `scenarios/*_test.go` | Scenario tests. See [Scenarios and their supporting code](#scenarios-and-their-supporting-code) for the mapping |
-| `harness/harness.go` | Console setup for the whole test run, building the watcher, the watcher with the error injection build tag, and `hookrec`, and deleting the binaries (`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). Per-scenario run folder (`NewScenario`), watcher launch (`Start`·`Launch`), helper process launch (`StartProcess`), output and exit observation (`Log`·`Done`·`Exited`·`ExitErr`), observation-based waiting (`Await`·`AwaitProgress`), graceful shutdown check (`Stop`·`StopWithin`), keeping diagnostics and cleanup (`cleanup`) |
+| `harness/harness.go` | Console setup for the whole test run, building the watcher, the watcher with the error injection build tag, and `hookrec`, running each once right after the build, and deleting the binaries (`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). Per-scenario run folder (`NewScenario`), watcher launch (`Start`·`Launch`), helper process launch (`StartProcess`), output and exit observation (`Log`·`Done`·`Exited`·`ExitErr`), observation-based waiting (`Await`·`AwaitProgress`), graceful shutdown check (`Stop`·`StopWithin`), keeping diagnostics and cleanup (`cleanup`) |
 | `harness/hook_records.go` | Parsing of `hookrec` one-line records. Reading records (`Lines`·`ReadLinesLenient`), building hook commands (`Hook`), waiting for a record (`AwaitLine`), counting records (`CountRecord`), `BEGIN` records of delayed hooks (`delayedHooks`·`DelayedHookBegun`), the completion boundary of received events (`AwaitChangesComplete`) |
 | `harness/process_records.go` | Parsing of process tree records (`ProcessRecord`). Waiting for generations to be ready (`AwaitReadyGenerations`), generations by label (`GenerationsLabeled`), checking that processes are alive or gone (`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), judging graceful completion (`AssertGracefulCompletion`), per-step liveness records (`SnapshotProcesses`), forced cleanup limited to the scenario's records (`rescueRecordedProcesses`) |
 | `harness/signal_unix.go`, `harness/signal_windows.go` | Per-platform process groups, graceful shutdown signal, forced watcher termination, the start and exit times of an exited scenario process (`processExit`), and the scenario-owned `processObserver` |
@@ -36,6 +36,10 @@
 | `windows/guestrun/guestrun_test.go` | Verifies that `Check` accepts only a passed result of the same run, that `ArchiveDir` and `Extract` round trip, and that `Extract` rejects paths leaving the target and symbolic links |
 
 - Building the binaries and setting up the console happen once for the whole test run.
+  - `Run` runs each binary once right after building it, before any scenario.
+    - Windows Defender pauses process creation to scan a newly built exe the first time it runs, and on a loaded VM this scan can take longer than a scenario's wait limit.
+    - Running the same file again does not wait for this scan.
+  - If this run fails, `Run` prints an error starting with `warm up:` and returns exit code 1 without running the tests.
 - Each scenario owns its run folder, watcher, process observation, and cleanup.
 - On Windows, `processObserver` keeps the handle it opened when it first observed a recorded PID until that scenario's cleanup finishes, and forced cleanup terminates only the `hookrec` handles in that scenario's records.
 - Every recorded process is `hookrec`, so if a program other than this run's `hookrec` already holds the PID at that first observation, the recorded process has exited and its PID was reused; it is judged gone.

@@ -35,7 +35,7 @@ func InjectWatcherBin() string { return injectWatcherBin }
 func HookrecBin() string { return hookrecBin }
 
 // Run은 TestMain의 본문이다: 콘솔을 준비하고, 테스트 바이너리 실행 전체에서 쓸
-// watcher, 주입 tag를 붙인 watcher, hookrec 바이너리를 빌드한 뒤, m을 실행하고 바이너리를 지운다. 바이너리를
+// watcher, 주입 tag를 붙인 watcher, hookrec 바이너리를 빌드해 한 번씩 실행해 둔 뒤, m을 실행하고 바이너리를 지운다. 바이너리를
 // 지우지 못하면 돌려주는 코드가 1이 된다. -short이면 바이너리를 쓰는 테스트를 skipShort가
 // 건너뛰므로 빌드 없이 m을 실행한다.
 func Run(m *testing.M) (code int) {
@@ -65,13 +65,23 @@ func Run(m *testing.M) (code int) {
 	watcherBin = filepath.Join(dir, binName("directory-watcher"))
 	injectWatcherBin = filepath.Join(dir, binName("directory-watcher-inject"))
 	hookrecBin = filepath.Join(dir, binName("hookrec"))
-	for _, build := range []struct{ output, source, tags string }{
-		{watcherBin, watcherPackage, ""},
-		{injectWatcherBin, watcherPackage, injectTag},
-		{hookrecBin, hookrecPackage, ""},
+	for _, build := range []struct {
+		output, source, tags string
+		warmUp               []string
+	}{
+		{watcherBin, watcherPackage, "", []string{"--help"}},
+		{injectWatcherBin, watcherPackage, injectTag, []string{"--help"}},
+		{hookrecBin, hookrecPackage, "", []string{"--file=" + os.DevNull, "--line=warm-up"}},
 	} {
 		if out, err := exec.Command("go", "build", "-tags="+build.tags, "-o", build.output, build.source).CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "build:", err, string(out))
+			return 1
+		}
+		// Windows Defender는 새로 빌드한 exe를 처음 실행할 때 프로세스 생성을 멈추고 검사하며, 이 검사는 부하가 걸린
+		// VM에서 시나리오의 대기 제한보다 길어질 수 있다. 같은 파일의 다음 실행은 검사를 기다리지 않으므로, 대기 제한이
+		// 없는 여기서 한 번 실행해 둔다.
+		if out, err := exec.Command(build.output, build.warmUp...).CombinedOutput(); err != nil {
+			fmt.Fprintln(os.Stderr, "warm up:", err, string(out))
 			return 1
 		}
 	}

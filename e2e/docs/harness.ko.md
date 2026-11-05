@@ -10,7 +10,7 @@
 |---|---|
 | `scenarios/main_test.go` | 시나리오 패키지의 `TestMain`. 테스트 실행 전체의 준비·정리를 `harness.Run`에 맡김 |
 | `scenarios/*_test.go` | 시나리오 테스트. 대응은 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응)에 있음 |
-| `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·오류 주입 build tag를 붙인 watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`·`AwaitProgress`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
+| `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·오류 주입 build tag를 붙인 watcher·`hookrec` 빌드, 빌드 직후 한 번 실행, 바이너리 삭제(`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`·`AwaitProgress`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
 | `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN` 기록(`delayedHooks`·`DelayedHookBegun`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
 | `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 레이블별 세대(`GenerationsLabeled`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
 | `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 끝난 시나리오 프로세스의 시작·종료 시각(`processExit`), 시나리오가 소유하는 `processObserver` |
@@ -36,6 +36,10 @@
 | `windows/guestrun/guestrun_test.go` | `Check`가 같은 실행의 통과 결과만 받아들이는지, `ArchiveDir`와 `Extract`를 거쳐 파일이 그대로 돌아오는지, `Extract`가 대상 밖으로 나가는 경로와 심볼릭 링크를 거부하는지 검증 |
 
 - 바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다.
+  - `Run`은 바이너리를 빌드한 직후, 시나리오보다 먼저 한 번씩 실행합니다.
+    - Windows Defender는 새로 빌드한 exe를 처음 실행할 때 프로세스 생성을 멈추고 검사하며, 부하가 걸린 VM에서는 이 검사가 시나리오의 대기 제한보다 길어질 수 있습니다.
+    - 같은 파일을 다시 실행할 때는 이 검사를 기다리지 않습니다.
+  - 이 실행이 실패하면 `Run`은 `warm up:`으로 시작하는 오류를 출력하고, 테스트를 실행하지 않은 채 종료 코드 1을 돌려줍니다.
 - 실행 폴더, watcher, 프로세스 관찰과 정리는 시나리오마다 소유합니다.
 - Windows의 `processObserver`는 기록된 PID를 처음 관찰할 때 연 handle을 해당 시나리오의 정리가 끝날 때까지 유지하고, 강제 정리는 그 시나리오의 기록에 있는 `hookrec` handle만 종료합니다.
 - 기록된 프로세스는 모두 `hookrec`이므로, 처음 관찰할 때 이미 이번 실행의 `hookrec`이 아닌 프로그램이 그 PID를 쓰고 있으면 기록된 프로세스는 끝났고 PID가 재사용된 것으로 보고 사라졌다고 판정합니다.
