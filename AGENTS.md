@@ -28,9 +28,10 @@
 
 # 검증
 
-- 검증은 아래 세 단계로 나눠 실행한다. 명령은 [CONTRIBUTING.md의 Verification](CONTRIBUTING.md#verification) 절과 같고, OS마다 다르게 동작하는 코드의 경로 목록은 그 절에 있다.
+- 검증 명령은 실행 시점에 따라 아래 네 가지로 나눈다. 명령과 실행 시점은 [CONTRIBUTING.md의 Verification](CONTRIBUTING.md#verification) 절과 같고, OS마다 다르게 동작하는 코드의 경로 목록은 그 절에 있다.
   - 코드를 고치는 동안에는 `make test-fast`(`go test -short ./...`)를 실행한다. 실제 watcher를 띄우는 E2E 테스트는 SKIP하고, 파일이 바뀌지 않은 패키지는 `(cached)`로 끝난다.
   - 커밋하기 전에는 `go build ./...`, `go vet ./...`, `go test -count=1 -race ./...`(`make test`)를 실행한다. E2E는 watcher를 별도의 `go build`로 빌드해서 Go 테스트 캐시가 watcher 소스의 변경을 알지 못하므로, `-count=1`을 빼지 않는다.
+  - `config.example.yml`을 바꿨거나 watcher가 시작하는 방식, hook을 실행하는 방식, 종료하는 방식을 바꿨을 때에는 `make smoke-example`도 실행한다.
   - OS마다 다르게 동작하는 코드를 바꿨을 때와 릴리스하기 전에는 `make e2e-linux`와 `make e2e-windows-all`도 실행한다.
 - Windows 동작을 확인해야 하면, Windows 환경이 없다고 판단하기 전에 `/Applications/UTM.app/Contents/MacOS/utmctl list`로 UTM VM을 찾는다. VM이 있으면 [UTM Windows VM에서 E2E 실행](e2e/docs/windows-utm.ko.md)을 읽고 `make e2e-windows-all ARGS="-vm=<VM 이름>"`으로 게스트에서 테스트를 실행한다. `./e2e/scenarios` 밖의 패키지를 함께 실행하는 방법과 이 VM으로 대신할 수 없는 Windows 검증도 그 문서에 있다.
 - Windows VM 검사는 `make e2e-windows-all`이 한 번 통과하면 충분하다. 같은 VM에서 여러 실행을 동시에 돌리거나 같은 검사를 반복하는 검사는 Windows 실행기(`e2e/windows/`)의 동시 실행 동작을 바꿀 때나 사용자가 요청할 때만 한다.
