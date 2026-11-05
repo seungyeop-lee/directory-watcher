@@ -67,7 +67,13 @@
 ### major를 올릴 때
 
 - Go는 major 2 이상인 version의 모듈을 `/v<major>` 접미사가 붙은 경로로 찾습니다.
-- major를 올리기 전에 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령, 설정 예시 첫 줄의 스키마 URL(`yaml-language-server: $schema=`)에 든 `v<major>` 브랜치를 새 major로 바꿔 먼저 커밋합니다.
+- major를 올리기 전에 모듈 경로의 major가 든 아래 곳을 모두 새 major로 바꿔 먼저 커밋합니다.
+  - `go.mod`의 모듈 경로와 그 경로를 쓰는 import를 바꿉니다.
+  - `.goreleaser.yaml`의 ldflags를 바꿉니다.
+  - `e2e/harness/harness.go`의 `watcherPackage` 상수를 바꿉니다. 이 상수를 놓치면 `go build`와 `go vet`은 통과하지만, `go test`의 E2E가 이전 major의 경로로 watcher를 빌드하지 못해 실패합니다.
+  - `README.md`와 `README.ko.md`의 `go install` 명령을 바꿉니다.
+  - 설정 예시의 스키마 URL 줄(`# yaml-language-server: $schema=`)에 든 `v<major>` 브랜치를 바꿉니다. 이 줄은 `config.example.yml`, `README.md`, `README.ko.md`, `docs/guide/configuration.md`, `docs/guide/configuration.ko.md`에 있습니다.
+- 바꾼 뒤 `git grep -n 'directory-watcher/v<이전 major>'`가 `CHANGELOG.md`의 줄만 출력하면 빠진 곳이 없습니다.
 - versionup skill은 모듈 경로가 새 version의 major와 맞지 않으면 아무것도 바꾸지 않고 멈춥니다.
 
 ## 배포 흐름
