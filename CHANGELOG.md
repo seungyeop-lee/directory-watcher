@@ -4,6 +4,22 @@ All notable changes to directory-watcher are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-11-05
+
+### Added
+
+- Without `-c`, `--config-path`, the watcher now reads `config.directory-watcher.yml` in the working directory, or `config.yml` if that file does not exist.
+  - If neither file exists, the watcher prints `Error: no config file found: tried config.directory-watcher.yml, config.yml (use -c to set a path)` and exits with code 1.
+  - If your working directory has both files and you want to keep using `config.yml`, start the watcher with `-c config.yml`.
+  - With `-c`, the watcher reads only the given path, as before.
+
+### Changed
+
+- When the watcher reads a config file at startup, it prints a `config: <path>` line on standard output before it checks the settings, so you can tell which file a config error comes from.
+  - The line has no log prefix such as `[INFO]`, and `--log-level` does not change it.
+  - `-s`, `--silent` turns the line off, and `-n`, `--dry-run` still prints it.
+- `--help` now lists `-l`, `--log-level` in a separate `Maintenance Flags:` section. The flag works as before.
+
 ## [3.1.0] - 2026-11-05
 
 ### Added
