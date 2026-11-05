@@ -185,7 +185,7 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
 
 - 각 알림 명령이 완료·실패·시간 초과되면, 그 명령이 시작해 아직 실행 중인 프로세스를 같은 정리 시간 한도 안에서 끝냅니다.
   - Windows에서 이 프로세스들을 끝낼 수 있게 알림 명령을 준비하지 못하면, watcher는 그 명령을 실행하지 않고 실패를 로그에 남깁니다.
-- 일반 hook이 시작한 프로세스는 hook이 취소될 때만 끝냅니다([과부하와 종료](#과부하와-종료)).
+- 일반 hook이 시작한 프로세스에는 hook이 취소될 때만 종료 신호를 보냅니다([과부하와 종료](#과부하와-종료)).
 
 ## 과부하와 종료
 
@@ -205,6 +205,12 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
   - 이벤트 처리와 취소한 실행이 모두 멈출 때까지 기다린 뒤 종료 hook을 실행합니다.
   - 감시 대상은 서로 기다리지 않고 따로 멈춥니다.
   - 종료 hook은 다른 hook과 같은 규칙으로 명령을 실행하며, 따로 실행 제한 시간이 없습니다.
+- macOS와 Linux에서 취소된 hook은 SIGTERM을 받고, hook이 시작한 프로세스도 함께 SIGTERM을 받습니다.
+- macOS와 Linux에서 SIGTERM을 보내고 20초가 지나도 hook의 `sh` 프로세스가 실행 중이면, watcher는 그 프로세스를 SIGKILL로 끝냅니다.
+  - 교체와 종료는 이 프로세스가 끝날 때까지 기다리므로, `trap '' TERM`을 실행한 hook처럼 `sh`가 SIGTERM을 무시하는 hook은 교체와 종료를 최대 20초 늦춥니다.
+- macOS와 Linux에서 hook이 시작한 프로세스 가운데 SIGTERM을 무시하는 프로세스는 hook이 취소되어도 끝나지 않습니다.
+  - 교체와 종료는 이 프로세스를 기다리지 않으며, 이 프로세스는 다음 실행이 시작된 뒤에도, watcher가 끝난 뒤에도 계속 실행됩니다.
+  - 이런 프로세스는 직접 끝내거나, hook이 시작하는 프로그램이 SIGTERM을 받으면 끝나도록 만듭니다.
 - Windows에서 취소된 hook은 CTRL+BREAK를 받습니다.
   - `cmd`에서 `a & b`의 다음 프로그램처럼 hook이 취소 뒤에 시작한 프로그램도, 시작된 지 500ms가 지나면 CTRL+BREAK를 받습니다.
   - 부하 때문에 늦게 시작하는 것처럼, 만들어졌지만 CTRL+BREAK를 보낸 순간 아직 콘솔에 연결되지 않은 hook의 프로세스는 그 CTRL+BREAK를 받지 못합니다. 이 프로세스는 콘솔에 연결된 지 500ms가 지나면 CTRL+BREAK를 다시 받고, hook의 다른 프로세스도 이 CTRL+BREAK를 함께 받습니다.
