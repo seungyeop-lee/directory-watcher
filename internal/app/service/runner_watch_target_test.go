@@ -224,6 +224,24 @@ func TestFolderRecreatedBeforeItsRemoveArrives(t *testing.T) {
 	}
 }
 
+// kqueue(macOS)에서 감시 대상 폴더를 지웠다 다시 만들면 handleEvent는 그 폴더의 Remove를 처리하며 다시 생긴 폴더를
+// 감시 목록에 넣는다. 넣기 직전에 폴더가 또 지워져도 handleEvent가 오류를 돌려주지 않아 runner가 멈추지 않는지
+// 확인한다.
+func TestTargetRemovedAgainWhileReAddedDoesNotStopRunner(t *testing.T) {
+	if !kqueueOS {
+		t.Skip("only on kqueue, handleEvent re-adds a watch target recreated before its Remove arrives")
+	}
+	root := filepath.Join(t.TempDir(), "target")
+	mkdir(t, root)
+	r := deletionRunner(t, root, hookBatchOption(0, 0, domain.DeliverEach))
+	removeAll(t, root)
+	mkdir(t, root)
+	r.tree.logger = &removeOnAddLogger{t: t, dir: root}
+	if err := r.handleEvent(fsnotify.Event{Name: root, Op: fsnotify.Remove}); err != nil {
+		t.Fatalf("handleEvent(Remove target) = %v, want nil", err)
+	}
+}
+
 // 이름이 매번 다른 폴더를 지워도, 지운 폴더의 기록은 중복 REMOVE가 올 수 있는 운영체제에서 removedDirTTL 안에 지운
 // 폴더만 남고 그 밖의 운영체제에서는 생기지 않는지 확인한다. 어느 쪽이든 폴더마다 폴더 삭제 하나만 hook에 간다.
 func TestRemovedFolderRecordsExpire(t *testing.T) {

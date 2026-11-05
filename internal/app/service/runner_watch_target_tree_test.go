@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -405,4 +406,30 @@ func TestWatchTreeForgetsAddedFolderRemovedBeforeWalk(t *testing.T) {
 	}
 	f.assertWatchList(".")
 	assertRecordMatchesDisk(t, f.tree, f.root, "new")
+}
+
+// 감시 중에 지워졌다 다시 생긴 감시 대상 폴더를 added가 감시 목록에 넣는 도중에 그 폴더가 또 지워지면, 감시를
+// 시작할 때와 달리 오류 없이 삭제로 넘기는지 확인한다. 훑기 전과 Add 직전에 지워지는 경우를 모두 본다.
+func TestWatchTreeAddedSkipsTargetRemovedAgain(t *testing.T) {
+	for _, beforeWalk := range []bool{true, false} {
+		t.Run(fmt.Sprintf("beforeWalk=%v", beforeWalk), func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "target")
+			mkdir(t, root)
+			f := newTreeFixtureAt(t, root, domain.WatchOption{SubDir: true})
+			f.add()
+			f.tree.unwatchTree(f.root)
+			removeAll(t, f.root)
+			mkdir(t, f.root)
+			if beforeWalk {
+				removeAll(t, f.root)
+			} else {
+				f.tree.logger = &removeOnAddLogger{t: t, dir: f.root}
+			}
+			if err := f.tree.added(f.root, true); err != nil {
+				t.Fatalf("added(root) = %v, want nil", err)
+			}
+			f.assertWatchList()
+			assertRecorded(t, f.tree, f.root, ".", false, false)
+		})
+	}
 }

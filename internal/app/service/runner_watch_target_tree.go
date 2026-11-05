@@ -158,15 +158,22 @@ func (t *watchTree) resolveLinkedPath() error {
 // 넣는다. subDir가 false이면 폴더를 감시 목록에 넣지 않는다.
 func (t *watchTree) added(path string, isDir bool) error {
 	t.addEntry(path, isDir)
-	if isDir && t.subDir && !t.isExcluded(path) {
-		return t.addDirTree(path)
+	if !isDir || !t.subDir || t.isExcluded(path) {
+		return nil
 	}
-	return nil
+	err := t.addDirTree(path)
+	// kqueue에서는 감시 중에 지워졌다 다시 생긴 감시 대상 폴더도 여기서 다시 넣는다. 넣기 전에 그 폴더가 또
+	// 지워졌으면 감시를 시작할 때와 달리 삭제로 보고 감시를 이어 간다.
+	if path == t.root && errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // addDirTree는 root와 그 아래에서 감시 규칙을 통과한 폴더를 감시 목록에 넣는다.
 // 감시를 시작할 때와 감시 중에 폴더가 생기거나 옮겨 올 때 모두 이 함수를 써서, 폴더가 언제
-// 생겼는지와 관계없이 같은 규칙을 적용한다.
+// 생겼는지와 관계없이 같은 규칙을 적용한다. 감시 대상 폴더가 없어 감시 목록에 넣지 못하면 감시를 시작하지 못한
+// 것으로 보고 fs.ErrNotExist를 감싼 오류를 돌려준다. 감시 중이면 added가 이 오류를 넘긴다.
 func (t *watchTree) addDirTree(root string) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
