@@ -9,6 +9,8 @@
 
 - After the first program records `BEGIN`, the watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal.
 - Both programs record `CANCEL`, and neither records its completion line (`FIRST` or `SECOND`). A `CANCEL` from the second program means the watcher sent CTRL+BREAK again after that program started.
+  - If the records have no `BEGIN` from the second program but `watcher.log` has `^C`, `cmd.exe` did start the second program, which got CTRL+BREAK before it began handling the signal and ended with exit code 0xC000013A.
+    - `cmd.exe` prints `^C` when a program of the command list ends with 0xC000013A.
 - Every hook process that recorded `BEGIN` is gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 
 ## Configuration
