@@ -69,6 +69,7 @@ The Windows E2E runs the watcher without Git Bash and checks that the watcher st
 - `records.log.processes` has one line per process tree process (`run=`, with generation and depth) and per delayed hook (`delayed=`, with its record), each holding the PID, liveness, first observation time, creation time, process access error, wait result, the program of the handle kept from the first observation (`held-image`), and the program that holds the PID now (`current-image`).
 - `cleanup.log` shows the state **after cleanup** and does not replace the graceful shutdown judgment.
 - For `GenerateConsoleCtrlEvent` or `AllocConsole` errors, check the console attachment and the process groups on the same console.
+- If a hook or the watcher exited with 0xc0000142, read `dll-init-failed.log` in that run folder as in [A hook exits with 0xc0000142](windows-utm.md#a-hook-exits-with-0xc0000142).
 - Access-denied and wait API errors are treated as alive and fail the test.
 - The handle opened at the first observation is kept until after cleanup to avoid confusion from PID reuse, and a PID that a program other than `hookrec` already held at that observation is judged gone with `open-error=PID reused by another program: <program path>`.
 - Failure cleanup terminates only the recorded helper binary handles of that run, and if the watcher is still alive, applies `TASKKILL /T /F` only to that watcher's tree.

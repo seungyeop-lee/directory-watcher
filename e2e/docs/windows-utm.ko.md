@@ -123,7 +123,7 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 | `source.txt` | 커밋, 전달한 소스 tar의 크기와 SHA-256, go test 인자, 미커밋 변경 목록 |
 | `request.json`, `result.json` | 게스트에 보낸 요청과 게스트 결과. 결과에는 실행 ID, go 종료 코드, 시간 초과 여부, 잔존 프로세스, Windows·Go 버전, 실행 디렉터리와 드라이브 종류가 있습니다. |
 | `stdout.log`, `stderr.log` | 게스트 go test의 출력 |
-| `diagnostics/` | 게스트 E2E 진단 파일. `cleanup.log`·`records.log.processes`의 분석은 [Windows 실패 분석](windows.ko.md#실패-분석)과 같습니다. |
+| `diagnostics/` | 게스트 E2E 진단 파일. `cleanup.log`·`records.log.processes`의 분석은 [Windows 실패 분석](windows.ko.md#실패-분석)과 같고, `dll-init-failed.log`를 읽는 방법은 [hook이 0xc0000142로 끝남](#hook이-0xc0000142로-끝남)에 있습니다. |
 
 - 실행기는 결과의 실행 ID가 이번 실행과 같고, 오류·시간 초과·잔존 프로세스가 없으며, go 종료 코드가 0이고, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다.
 - 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일과 `.agents/skills` 같은 심볼릭 링크는 전달하지 않습니다.

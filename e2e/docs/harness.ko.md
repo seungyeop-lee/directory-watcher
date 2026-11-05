@@ -13,10 +13,13 @@
 | `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·오류 주입 build tag를 붙인 watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
 | `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN`·`CANCEL` 기록(`delayedHooks`·`DelayedHookBegun`·`DelayedHookCanceled`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
 | `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 레이블별 세대(`GenerationsLabeled`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
-| `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 시나리오가 소유하는 `processObserver` |
+| `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 끝난 시나리오 프로세스의 시작·종료 시각(`processExit`), 시나리오가 소유하는 `processObserver` |
+| `harness/dll_init_failure.go` | Windows에서 0xc0000142로 끝난 프로세스 앞뒤의 CTRL+BREAK와 종료 보고. 하네스가 보낸 CTRL+BREAK 기록(`recordHarnessSignal`), watcher DEBUG 줄 해석(`watcherEvents`), `cleanup`이 `dll-init-failed.log`와 테스트 출력에 남기는 보고 작성(`dllInitFailureReport`·`formatDLLInitFailureReport`) |
 | `harness/hook_records_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
+| `harness/dll_init_failure_test.go` | watcher 로그 줄과 하네스 신호로 만드는 보고의 단위 검증 |
 | `harness/cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증. 같은 `Run`을 거치는 하네스 패키지의 `TestMain` 포함 |
 | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 이미 쓰고 있는 기록된 PID를 사라진 것으로 보는지, 기록된 hook이 실행 중이면 지연 hook 부재 대기가 여전히 실패하는지 검증 |
+| `harness/dll_init_failure_windows_test.go` | Windows에서 실제 watcher의 hook이 0xc0000142로 끝나면 그 종료와 하네스·watcher가 보낸 CTRL+BREAK, 취소된 hook의 종료가 보고에 남는지 검증 |
 | `hookrec/` | 한 줄 기록 또는 실제 부모·자식·손자 프로세스를 만드는 보조 프로그램. 옵션은 [`hookrec` 프로세스 트리와 지연 hook](#hookrec-프로세스-트리와-지연-hook)에 있음 |
 | `hookrec/main_test.go` | `--error-context`와 `--queue-context`가 이름이 `DW_ERROR_`나 `DW_QUEUE_`로 시작하는 환경 변수를, 코드에 나열하지 않은 이름까지 모두 담고 다른 변수는 담지 않은 JSON으로 `--line` 기록보다 먼저 기록하는지, `--error-context`가 작업 디렉터리도 기록하는지, `--workdir`이 작업 디렉터리를 줄 기록 앞에 기록하는지, `--exit-code`가 종료 코드를 정하는지, `--label`이 프로세스 트리의 레이블을 그 세대의 `start` 기록보다 먼저 기록하는지 검증 |
 | `linux/` | 현재 소스 사본을 독립 Linux 컨테이너로 전달하고 같은 Go E2E를 실행하는 진입점 |
@@ -68,6 +71,7 @@
 | `TestCleanupReportsLockedResources` | `harness/cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |
 | `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram` | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 쓰는 기록된 PID의 부재 판정 | `NewScenario`, `AwaitDelayedHooksGone` |
 | `TestDelayedHooksGoneFailsWhileHookRuns` | `harness/process_observer_windows_test.go` | Windows에서 실행 중인 기록된 hook이 있을 때 지연 hook 부재 대기의 실패 | `NewScenario`, `Await`, `DelayedHookBegun`, `AwaitDelayedHooksGone` |
+| `TestDLLInitFailureReportFromWatcher` | `harness/dll_init_failure_windows_test.go` | Windows의 0xc0000142 보고에 남는 실패한 종료와 그 앞뒤의 CTRL+BREAK | `NewScenario`, `Start`, `Hook`, `Await`, `DelayedHookBegun`, `Stop`, `dllInitFailureReport` |
 
 - 시나리오 이름의 링크는 확인 내용과 성공 조건, 진행 순서 다이어그램, 하위 테스트, 실행 명령을 설명하는 시나리오 문서로 이어집니다.
 - 여러 시나리오에 걸친 수신 경계 판정과 유실 검증의 한계는 [경합·과부하·유실 검증](reliability.ko.md)에, Windows 시나리오의 실행과 CI 확인은 [Windows E2E 실행과 CI 결과 확인](windows.ko.md)에 있습니다.

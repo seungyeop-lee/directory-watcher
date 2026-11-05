@@ -8,6 +8,7 @@
 - To keep them on success as well, set `DW_E2E_KEEP=1`.
 - In `cleanup.log`, check `alive=false` for the helper processes and check that the watcher PID has also exited.
 - On Windows, `records.log.processes` from before cleanup is kept as well; see [Windows failure analysis](windows.md#failure-analysis) for how to analyze it.
+- On Windows, `dll-init-failed.log` is kept as well when a process in that scenario exited with 0xc0000142. It holds the CTRL+BREAK sent in the test binary's console during the scenario and the related exits in time order, and the same report appears in the test output. How to read it is in [A hook exits with 0xc0000142](windows-utm.md#a-hook-exits-with-0xc0000142).
 
 - A delete error for a run folder that is not kept fails that test, and a delete error for the test binary folder makes the final exit code 1.
 - `TestCleanupReportsLockedResources` opens real delete-blocking handles on Windows and checks that neither error is hidden as success.

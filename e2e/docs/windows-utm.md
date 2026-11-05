@@ -123,7 +123,7 @@ The following files are left in this directory as UTF-8 text.
 | `source.txt` | Commit, size and SHA-256 of the source tar that was sent, go test arguments, list of uncommitted changes |
 | `request.json`, `result.json` | Request sent to the guest and the guest's result. The result contains the run ID, go exit code, whether it timed out, leftover processes, Windows and Go versions, and the run directory and its drive type. |
 | `stdout.log`, `stderr.log` | Output of the guest go test |
-| `diagnostics/` | Guest E2E diagnostics files. Analyze `cleanup.log` and `records.log.processes` as in [Windows failure analysis](windows.md#failure-analysis). |
+| `diagnostics/` | Guest E2E diagnostics files. Analyze `cleanup.log` and `records.log.processes` as in [Windows failure analysis](windows.md#failure-analysis), and `dll-init-failed.log` as in [A hook exits with 0xc0000142](#a-hook-exits-with-0xc0000142). |
 
 - The runner judges a run successful only when the result's run ID matches this run, there are no errors, timeouts, or leftover processes, the go exit code is 0, and the run directory is on an internal disk (`fixed`).
 - Uncommitted modifications, additions, and deletions in the working tree are sent as they are, and files excluded by `.gitignore` and symbolic links such as `.agents/skills` are not sent.

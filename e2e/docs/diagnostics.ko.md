@@ -8,6 +8,7 @@
 - 성공 시에도 보존하려면 `DW_E2E_KEEP=1`을 설정합니다.
 - `cleanup.log`에서 보조 프로세스의 `alive=false`를 확인하고 watcher PID도 종료되었는지 확인합니다.
 - Windows에는 정리 전 `records.log.processes`도 남기며, 분석 방법은 [Windows 실패 분석](windows.ko.md#실패-분석)에 있습니다.
+- Windows에서 그 시나리오에 0xc0000142로 끝난 프로세스가 있었으면 `dll-init-failed.log`도 남깁니다. 이 파일에는 시나리오 동안 테스트 바이너리의 콘솔에서 보낸 CTRL+BREAK와 관련 종료가 시각 순서로 담기며, 같은 보고가 테스트 출력에도 나옵니다. 읽는 방법은 [hook이 0xc0000142로 끝남](windows-utm.ko.md#hook이-0xc0000142로-끝남)에 있습니다.
 
 - 보존하지 않는 실행 폴더의 삭제 오류는 해당 테스트를 실패시키고, 테스트 바이너리 폴더의 삭제 오류는 최종 종료 코드를 1로 만듭니다.
 - `TestCleanupReportsLockedResources`는 Windows에서 실제 삭제 방지 handle을 열어 두 오류가 성공으로 숨겨지지 않는지 검사합니다.

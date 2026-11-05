@@ -4,7 +4,7 @@
 
 - 실제 현재 소스의 watcher와 Go 보조 프로그램을 빌드하고 파일 이벤트·hook 기록·프로세스 종료를 검사합니다.
 - macOS 로컬·Linux Docker·Windows는 `e2e/scenarios`의 같은 Go E2E 시나리오를 실행합니다.
-- Windows에서만 실행하는 하네스 검증 `TestCleanupReportsLockedResources`, `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram`, `TestDelayedHooksGoneFailsWhileHookRuns`는 `e2e/harness` 패키지에 있어 `make e2e-local`이 아닌 `go test ./...`로 실행됩니다.
+- Windows에서만 실행하는 하네스 검증 `TestCleanupReportsLockedResources`, `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram`, `TestDelayedHooksGoneFailsWhileHookRuns`, `TestDLLInitFailureReportFromWatcher`는 `e2e/harness` 패키지에 있어 `make e2e-local`이 아닌 `go test ./...`로 실행됩니다.
 - 시나리오별 검증 내용과 코드 위치는 [시나리오와 지원 코드의 대응](docs/harness.ko.md#시나리오와-지원-코드의-대응)에 있습니다.
 
 ## 준비와 실행
