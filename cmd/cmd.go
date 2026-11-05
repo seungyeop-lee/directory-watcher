@@ -34,7 +34,11 @@ func Execute() {
 	}
 	rootCmd.Version = version
 
-	if err := rootCmd.Execute(); err != nil {
+	restoreConsole := useUTF8ConsoleOutput()
+	err := rootCmd.Execute()
+	// os.Exit은 defer를 실행하지 않으므로, 종료 코드를 정하기 전에 되돌린다.
+	restoreConsole()
+	if err != nil {
 		os.Exit(1)
 	}
 }
