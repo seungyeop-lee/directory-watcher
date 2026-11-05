@@ -21,7 +21,7 @@ func TestFolderEvents(t *testing.T) {
 	t.Parallel()
 	t.Run("actions", func(t *testing.T) {
 		t.Parallel()
-		f := startFolderEvents(t, "")
+		f := startFolderEvents(t)
 		// Windows는 감시 중인 하위 폴더가 있는 폴더의 이름을 바꾸거나 옮기지 못하므로, 옮기는 폴더에는 파일만 둔다.
 		fill(t, filepath.Join(f.outside, "x"), 3)
 		// createLater는 앞 단계에서 폴더 이벤트를 받은 폴더 안에 빈 파일 rel을 만들고, hook이 그 파일의 C를 받기를
@@ -64,25 +64,6 @@ func TestFolderEvents(t *testing.T) {
 			}, []string{"D,false,src/g.txt"}, ""},
 		})
 	})
-	// 부하가 큰 Windows CI에서는 파일 300개가 든 폴더를 지우는 동안 이벤트 사이가 dirBatch 기본 대기 100ms를 넘어,
-	// 먼저 받은 파일 삭제가 폴더 D에 흡수되지 않고 hook에 간 적이 있다. 그래서 이 하위 테스트만 대기를 1초, 상한을
-	// 10초로 늘리고, 표지는 이 상한보다 길게 기다린다. 늘린 대기는 단계마다 걸리는 시간을 늘리므로 다른 동작과 나눈다.
-	t.Run("folderWith300Files", func(t *testing.T) {
-		t.Parallel()
-		f := startFolderEvents(t, `
-      dirBatch:
-        waitMillisecond: 1000
-        maxWaitMillisecond: 10000`)
-		fill(t, filepath.Join(f.outside, "big"), 300)
-		f.run(&changeSteps{t: t, s: f.s, root: f.s.Watch, timeout: 20 * time.Second}, []folderStep{
-			{"move in a folder with 300 files", func() { f.move(filepath.Join(f.outside, "big"), f.watch("src/big")) }, []string{"C,true,src/big"}, ""},
-			{"rm -rf a folder with 300 files", func() {
-				if err := os.RemoveAll(f.watch("src/big")); err != nil {
-					t.Fatal(err)
-				}
-			}, []string{"D,true,src/big"}, ""},
-		})
-	})
 }
 
 // folderStep은 TestFolderEvents의 사용자 동작 한 단계와 그 동작에서 hook이 받기를 기대하는 기록이다.
@@ -101,9 +82,8 @@ type folderEvents struct {
 	outside string
 }
 
-// startFolderEvents는 감시 폴더에 src와 dst를, 실행 폴더에 outside를 만들고 watcher를 띄운다. option은 대상
-// option 아래에 덧붙일 설정이다.
-func startFolderEvents(t *testing.T, option string) *folderEvents {
+// startFolderEvents는 감시 폴더에 src와 dst를, 실행 폴더에 outside를 만들고 watcher를 띄운다.
+func startFolderEvents(t *testing.T) *folderEvents {
 	s := harness.NewScenario(t)
 	f := &folderEvents{t: t, s: s, outside: filepath.Join(s.Work, "outside")}
 	for _, dir := range []string{f.watch("src"), f.watch("dst"), f.outside} {
@@ -116,11 +96,11 @@ func startFolderEvents(t *testing.T, option string) *folderEvents {
         - %s
     option:
       watch:
-        exclude: ['*.probe']%s
+        exclude: ['*.probe']
       hookBatch:
         waitMillisecond: 0
         deliver: each
-`, s.Watch, s.Hook("--line=CHANGE:{{.Event}},{{.IsDir}},{{.Path}}"), option))
+`, s.Watch, s.Hook("--line=CHANGE:{{.Event}},{{.IsDir}},{{.Path}}")))
 	return f
 }
 

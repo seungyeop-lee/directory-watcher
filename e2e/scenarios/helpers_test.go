@@ -20,9 +20,7 @@ type changeSteps struct {
 	root string
 	// dirSentinels이면 표지를 빈 파일 대신 폴더로 만든다. 파일 이벤트가 hook을 실행하지 않는 설정에서 쓴다.
 	dirSentinels bool
-	// timeout은 next가 표지와 기다리는 기록을 기다리는 가장 긴 시간이고, 0이면 10초다.
-	timeout    time.Duration
-	seen, step int
+	seen, step   int
 }
 
 // next는 root 아래 dirs의 각 폴더에 표지를 만들고, hook이 표지를 모두 받고 awaited의 기록도 모두 받을 때까지
@@ -44,12 +42,8 @@ func (c *changeSteps) next(label string, awaited []string, dirs ...string) []str
 		}
 	}
 	c.step++
-	timeout := c.timeout
-	if timeout == 0 {
-		timeout = 10 * time.Second
-	}
 	var got []string
-	c.s.Await(label+" sentinels", timeout, func() bool {
+	c.s.Await(label+" sentinels", 10*time.Second, func() bool {
 		got = nil
 		waiting := map[string]bool{}
 		for _, sentinel := range sentinels {
