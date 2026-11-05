@@ -172,6 +172,12 @@ func (t *watchTree) addDirTree(root string) error {
 		if err != nil {
 			// 감시 중에 생긴 폴더는 감시 목록에 넣기 전에 지워질 수 있다.
 			if errors.Is(err, fs.ErrNotExist) {
+				// d가 nil이면 훑기 시작한 폴더가 이미 없어 감시 목록에 넣지 못했으므로, 그 폴더의 삭제 이벤트가 오지
+				// 않을 수 있어 기록에서 지운다. d가 있으면 감시 목록에 넣은 폴더를 읽지 못한 것이고, 그 폴더의 삭제
+				// 이벤트가 기록을 지운다.
+				if d == nil {
+					t.forgetEntry(p)
+				}
 				return nil
 			}
 			return err

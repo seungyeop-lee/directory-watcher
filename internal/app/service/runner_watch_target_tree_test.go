@@ -375,3 +375,19 @@ func TestWatchTreeAddFailsWhenTargetRemovedBeforeAdd(t *testing.T) {
 		t.Errorf("add() = %v, want an error wrapping fs.ErrNotExist", err)
 	}
 }
+
+// 감시 중에 생긴 폴더가 handleEvent가 확인한 뒤 addDirTree가 훑기 전에 지워지면, 그 폴더를 기록에 남기지 않는지
+// 확인한다. 기록이 남으면 같은 경로에 다시 만든 폴더를 있던 폴더로 보아 생성을 hook에 넘기지 않는다.
+func TestWatchTreeForgetsAddedFolderRemovedBeforeWalk(t *testing.T) {
+	f := newTreeFixture(t, domain.WatchOption{SubDir: true})
+	f.add()
+	f.mkdirAll("new/a")
+	if err := os.RemoveAll(f.path("new")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tree.added(f.path("new"), true); err != nil {
+		t.Fatalf("added(new) = %v, want nil", err)
+	}
+	f.assertWatchList(".")
+	assertRecordMatchesDisk(t, f.tree, f.root, "new")
+}
