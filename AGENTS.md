@@ -33,6 +33,8 @@
   - 커밋하기 전에는 `go build ./...`, `go vet ./...`, `go test -count=1 -race ./...`(`make test`)를 실행한다. E2E는 watcher를 별도의 `go build`로 빌드해서 Go 테스트 캐시가 watcher 소스의 변경을 알지 못하므로, `-count=1`을 빼지 않는다.
   - OS마다 다르게 동작하는 코드를 바꿨을 때와 릴리스하기 전에는 `make e2e-linux`와 `make e2e-windows-all`도 실행한다.
 - Windows 동작을 확인해야 하면, Windows 환경이 없다고 판단하기 전에 `/Applications/UTM.app/Contents/MacOS/utmctl list`로 UTM VM을 찾는다. VM이 있으면 [UTM Windows VM에서 E2E 실행](e2e/docs/windows-utm.ko.md)을 읽고 `make e2e-windows-all ARGS="-vm=<VM 이름>"`으로 게스트에서 테스트를 실행한다. `./e2e/scenarios` 밖의 패키지를 함께 실행하는 방법과 이 VM으로 대신할 수 없는 Windows 검증도 그 문서에 있다.
+- Windows VM 검사는 `make e2e-windows-all`이 한 번 통과하면 충분하다. 같은 VM에서 여러 실행을 동시에 돌리거나 같은 검사를 반복하는 검사는 Windows 실행기(`e2e/windows/`)의 동시 실행 동작을 바꿀 때나 사용자가 요청할 때만 한다.
+- 여러 작업을 동시에 진행해도 같은 VM의 검사는 한 번에 하나씩 돌린다. 실행이 겹치면 부하로 드물게 나는 실패가 늘어 검사를 다시 돌리게 된다.
 - Windows 실행 로그는 UTF-8이 아닌 텍스트라서, Claude Code 셸의 `grep`(`ugrep -I` 래퍼)은 이를 바이너리로 보고 건너뛴다. 로그를 검색하거나 끝날 때까지 기다리는 루프에는 `grep -a`나 `/usr/bin/grep`을 쓴다.
 - 심볼릭 링크를 만드는 테스트는 링크를 만들 수 없으면 SKIP한다. Windows 실행 출력에서 해당 테스트가 `--- SKIP` 없이 `--- PASS`인지 확인한다.
 
