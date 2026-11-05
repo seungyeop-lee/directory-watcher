@@ -33,8 +33,16 @@ func setupProcGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
 }
 
+// gracefulStop은 watcher의 프로세스 그룹에 CTRL+BREAK를 보낸다. 그룹은 watcher의 PID로 고르므로, 그 PID가 다른 프로세스에
+// 재사용되지 않도록 watcher의 handle을 쥔 채로 보낸다. cmd.Wait가 handle을 이미 닫았으면 watcher가 끝난 것이므로 보내지 않는다.
 func gracefulStop(cmd *exec.Cmd) error {
-	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
+	var err error
+	if cmd.Process.WithHandle(func(uintptr) {
+		err = windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
+	}) != nil {
+		return nil
+	}
+	return err
 }
 
 func forceStop(cmd *exec.Cmd) error {

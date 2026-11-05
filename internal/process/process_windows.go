@@ -36,11 +36,25 @@ const jobKillWait = 5 * time.Second
 // jobPollInterval은 job에 남은 프로세스와 새로 들어온 프로세스를 확인하는 간격이다.
 const jobPollInterval = 10 * time.Millisecond
 
+// terminateProcess는 cmd가 리더인 프로세스 그룹에 CTRL+BREAK를 보낸다. 그룹은 리더의 PID로 고르므로, 리더가 이미 끝났어도
+// processTree가 리더의 handle을 쥐고 있어야 그 PID가 다른 프로세스에 재사용되지 않는다.
 func terminateProcess(cmd *exec.Cmd) error {
 	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
 }
 
-type processTree windows.Handle
+// processTree는 명령을 넣은 job과 명령 프로세스(프로세스 그룹의 리더)의 handle이다. os/exec는 cmd.Wait에서 cmd.Cancel이
+// 돌아오기를 기다리기 전에 자기 handle을 닫으므로, 이 handle은 cmd.Wait가 돌아온 뒤에 닫는다.
+type processTree struct {
+	job, leader windows.Handle
+}
+
+func (tree processTree) close() {
+	for _, handle := range []windows.Handle{tree.job, tree.leader} {
+		if handle != 0 {
+			_ = windows.CloseHandle(handle)
+		}
+	}
+}
 
 // startProcessTree는 cmd를 새 job object 안에서 시작해 cmd의 자손도 모두 그 job에 들어가게 하고, cmd.Cancel이
 // job의 프로세스를 모두 멈추게 한다(stopTreeOnCancel). killOnClose이면 job handle을 닫을 때 남은 프로세스도
@@ -49,7 +63,7 @@ func startProcessTree(cmd *exec.Cmd, killOnClose bool) (processTree, error) {
 	markStarted := stopTreeOnCancel(cmd)
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
-		return 0, fmt.Errorf("create job object: %w", err)
+		return processTree{}, fmt.Errorf("create job object: %w", err)
 	}
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
 	if killOnClose {
@@ -61,7 +75,7 @@ func startProcessTree(cmd *exec.Cmd, killOnClose bool) (processTree, error) {
 	}
 	if ok, _, err := procSetInformationJobObject.Call(uintptr(job), windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), unsafe.Sizeof(limits)); ok == 0 {
 		_ = windows.CloseHandle(job)
-		return 0, fmt.Errorf("configure job object: %w", err)
+		return processTree{}, fmt.Errorf("configure job object: %w", err)
 	}
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -70,53 +84,58 @@ func startProcessTree(cmd *exec.Cmd, killOnClose bool) (processTree, error) {
 	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
 	if err := cmd.Start(); err != nil {
 		_ = windows.CloseHandle(job)
-		return 0, err
+		return processTree{}, err
 	}
-	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
+	leader, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
 	if err == nil {
-		err = windows.AssignProcessToJobObject(job, process)
-		_ = windows.CloseHandle(process)
+		err = windows.AssignProcessToJobObject(job, leader)
 	}
 	if err == nil {
 		err = resumeProcess(cmd.Process.Pid)
 	}
 	if err != nil {
 		// cmd.Wait가 cmd.Cancel의 결과를 기다리므로, 그 전에 cmd.Cancel이 job 없이 끝나게 한다.
-		markStarted(0)
+		markStarted(processTree{leader: leader})
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		_ = windows.CloseHandle(job)
-		return 0, fmt.Errorf("start in job object: %w", err)
+		processTree{job: job, leader: leader}.close()
+		return processTree{}, fmt.Errorf("start in job object: %w", err)
 	}
-	markStarted(job)
-	return processTree(job), nil
+	tree := processTree{job: job, leader: leader}
+	markStarted(tree)
+	return tree, nil
 }
 
 func releaseProcessTree(tree processTree) {
-	_ = windows.CloseHandle(windows.Handle(tree))
+	tree.close()
 }
 
 // stopTreeOnCancel은 cmd.Cancel을 감싸, 취소된 명령이 시작 후 minRunBeforeBreak가 지난 뒤에 첫 CTRL+BREAK를
 // 받고 job의 프로세스가 모두 끝날 때까지 cmd.Cancel이 돌아오지 않게 한다(stopJob). 프로세스를 job에 넣고
-// 다시 실행한 직후, 또는 그러지 못했을 때 돌려받은 함수에 job을 넘겨야 한다. 그러지 못했으면 0을 넘긴다.
-func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(job windows.Handle)) {
+// 다시 실행한 직후, 또는 그러지 못했을 때 돌려받은 함수에 processTree를 넘겨야 한다. job에 넣지 못했으면 job을 0으로 두고,
+// 리더의 handle도 열지 못했으면 leader도 0으로 둔다. 리더의 handle이 없으면 PID가 재사용됐을 수 있으므로 CTRL+BREAK를
+// 보내지 않는다. 이때 명령은 startProcessTree가 강제로 끝낸다.
+func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(tree processTree)) {
 	send := cmd.Cancel
 	if send == nil {
-		return func(windows.Handle) {}
+		return func(processTree) {}
 	}
 	started := make(chan struct{})
-	var job windows.Handle
+	var tree processTree
 	var startedAt time.Time
 	cmd.Cancel = func() error {
 		<-started
-		if job == 0 {
+		switch {
+		case tree.leader == 0:
+			return nil
+		case tree.job == 0:
 			return send()
 		}
 		time.Sleep(time.Until(startedAt.Add(minRunBeforeBreak)))
-		return stopJob(job, send)
+		return stopJob(tree.job, send)
 	}
-	return func(handle windows.Handle) {
-		job, startedAt = handle, time.Now()
+	return func(t processTree) {
+		tree, startedAt = t, time.Now()
 		close(started)
 	}
 }
@@ -268,9 +287,8 @@ type jobAccounting struct {
 }
 
 func cleanupProcessTree(_ *exec.Cmd, tree processTree, deadline time.Time) error {
-	job := windows.Handle(tree)
-	defer windows.CloseHandle(job)
-	return terminateJob(job, deadline)
+	defer tree.close()
+	return terminateJob(tree.job, deadline)
 }
 
 // terminateJob은 job의 프로세스를 모두 끝내고, deadline까지 모두 사라지기를 기다린다.

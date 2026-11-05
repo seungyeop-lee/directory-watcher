@@ -28,6 +28,7 @@ const breakSignalExit = 3
 // 덧붙인다. DW_BREAK_SIGNAL_IGNORE=1이면 신호를 받아도 끝나지 않는다.
 // DW_BREAK_SIGNAL_CHILD=1이면 minRunBeforeBreak가 지난 뒤 자기 사본을 자식으로 시작하고 나서 ready를 쓴다.
 // DW_BREAK_SIGNAL_LATE_CHILD=1이면 ready를 쓴 뒤 표준 입력에서 1바이트를 읽고 나서 자기 사본을 자식으로 하나 더 시작한다.
+// DW_BREAK_SIGNAL_EXIT_ON_EOF=1이면 시작을 기록한 뒤 표준 입력을 끝까지 읽고 0으로 끝난다.
 func TestBreakSignalProcess(t *testing.T) {
 	if os.Getenv("DW_BREAK_SIGNAL_HELPER") != "1" {
 		return
@@ -49,6 +50,10 @@ func TestBreakSignalProcess(t *testing.T) {
 		os.Exit(2)
 	}
 	record("start", created.Nanoseconds())
+	if os.Getenv("DW_BREAK_SIGNAL_EXIT_ON_EOF") == "1" {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		os.Exit(0)
+	}
 	if os.Getenv("DW_BREAK_SIGNAL_CHILD") == "1" {
 		time.Sleep(minRunBeforeBreak)
 		startBreakSignalChild()
@@ -155,6 +160,68 @@ func TestRunCommandDelaysBreakRightAfterStart(t *testing.T) {
 		t.Fatalf("CTRL+BREAK sent at %v after start %v, want once at least %s after start", sent, before, minRunBeforeBreak)
 	}
 	assertEndedBySignal(t, cmd, ended.Sub(before), breakSignalExit, statusControlCExit)
+}
+
+// 취소된 hook이 첫 CTRL+BREAK 전에 끝나도, CTRL+BREAK를 보낼 때까지 hook의 PID는 다른 프로세스에 재사용되지 않아야 한다.
+// CTRL+BREAK는 PID로 프로세스 그룹을 고르므로, PID가 재사용되면 그 PID를 받은 다른 프로세스 그룹이 신호를 받는다.
+func TestRunCommandKeepsPIDOfExitedHookUntilBreak(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "record")
+	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
+	t.Setenv("DW_BREAK_SIGNAL_EXIT_ON_EOF", "1")
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
+	cmd, sentAt := breakSignalHook(t, ctx)
+	// 첫 Read에서 취소하고 나서 EOF를 돌려주므로, hook은 취소된 뒤에 끝난다.
+	cmd.Stdin = readFunc(func([]byte) (int, error) {
+		ctx.Cancel()
+		return 0, io.EOF
+	})
+	out, in, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+	cmd.Stdout = in
+	var pidErr error
+	var seen []time.Time
+	send := cmd.Cancel
+	cmd.Cancel = func() error {
+		// hook의 stdout이 닫히면 hook이 끝난 것이다.
+		in.Close()
+		_, _ = io.Copy(io.Discard, out)
+		// os/exec는 hook이 끝난 직후에 자기 handle을 닫으므로, 그 뒤에도 PID가 hook을 가리키는지 잠시 지켜본다.
+		for end := time.Now().Add(500 * time.Millisecond); pidErr == nil && time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+			var created time.Time
+			if created, pidErr = processCreation(uint32(cmd.Process.Pid)); pidErr == nil && !slices.Contains(seen, created) {
+				seen = append(seen, created)
+			}
+		}
+		return send()
+	}
+	_ = ctx.RunCommand(cmd)
+
+	if len(sentAt()) == 0 {
+		t.Fatal("CTRL+BREAK was not sent to the canceled hook")
+	}
+	if pidErr != nil {
+		t.Fatalf("PID of the exited hook was released before CTRL+BREAK: %v", pidErr)
+	}
+	if want := recordedCreations(t, record); !slices.Equal(seen, want) {
+		t.Fatalf("PID of the exited hook pointed to processes created at %v before CTRL+BREAK, want only the hook created at %v", seen, want)
+	}
+}
+
+// processCreation은 pid를 쓰는 프로세스의 생성 시각을 돌려준다. pid를 쓰는 프로세스가 없으면 오류를 돌려준다.
+func processCreation(pid uint32) (time.Time, error) {
+	process, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer windows.CloseHandle(process)
+	var creation, exit, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(process, &creation, &exit, &kernel, &user); err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(0, creation.Nanoseconds()), nil
 }
 
 // 최소 시간이 지난 뒤에 취소된 hook은 지금처럼 바로 CTRL+BREAK를 받아야 한다.
