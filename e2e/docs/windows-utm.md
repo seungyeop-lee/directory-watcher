@@ -13,7 +13,7 @@ You do the setup below only once.
 
 1. Install UTM at `/Applications/UTM.app`. If you installed it elsewhere, pass `-utmctl=<UTM.app>/Contents/MacOS/utmctl` when running. The runner rejects symbolic links such as Homebrew's `/opt/homebrew/bin/utmctl`.
 2. Create a Windows 11 ARM64 VM in UTM and finish the Windows installation and license agreement yourself. This step is not automated.
-3. Install [UTM Windows Guest Tools](https://docs.getutm.app/guest-support/windows/) in the guest. If `/Applications/UTM.app/Contents/MacOS/utmctl ip-address <VM>` prints an IPv4 address while the VM is running, the QEMU Guest Agent is working. If the screen shows `Display output is not active.` after installing Guest Tools, on the Mac where this project was verified, changing the DirectX Driver to DXMT in the VM's Display settings and restarting the VM normally fixed it.
+3. Install [UTM Windows Guest Tools](https://docs.getutm.app/guest-support/windows/) in the guest. If `/Applications/UTM.app/Contents/MacOS/utmctl ip-address <VM>` prints an IPv4 address while the VM is running, the QEMU Guest Agent is working. If the screen shows `Display output is not active.` after installing Guest Tools, change the DirectX Driver to DXMT in the VM's Display settings and restart the VM normally.
 4. Install Go with the MSI in the guest, at or above the version in `go.mod`. The runner uses the default install path `C:\Program Files\Go\bin\go.exe`; pass a different path with `-guest-go`. You do not need to change the PowerShell execution policy.
 5. Create a clone without display and sound devices by following [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm) below.
 
@@ -130,7 +130,7 @@ The following files are left in this directory as UTF-8 text.
 
 - The runner judges a run successful only when the result has no guest-side error, timeout, or leftover process, the go exit code is 0, and the run directory is on an internal disk (`fixed`).
 - When a run failed without a guest result, its `stdout.log`, `stderr.log`, and `diagnostics/` may hold the contents of another run on the same VM.
-- Uncommitted modifications, additions, and deletions in the working tree are sent as they are, and files excluded by `.gitignore` and symbolic links such as `.agents/skills` are not sent.
+- The runner sends [the same working tree files as the Linux runner](diagnostics.md#parallel-runs-across-worktrees-and-isolation), except symbolic links such as `.agents/skills`.
 - The guest's run directory `<guest-dir>\<run ID>` and the marker files `<guest-dir>\<run ID>.*` next to it are deleted once collection finishes.
 - If collection fails, the run directory is left in place and the error message shows its path.
 
@@ -139,14 +139,12 @@ The following files are left in this directory as UTF-8 text.
 - `down` and `all` request a graceful shutdown from Windows with `utmctl stop --request`, and repeat the request every 30 seconds if the VM does not shut down.
   - Windows sometimes ignores the first request and shuts down on a repeated one; the cause has not been determined.
 - They never force the VM's power off; if the VM does not shut down within `-stop-timeout`, they fail and leave the VM running.
-- Every guest shut down by a request logged a clean shutdown, and the next boot was a cold boot.
-- Hibernation is off in this guest, so Fast Startup cannot be used.
 
 ## Differences between Windows ARM64 and x64
 
 - The UTM VM runs Windows ARM64, and the guest Go is `windows/arm64`.
 - Go's race detector supports only `windows/amd64` on Windows ([requirements](https://go.dev/doc/articles/race_detector#Requirements)), so `-race` verification is not possible on this VM.
-- `-race` verification and Windows x64 behavior are still checked by `test (windows-latest)` in GitHub Actions ([CI steps](windows.md#ci-steps)).
+- `-race` verification and Windows x64 behavior are checked by `test (windows-latest)` in GitHub Actions ([Checking CI results](windows.md#checking-ci-results)).
 - A passing UTM run does not substitute for a Windows x64 CI result.
 
 ## Troubleshooting
@@ -165,7 +163,7 @@ The following files are left in this directory as UTF-8 text.
 
 ### AppleScript fails with -600 while UTM is running
 
-- While any `utmctl` process is running, an AppleScript `tell application "UTM"` sends its events to that `utmctl` process instead of UTM and fails at once with `Application isn't running. (-600)` (checked on macOS 27.2 and UTM 5.0.8).
+- While any `utmctl` process is running, an AppleScript `tell application "UTM"` sends its events to that `utmctl` process instead of UTM and fails at once with `Application isn't running. (-600)`.
   - Pointing to UTM by bundle ID or app path gives the same result.
   - `utmctl` requests from other runs on the same VM, such as `file push`, last for seconds, so concurrent runs hit this often.
 - The runner and the command in step 2 of [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm) send their events to UTM with JXA (`osascript -l JavaScript`), whose events reach UTM even while `utmctl` is running.
@@ -175,7 +173,7 @@ The following files are left in this directory as UTF-8 text.
 ### QEMU aborts during shutdown
 
 - If a new `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips` appears after the shutdown request, `down` and `all` fail with `QEMU aborted while the VM was stopping` even if the VM shut down.
-- These aborts happen often on a VM with a display and have not been seen on the dedicated E2E VM; the cause is on UTM's QEMU side and has not been determined.
+- These aborts happen mostly on a VM with a display, and their cause on UTM's QEMU side has not been determined.
 - The report does not identify the VM, so a QEMU abort of another VM at the same time is also judged a failure.
 
 ### Guest run directory is left behind
@@ -215,8 +213,8 @@ After checking the result, delete the result file with the following command, an
 3. Copy the last line of the warning as it is and run it in the Mac shell.
 4. If the run ID from the warning is not in the listing of `dir /b /ad C:\dw-e2e`, the directory has been removed.
 5. If the directory remains although no process remains, Windows cannot delete `guest.exe` for several minutes after the guest program ended. Wait a few minutes, then continue again from step 3.
-   - Running `rmdir /s /q <path>` in the way above prints `guest.exe - Access is denied.` (`액세스가 거부되었습니다.` on a Korean guest), but Restart Manager found no process that had the file open.
-   - The XtaCache service, which stores translations of x64 programs on an ARM64 guest, is presumed to hold the file, but this has not been confirmed.
+   - Running `rmdir /s /q <path>` in the way above then prints `guest.exe - Access is denied.` (`액세스가 거부되었습니다.` on a Korean guest).
+   - The process that holds this file has not been identified.
 6. If the directory still remains a few minutes later, the QEMU Guest Agent did not close a file in the directory that it opened for `utmctl file pull` or `file push`. Such a file is closed only when the Guest Agent process ends, so after the other runs on the same VM end, restart the VM with `make e2e-windows-down` and `make e2e-windows-up`, then continue again from step 3.
 
 ### The VM window appears or the boot sound plays

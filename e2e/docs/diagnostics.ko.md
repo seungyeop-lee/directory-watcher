@@ -6,6 +6,8 @@
 
 - 로컬 실패 시 `diagnostics retained:` 뒤의 경로에 `config.yml`, `records.log`, `watcher.log`, `watcher.pid`, `cleanup.log`를 남깁니다.
 - 성공 시에도 보존하려면 `DW_E2E_KEEP=1`을 설정합니다.
+- 실행 폴더는 기본으로 OS 임시 디렉터리 아래에 만들고, `DW_E2E_DIAGNOSTICS`를 설정하면 그 디렉터리 아래에 만듭니다.
+  - CI는 `$RUNNER_TEMP/dw-e2e`를 지정하고, 이 디렉터리를 `e2e-diagnostics-<OS>` artifact로 올립니다.
 - `cleanup.log`에서 보조 프로세스의 `alive=false`를 확인하고 watcher PID도 종료되었는지 확인합니다.
 - Windows에는 정리 전 `records.log.processes`도 남기며, 분석 방법은 [Windows 실패 분석](windows.ko.md#실패-분석)에 있습니다.
 - Windows에서 그 시나리오에 0xc0000142로 끝난 프로세스가 있었으면 `dll-init-failed.log`도 남깁니다. 이 파일에는 시나리오 동안 테스트 바이너리의 콘솔에서 보낸 CTRL+BREAK와 관련 종료가 시각 순서로 담기며, 같은 보고가 테스트 출력에도 나옵니다. 읽는 방법은 [hook이 0xc0000142로 끝남](windows-utm.ko.md#hook이-0xc0000142로-끝남)에 있습니다.
@@ -15,15 +17,17 @@
 - 실패 또는 `DW_E2E_KEEP=1`로 실행 폴더를 보존한 경우에는 그 폴더의 삭제를 검증한 것이 아닙니다.
 
 - Linux는 `Linux diagnostics:` 뒤의 호스트 경로에 `runner.log`와 컨테이너 `/tmp`의 진단을 복사합니다.
+  - Linux 실행기는 컨테이너에 `DW_E2E_KEEP=1`을 넘기므로, 통과한 시나리오의 실행 폴더도 복사됩니다.
 - 제한 시간 초과 시 실행기 로그의 `deadline`과 watcher 로그의 마지막 이벤트·hook, 기록의 마지막 `signal`·`complete`를 비교합니다.
 - 컨테이너 ID가 더 이상 `docker inspect <ID>`에 나타나지 않아야 합니다.
 
 ### 의도적인 실패·시간 초과
 
 - 정리 경로를 일부러 검사하는 아래 명령은 **실패가 기대 결과**입니다.
-- `failure`는 실제 프로세스 트리 준비 직후 실패하고, `timeout`은 준비 후 충족되지 않는 조건의 제한 시간을 초과합니다.
+- `DW_E2E_FAULT`는 [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md)만 읽습니다.
+- `failure`는 실제 프로세스 트리 준비 직후 `intentional failure after process tree readiness`로 실패하고, `timeout`은 준비 후 충족되지 않는 조건의 제한 시간을 넘겨 `timeout: intentional timeout`으로 실패합니다.
 - 두 경우 모두 진단 경로와 PID 종료, Linux 컨테이너 제거를 확인합니다.
-- Windows PowerShell 명령은 [Windows 실패 분석](windows.ko.md#실패-분석)에 있습니다.
+- Windows PowerShell 명령은 [Windows 실패 분석](windows.ko.md#실패-분석)에, UTM Windows VM 명령은 [테스트 선택·반복·시간 제한](windows-utm.ko.md#테스트-선택반복시간-제한)에 있습니다.
 
 ```sh
 DW_E2E_FAULT=failure go test -count=1 -v -run '^TestProcessLifecycle$' ./e2e/scenarios

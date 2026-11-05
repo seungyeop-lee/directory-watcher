@@ -197,6 +197,6 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
   - hook이 프로그램을 시작한 지 500ms가 지나기 전에 취소되어도, hook과 그 프로그램은 프로그램이 시작된 뒤 500ms가 지났을 때 CTRL+BREAK를 받습니다.
 - Windows에서 취소되지 않고 끝난 hook이 시작한 프로세스는 계속 실행됩니다.
 - Windows E2E가 취소된 hook의 종료에 대해 확인하는 내용은 [Windows E2E](../../e2e/docs/windows.ko.md#hook-취소-검증)에 있습니다.
-- 파일 조작과 OS 알림은 일대일이 아닙니다. Linux와 Windows는 OS 이벤트 overflow를 보고하며, 이때도 전달 대기열이 가득 찼을 때처럼 처리를 중단합니다. macOS는 overflow를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. 실제 관찰한 Linux overflow와 Windows 백엔드 계약을 구분한 [E2E 시나리오와 한계](../../e2e/docs/reliability.ko.md#경합과-과부하-검증)를 확인하세요.
+- 파일 조작과 OS 알림은 일대일이 아닙니다. Linux와 Windows는 OS 이벤트 overflow를 보고하며, 이때도 전달 대기열이 가득 찼을 때처럼 처리를 중단합니다. macOS는 overflow를 보고하지 않습니다. 애플리케이션 상한이 모든 OS 유실의 감지를 보장하지는 않습니다. 실제 관찰한 Linux overflow와 Windows 백엔드 계약을 구분한 [E2E 시나리오와 한계](../../e2e/docs/reliability.ko.md#유실-검증의-구분)를 확인하세요.
 
 - 이 단계들의 순서는 [동작 방식](how-it-works.ko.md)에 그려 두었습니다.

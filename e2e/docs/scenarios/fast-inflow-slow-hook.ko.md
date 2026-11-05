@@ -9,12 +9,16 @@
 
 ## 확인 내용과 성공 조건
 
-- **유입 배치의 완료**: 유효 경로(`initial.txt`, `shared.txt`, `00.txt`~`23.txt`)의 `CREATE`·`WRITE` 이벤트 가운데 DEBUG 로그에 실제로 수신된 것만 대상으로 합니다. 마지막 `DONE:` 기록의 경로가 마지막으로 수신된 경로와 같고, `BEGIN`을 기록한 hook이 모두 완료(`DONE:`)되거나 취소(`CANCEL`)되었으며, 로그와 기록이 120ms 동안 변하지 않아야 합니다. 이 판정의 근거와 한계는 [OS E2E의 수신 경계 판정](../reliability.ko.md#os-e2e의-수신-경계-판정)에 있습니다.
-  - 받은 이벤트와 기록이 10초 동안 변하지 않으면 대기가 실패합니다.
+- **유입 배치의 완료**: 유효 경로(`initial.txt`, `shared.txt`, `00.txt`~`23.txt`)의 `CREATE`·`WRITE` 이벤트 가운데 DEBUG 로그에 실제로 수신된 것만 대상으로 합니다. 판정 방식과 한계는 [OS E2E의 수신 경계 판정](../reliability.ko.md#os-e2e의-수신-경계-판정)에 있습니다.
+  - 마지막 `DONE:` 기록의 경로가 마지막으로 수신된 경로와 같아야 합니다.
+  - `BEGIN`을 기록한 hook이 모두 완료(`DONE:`)되거나 취소(`CANCEL`)되어야 합니다.
+  - 로그와 기록이 120ms 동안 변하지 않아야 합니다.
 - **비중단 순차 처리**: `deliver=each/interrupt=none`에서는 `DONE:` 기록 수가 수신된 유효 이벤트 수와 같아야 하고, `00.txt`~`23.txt` 각각에 `DONE:` 기록이 하나 이상 있어야 합니다. 기준은 파일을 조작한 횟수가 아니라 관찰된 수신 횟수입니다.
 - **고립된 변경**: 배치가 안정된 뒤 쓴 `last.txt`의 `DONE:` 기록이 10초 안에 나타나야 합니다.
 - **제외 파일**: 종료 전까지의 기록에 `excluded.swp`나 `readiness.probe`가 들어 있는 줄이 없어야 합니다.
-- **종료**: watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝나며, `FINISH` 기록이 정확히 한 번 있고 그 뒤에 `BEGIN|` 기록이 없어야 합니다. 즉 종료 시 대기 중인 변경은 실행되지 않습니다. `BEGIN`을 기록한 모든 hook 프로세스는 5초 안에 사라져야 합니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- **종료**: watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝나야 합니다.
+  - `FINISH` 기록이 정확히 한 번 있고 그 뒤에 `BEGIN|` 기록이 없어야 하므로, 종료 시 대기 중인 변경은 실행되지 않습니다.
+  - `BEGIN`을 기록한 모든 hook 프로세스는 5초 안에 사라져야 합니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
 - **알림 미실행**: watcher가 종료된 뒤 `ERROR|` 알림 기록이 하나도 없어야 합니다. 하나라도 있으면 그 기록을 출력하고 실패합니다.
 
 ## 설정
@@ -73,9 +77,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestFastInflowSlowHook$' ./e2e/scenarios
@@ -83,12 +85,12 @@ go run ./e2e/linux -- -run '^TestFastInflowSlowHook$'
 make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ```
 
-- 하위 테스트 하나만 실행하려면 `-run '^TestFastInflowSlowHook$/^deliver=each$/^interrupt=none$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
+- 하위 테스트 하나만 실행하려면 `-run '^TestFastInflowSlowHook$/^deliver=each$/^interrupt=none$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
 - 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/reliability_test.go`: `TestFastInflowSlowHook`
-- `e2e/scenarios/error_notification_test.go`: 알림 기록을 읽는 `errorContexts`
-- `e2e/harness`: `Start`, `Hook`, `Await`, `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `CountRecord`, `Stop`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/scenarios/reliability_test.go`에는 `TestFastInflowSlowHook`이 있습니다.
+- `e2e/scenarios/error_notification_test.go`에는 알림 기록을 읽는 `errorContexts`가 있습니다.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `DelayedHookBegun`, `Lines`, `AwaitChangesComplete`, `AwaitLine`, `CountRecord`, `Log`, `Stop`, `ReadLinesLenient`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

@@ -13,7 +13,7 @@
 
 1. UTM을 `/Applications/UTM.app`에 설치합니다. 다른 위치에 설치했다면 실행할 때 `-utmctl=<UTM.app>/Contents/MacOS/utmctl`을 지정합니다. Homebrew의 `/opt/homebrew/bin/utmctl` 같은 심볼릭 링크는 실행기가 거절합니다.
 2. UTM에 Windows 11 ARM64 VM을 만들고 Windows 설치와 라이선스 동의를 직접 마칩니다. 이 단계는 자동화하지 않습니다.
-3. 게스트에 [UTM Windows Guest Tools](https://docs.getutm.app/guest-support/windows/)를 설치합니다. VM이 켜진 상태에서 `/Applications/UTM.app/Contents/MacOS/utmctl ip-address <VM>`이 IPv4 주소를 출력하면 QEMU Guest Agent가 동작하는 것입니다. Guest Tools 설치 뒤 화면에 `Display output is not active.`가 나오면, 이 프로젝트를 확인한 Mac에서는 VM의 Display 설정에서 DirectX Driver를 DXMT로 바꾸고 VM을 정상 재시작해 해결됐습니다.
+3. 게스트에 [UTM Windows Guest Tools](https://docs.getutm.app/guest-support/windows/)를 설치합니다. VM이 켜진 상태에서 `/Applications/UTM.app/Contents/MacOS/utmctl ip-address <VM>`이 IPv4 주소를 출력하면 QEMU Guest Agent가 동작하는 것입니다. Guest Tools 설치 뒤 화면에 `Display output is not active.`가 나오면, VM의 Display 설정에서 DirectX Driver를 DXMT로 바꾸고 VM을 정상 재시작합니다.
 4. 게스트에 `go.mod`의 버전 이상인 Go를 MSI로 설치합니다. 실행기는 기본 설치 경로 `C:\Program Files\Go\bin\go.exe`를 사용하며, 다른 경로는 `-guest-go`로 지정합니다. PowerShell 실행 정책은 바꾸지 않아도 됩니다.
 5. 아래 [E2E 전용 VM 만들기](#e2e-전용-vm-만들기) 절차로 디스플레이와 사운드 장치가 없는 복제본을 만듭니다.
 
@@ -130,7 +130,7 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 
 - 실행기는 결과에 게스트 쪽 오류·시간 초과·잔존 프로세스가 없고, go 종료 코드가 0이며, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다.
 - 게스트 결과를 받지 못해 실패한 실행의 `stdout.log`·`stderr.log`·`diagnostics/`는 같은 VM을 쓰는 다른 실행의 내용일 수 있습니다.
-- 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일과 `.agents/skills` 같은 심볼릭 링크는 전달하지 않습니다.
+- 실행기는 [Linux 실행기와 같은 작업 트리 파일](diagnostics.ko.md#워크트리-병렬-실행과-격리)을 전달하되, `.agents/skills` 같은 심볼릭 링크는 전달하지 않습니다.
 - 게스트의 실행 디렉터리 `<guest-dir>\<실행 ID>`와 그 옆의 표시 파일 `<guest-dir>\<실행 ID>.*`는 회수가 끝나면 지워집니다.
 - 회수에 실패하면 실행 디렉터리를 남기고 오류 메시지에 경로를 표시합니다.
 
@@ -139,14 +139,12 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 - `down`과 `all`은 `utmctl stop --request`로 Windows에 정상 종료를 요청하고, 꺼지지 않으면 30초마다 다시 요청합니다.
   - Windows가 첫 요청을 무시하고 다시 보낸 요청으로 꺼지는 경우가 있으며, 원인은 확인되지 않았습니다.
 - VM 전원을 강제로 끄지 않으며, `-stop-timeout` 안에 꺼지지 않으면 VM을 켜 둔 채 실패합니다.
-- 요청으로 꺼진 게스트는 매번 정상 종료 기록을 남겼고 다음 부팅은 콜드 부팅이었습니다.
-- 이 게스트는 최대 절전 모드가 꺼져 있어 빠른 시작을 사용할 수 없습니다.
 
 ## Windows ARM64와 x64의 차이
 
 - UTM VM은 Windows ARM64이고 게스트 Go는 `windows/arm64`입니다.
 - Go의 race detector는 Windows에서 `windows/amd64`만 지원하므로([요구 사항](https://go.dev/doc/articles/race_detector#Requirements)), 이 VM에서는 `-race` 검증을 할 수 없습니다.
-- `-race` 검증과 Windows x64 동작은 계속 GitHub Actions의 `test (windows-latest)`로 확인합니다([CI 단계](windows.ko.md#ci-단계)).
+- `-race` 검증과 Windows x64 동작은 GitHub Actions의 `test (windows-latest)`로 확인합니다([CI 결과 확인](windows.ko.md#ci-결과-확인)).
 - UTM 실행의 통과를 Windows x64 CI 결과로 대신하지 않습니다.
 
 ## 문제 해결
@@ -165,7 +163,7 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 
 ### UTM이 실행 중인데 AppleScript가 -600으로 실패함
 
-- `utmctl` 프로세스가 하나라도 실행 중이면, AppleScript의 `tell application "UTM"`은 이벤트를 UTM이 아니라 그 `utmctl` 프로세스로 보내 곧바로 `응용 프로그램이 실행 중이 아닙니다. (-600)`(영어 환경에서는 `Application isn't running. (-600)`)로 실패합니다(macOS 27.2, UTM 5.0.8에서 확인).
+- `utmctl` 프로세스가 하나라도 실행 중이면, AppleScript의 `tell application "UTM"`은 이벤트를 UTM이 아니라 그 `utmctl` 프로세스로 보내 곧바로 `응용 프로그램이 실행 중이 아닙니다. (-600)`(영어 환경에서는 `Application isn't running. (-600)`)로 실패합니다.
   - UTM을 bundle ID나 앱 경로로 가리켜도 결과가 같습니다.
   - 같은 VM을 쓰는 다른 실행의 `file push` 같은 `utmctl` 요청은 몇 초씩 이어지므로, 동시에 실행하면 이 실패가 자주 나타납니다.
 - 실행기와 [E2E 전용 VM 만들기](#e2e-전용-vm-만들기) 2단계의 명령은 JXA(`osascript -l JavaScript`)로 UTM에 이벤트를 보내며, JXA의 이벤트는 `utmctl`이 실행 중이어도 UTM에 도착합니다.
@@ -175,7 +173,7 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 ### QEMU가 종료 중에 비정상 종료함
 
 - 종료 요청 뒤 `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips`가 새로 생기면 `down`과 `all`은 VM이 꺼졌더라도 `QEMU aborted while the VM was stopping`으로 실패합니다.
-- 이 비정상 종료는 디스플레이가 있는 VM에서 자주 일어나고 E2E 전용 VM에서는 관찰되지 않았으며, 원인은 UTM의 QEMU 쪽에 있고 확인되지 않았습니다.
+- 이 비정상 종료는 디스플레이가 있는 VM에서 주로 일어나며, UTM의 QEMU 쪽 원인은 밝혀지지 않았습니다.
 - 보고서에는 VM이 표시되지 않으므로, 같은 시간에 다른 VM의 QEMU가 비정상 종료해도 실패로 판정됩니다.
 
 ### 게스트 실행 디렉터리가 남음
@@ -215,8 +213,8 @@ id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
 3. 경고의 마지막 줄을 그대로 복사해 Mac의 셸에서 실행합니다.
 4. `dir /b /ad C:\dw-e2e`의 목록에 경고의 실행 ID가 없으면 디렉터리가 지워진 것입니다.
 5. 남은 프로세스가 없는데도 디렉터리가 남아 있으면, 게스트 프로그램이 끝난 뒤에도 Windows가 몇 분 동안 `guest.exe`를 지우지 못하는 경우입니다. 몇 분 기다린 뒤 3단계부터 다시 진행합니다.
-   - `rmdir /s /q <경로>`를 위 방법으로 실행하면 `guest.exe - 액세스가 거부되었습니다.`(영어 환경에서는 `Access is denied.`)가 출력되지만, Restart Manager로는 이 파일을 연 프로세스를 찾지 못했습니다.
-   - ARM64 게스트에서 x64 프로그램의 변환 결과를 저장하는 XtaCache 서비스가 이 파일을 잡고 있는 것으로 추정하지만, 확인하지는 않았습니다.
+   - 이때 `rmdir /s /q <경로>`를 위 방법으로 실행하면 `guest.exe - 액세스가 거부되었습니다.`(영어 환경에서는 `Access is denied.`)가 출력됩니다.
+   - 이 파일을 잡고 있는 프로세스는 밝혀지지 않았습니다.
 6. 몇 분 뒤에도 디렉터리가 남아 있으면, QEMU Guest Agent가 `utmctl file pull`이나 `file push`로 연 디렉터리 안의 파일을 닫지 않은 경우입니다. 이 파일은 Guest Agent 프로세스가 끝나야 닫히므로, 같은 VM을 쓰는 다른 실행이 모두 끝난 뒤 `make e2e-windows-down`과 `make e2e-windows-up`으로 VM을 다시 시작하고 3단계부터 다시 진행합니다.
 
 ### VM 창이 화면에 뜨거나 부팅음이 남

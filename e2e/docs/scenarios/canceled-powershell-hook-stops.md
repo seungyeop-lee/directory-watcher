@@ -9,11 +9,11 @@
 
 - The watcher exits with exit code 0 within 25 seconds of receiving the shutdown signal. 25 seconds is the 20-second limit after which the watcher ends the hook's processes, plus 5 seconds of slack.
 - There is no `DONE` record, which the hook program writes only when it runs to completion.
-- Every hook process that recorded `BEGIN` is gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- Every hook process that recorded `BEGIN` is gone within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 
 - Whether the hook program starts depends on when the cancel arrives, so the test does not require `BEGIN` or `CANCEL`.
-- On the UTM VM (2026-11-04), a cancel during PowerShell's startup ended PowerShell before the program started, sometimes only after about 5 seconds while Windows Error Reporting (`wermgr.exe`) ran.
-- A later cancel reached the running program, which recorded `CANCEL`.
+- A cancel during PowerShell's startup ends PowerShell before it starts the program, and when Windows Error Reporting (`wermgr.exe`) runs, the exit can take about 5 seconds.
+- A later cancel reaches the running program, which records `CANCEL`.
 
 ## Configuration
 
@@ -53,18 +53,16 @@ sequenceDiagram
 
 ## Running
 
-- This test runs only on Windows.
-
-Run from the repository root on the UTM Windows VM.
+This test has a Windows-only build tag and runs only on Windows, so run it from the repository root on the UTM Windows VM.
 
 ```sh
 make e2e-windows ARGS="-- -run '^TestCanceledPowershellHookStops$'"
 ```
 
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- To run a single subtest, specify it as in `-run '^TestCanceledPowershellHookStops$/^after=500ms$'`.
 
 ## Related code
 
-- `e2e/scenarios/windows_cancel_test.go`: `TestCanceledPowershellHookStops`
-- `e2e/harness`: `Launch`, `Hook`, `Await`, `Log`, `StopWithin`, `CountRecord`, `AwaitDelayedHooksGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/windows_cancel_test.go` contains `TestCanceledPowershellHookStops`, `unquotedHook`, which builds the hook command without single quotes.
+- `e2e/harness`: `NewScenario`, `Launch`, `WatcherBin`, `Hook`, `Await`, `Log`, `StopWithin`, `Lines`, `CountRecord`, `AwaitDelayedHooksGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

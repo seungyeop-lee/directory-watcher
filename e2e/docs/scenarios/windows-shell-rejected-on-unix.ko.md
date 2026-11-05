@@ -8,7 +8,7 @@
 
 - 프로세스는 10초 안에 종료 코드 1로 끝나야 합니다.
 - stdout과 stderr를 합친 출력의 앞뒤 공백을 제거하면 정확히 `config: <경로>`와 `Error: shell "cmd" runs only on Windows` 두 줄이어야 합니다.
-  - `<경로>`는 `Launch`가 `-c`로 넘기는 `config.yml`의 경로입니다.
+  - `<경로>`는 `Launch`가 `-c`로 넘기는 실행 폴더의 `config.yml` 경로입니다.
 - 기록 파일이 비어 있어 전역·대상 생명주기 명령이 실행되지 않았어야 합니다.
 
 ## 설정
@@ -24,23 +24,24 @@ sequenceDiagram
     participant testCode as 테스트
     participant watcherProc as watcher
     participant recordFile as records.log
-    testCode->>watcherProc: Launch shell: cmd
-    watcherProc->>watcherProc: validate shell before hooks
-    watcherProc-->>testCode: exact error and exit 1
-    testCode->>recordFile: assert no records
+    testCode->>watcherProc: Launch (shell: cmd)
+    watcherProc->>watcherProc: hook을 실행하기 전에 셸 검사
+    watcherProc-->>testCode: 오류 출력과 종료 코드 1 (최대 10초 대기)
+    testCode->>recordFile: 기록이 없는지 확인
 ```
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-- Unix의 셸 거부만 확인하는 Unix 전용 테스트이므로 Windows에서는 실행 대상이 아닙니다.
+저장소 루트에서 차례로 로컬과 Linux Docker에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestWindowsShellRejectedOnUnix$' ./e2e/scenarios
 go run ./e2e/linux -- -run '^TestWindowsShellRejectedOnUnix$'
 ```
 
+- 이 테스트는 Unix에서 `cmd`를 거부하는지만 확인하므로, Unix 전용 build tag를 써서 Windows에서는 실행되지 않습니다.
+
 ## 관련 코드
 
-- `e2e/scenarios/shell_unix_test.go`에 `TestWindowsShellRejectedOnUnix`를 정의합니다.
-- 테스트는 `e2e/harness`의 `NewScenario`, `Hook`, `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines`를 사용합니다.
+- `e2e/scenarios/shell_unix_test.go`에는 `TestWindowsShellRejectedOnUnix`가 있습니다.
+- `e2e/harness`: `NewScenario`, `Hook`, `Launch`, `WatcherBin`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

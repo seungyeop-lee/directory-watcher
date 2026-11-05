@@ -4,7 +4,7 @@
 
 - `dw_e2e_inject` build tag로 빌드한 watcher의 watcher 오류 채널에 오류를 보내, 유실 오류는 `global.lifeCycle.onError`를 한 번 실행하고 종료 코드 1로 끝나고, 유실이 아닌 치명적 오류는 알림 없이 종료 코드 1로 끝나는지 확인합니다.
 
-- 주입한 오류는 실제 OS overflow를 관찰한 증거가 아닙니다.
+- 주입한 오류와 실제 OS overflow의 구분은 [유실 검증의 구분](../reliability.ko.md#유실-검증의-구분)에 있습니다.
 - 알림의 환경 변수는 [이벤트 유실 알림](../../../docs/guide/running.ko.md#이벤트-유실-알림)을 따릅니다.
 
 ## 확인 내용과 성공 조건
@@ -17,7 +17,7 @@
 - 로그에 두 번째로 주입한 오류 `later injected error must not replace the first`가 없습니다.
 - 유실 하위 테스트에서는 `ERROR|` 알림 기록이 생기면 파일 생성을 다시 시작하고, 그 기록 뒤에는 hook 프로세스 트리의 루트 부모가 `start`를 기록하지 않습니다.
 - 종료 hook 기록 `TARGET:FINISH`와 `GLOBAL:FINISH`가 각각 정확히 한 번 있습니다.
-- 기록된 hook 프로세스가 모두 5초 안에 사라집니다.
+- 기록된 hook 프로세스가 모두 5초 안에 사라집니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
 
 유실 하위 테스트에서는 `ERROR|<JSON>` 알림 기록이 정확히 한 개이고, JSON에 아래 6개 항목만 있어야 합니다.
 
@@ -46,7 +46,7 @@ tag를 붙인 watcher의 주입 지점은 다음과 같이 동작합니다.
 - 감시 폴더의 `dw-e2e-error.inject`를 10ms마다 읽고, 한 번만 반응합니다.
 - 내용이 `loss`이면 `fsnotify.ErrEventOverflow`를 감싼 `injected 'cause' {{.Path}} $HOME: `을 보내고, `nonloss`이면 `injected non-loss failure`를 보냅니다.
 - 첫 오류를 보낸 바로 뒤에 `later injected error must not replace the first`를 보냅니다.
-- tag 없이 빌드하면 주입 지점이 없습니다.
+- 배포 바이너리와 make 빌드 타깃은 이 tag 없이 빌드하므로 주입 지점이 없습니다.
 
 ## 하위 테스트
 
@@ -94,9 +94,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestInjectedLossNotificationCLI$' ./e2e/scenarios
@@ -104,11 +102,12 @@ go run ./e2e/linux -- -run '^TestInjectedLossNotificationCLI$'
 make e2e-windows ARGS="-- -run '^TestInjectedLossNotificationCLI$'"
 ```
 
+- 하네스가 주입 tag를 붙인 watcher를 직접 빌드하므로 따로 빌드하지 않아도 됩니다.
 - 하위 테스트 하나만 실행하려면 `-run '^TestInjectedLossNotificationCLI$/^non-loss-fatal-does-not-notify$'`처럼 지정합니다.
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/error_notification_test.go`: `TestInjectedLossNotificationCLI`, 하위 테스트 하나를 실행하는 `runInjectedNotification`, 실행 중 트리를 찾는 `runningTree`, 알림 기록을 읽는 `errorContexts`, 검사 함수 `assertErrorContext`·`assertLossExit`
-- `internal/app/service/runner_watch_target_tree_inject.go`: `dw_e2e_inject` tag로만 빌드되는 주입 지점입니다. tag가 없으면 `runner_watch_target_tree_inject_off.go`가 watcher 오류 채널을 그대로 돌려줍니다.
-- `e2e/harness`: `NewScenario`, `InjectWatcherBin`, `Launch`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `Await`, `Done`, `Exited`, `ExitErr`, `Log`, `Lines`, `CountRecord`, `ReadLinesLenient`, `ProcessRecords`, `Alive`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/scenarios/error_notification_test.go`에는 `TestInjectedLossNotificationCLI`, 하위 테스트 하나를 실행하는 `runInjectedNotification`, 실행 중 트리를 찾는 `runningTree`, 알림 기록을 읽는 `errorContexts`, 검사 함수 `assertErrorContext`와 `assertLossExit`가 있습니다.
+- `internal/app/service/runner_watch_target_tree_inject.go`에는 `dw_e2e_inject` tag로만 빌드되는 주입 지점이 있습니다. tag가 없으면 `runner_watch_target_tree_inject_off.go`가 watcher 오류 채널을 그대로 돌려줍니다.
+- `e2e/harness`: `NewScenario`, `InjectWatcherBin`, `Launch`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `Await`, `Done`, `Write`, `Exited`, `ExitErr`, `Log`, `Lines`, `CountRecord`, `ReadLinesLenient`, `ProcessRecords`, `Alive`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

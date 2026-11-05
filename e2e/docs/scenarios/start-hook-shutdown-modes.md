@@ -10,7 +10,7 @@
 - The start hook's generation becomes ready, and its processes are alive.
 - With `run.interrupt: oldest`, the change event replaces the start hook and a second generation becomes ready.
 - Right before shutdown, the processes of the last recorded generation, that is the running generation, are alive.
-- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`, and every recorded process is gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`, and every recorded process is gone within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 - With `run.interrupt: none`, there must be no parent (depth 2) `start` record other than the first generation. The start hook does not finish until it receives the shutdown signal, and shutdown discards pending changes, so the change hook must never run.
 
 ## Configuration
@@ -60,9 +60,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+Run these commands from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestStartHookShutdownModes$' ./e2e/scenarios
@@ -72,9 +70,9 @@ make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 
 - To run a single subtest, specify it as in `-run '^TestStartHookShutdownModes$/^interrupt=none$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 
-- `e2e/scenarios/process_test.go`: `TestStartHookShutdownModes`
-- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `ProcessRecords`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/process_test.go` contains `TestStartHookShutdownModes`.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `AwaitReadyGenerations`, `AssertRunning`, `ProcessRecords`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

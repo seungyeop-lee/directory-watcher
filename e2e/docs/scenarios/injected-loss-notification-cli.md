@@ -4,7 +4,7 @@
 
 - Sends an error into the watcher error channel of a watcher built with the `dw_e2e_inject` build tag, and checks that a loss error runs `global.lifeCycle.onError` once and exits with code 1, while a fatal error other than loss exits with code 1 without the notification.
 
-- The injected error is not evidence of an observed real OS overflow.
+- How an injected error differs from a real OS overflow is in [Kinds of loss verification](../reliability.md#kinds-of-loss-verification).
 - The notification's environment variables follow [Event-loss notification](../../../docs/guide/running.md#event-loss-notification).
 
 ## What it checks and success criteria
@@ -17,7 +17,7 @@ Every subtest checks the following.
 - The log does not contain the second injected error, `later injected error must not replace the first`.
 - In the loss subtests, the test resumes file creation once the `ERROR|` notification record appears, and no root parent of a hook process tree records `start` after that record.
 - The finish hook records `TARGET:FINISH` and `GLOBAL:FINISH` each appear exactly once.
-- Every recorded hook process disappears within 5 seconds.
+- Every recorded hook process disappears within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 
 In the loss subtests, there is exactly one `ERROR|<JSON>` notification record, and the JSON has only the 6 fields below.
 
@@ -46,7 +46,7 @@ The injection point in the tagged watcher works as follows.
 - It reads `dw-e2e-error.inject` in the watch folder every 10ms and reacts only once.
 - When the content is `loss`, it sends `injected 'cause' {{.Path}} $HOME: ` wrapping `fsnotify.ErrEventOverflow`; when the content is `nonloss`, it sends `injected non-loss failure`.
 - Right after the first error, it sends `later injected error must not replace the first`.
-- A build without the tag has no injection point.
+- Release binaries and the make build targets are built without this tag, so they have no injection point.
 
 ## Subtests
 
@@ -94,9 +94,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+Run these commands from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestInjectedLossNotificationCLI$' ./e2e/scenarios
@@ -104,11 +102,12 @@ go run ./e2e/linux -- -run '^TestInjectedLossNotificationCLI$'
 make e2e-windows ARGS="-- -run '^TestInjectedLossNotificationCLI$'"
 ```
 
+- The harness builds the watcher with the injection tag itself, so the commands need no separate build.
 - To run a single subtest, specify it as in `-run '^TestInjectedLossNotificationCLI$/^non-loss-fatal-does-not-notify$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
 
 ## Related code
 
-- `e2e/scenarios/error_notification_test.go`: `TestInjectedLossNotificationCLI`, `runInjectedNotification`, which runs one subtest, `runningTree`, which finds a running tree, `errorContexts`, which reads the notification records, and the check functions `assertErrorContext`·`assertLossExit`
-- `internal/app/service/runner_watch_target_tree_inject.go`: the injection point built only with the `dw_e2e_inject` tag. Without the tag, `runner_watch_target_tree_inject_off.go` returns the watcher error channel unchanged.
-- `e2e/harness`: `NewScenario`, `InjectWatcherBin`, `Launch`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `Await`, `Done`, `Exited`, `ExitErr`, `Log`, `Lines`, `CountRecord`, `ReadLinesLenient`, `ProcessRecords`, `Alive`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/error_notification_test.go` contains `TestInjectedLossNotificationCLI`, `runInjectedNotification`, which runs one subtest, `runningTree`, which finds a running tree, `errorContexts`, which reads the notification records, and the check functions `assertErrorContext` and `assertLossExit`.
+- `internal/app/service/runner_watch_target_tree_inject.go` holds the injection point, which is built only with the `dw_e2e_inject` tag. Without the tag, `runner_watch_target_tree_inject_off.go` returns the watcher error channel unchanged.
+- `e2e/harness`: `NewScenario`, `InjectWatcherBin`, `Launch`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `Await`, `Done`, `Write`, `Exited`, `ExitErr`, `Log`, `Lines`, `CountRecord`, `ReadLinesLenient`, `ProcessRecords`, `Alive`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

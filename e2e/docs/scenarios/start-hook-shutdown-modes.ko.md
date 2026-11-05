@@ -10,7 +10,7 @@
 - 시작 hook의 세대가 준비되고, 그 프로세스가 살아 있습니다.
 - `run.interrupt: oldest`이면 변경 이벤트가 시작 hook을 교체해 두 번째 세대가 준비됩니다.
 - 종료 직전에 마지막으로 기록된 세대, 즉 실행 중인 세대의 프로세스가 살아 있습니다.
-- watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝납니다. `ready`를 기록한 모든 프로세스는 `signal`을 기록한 뒤 `complete`를 기록하고, 기록된 모든 프로세스는 5초 안에 사라집니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝납니다. `ready`를 기록한 모든 프로세스는 `signal`을 기록한 뒤 `complete`를 기록하고, 기록된 모든 프로세스는 5초 안에 사라집니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
 - `run.interrupt: none`이면 첫 세대 외의 부모(깊이 2) `start` 기록이 없어야 합니다. 시작 hook은 종료 신호를 받기 전까지 끝나지 않고 종료는 대기 중인 변경을 버리므로, 변경 hook은 한 번도 실행되지 않아야 합니다.
 
 ## 설정
@@ -60,9 +60,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestStartHookShutdownModes$' ./e2e/scenarios
@@ -72,9 +70,9 @@ make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 
 - 하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^interrupt=none$'`처럼 지정합니다.
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
-- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
+- 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/process_test.go`: `TestStartHookShutdownModes`
-- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `ProcessRecords`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/scenarios/process_test.go`에는 `TestStartHookShutdownModes`가 있습니다.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `AwaitReadyGenerations`, `AssertRunning`, `ProcessRecords`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

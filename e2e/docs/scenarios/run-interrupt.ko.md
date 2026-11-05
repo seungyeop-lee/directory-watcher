@@ -11,7 +11,7 @@
 - 새 세대가 준비되기를 최대 10초 기다린 뒤, 새 실행이 어느 세대를 취소했는지 확인합니다.
   - 취소된 세대는 새 세대가 첫 `start`를 기록하기 전에 부모·자식·손자 모두 `complete`를 기록하고, 그 프로세스는 5초 안에 사라집니다.
   - 취소되면 안 되는 세대에는 `signal` 기록이 없고, 그 프로세스가 살아 있습니다. 새 실행은 자기가 취소한 실행이 끝난 뒤에야 시작하므로, 새 세대가 준비된 뒤의 이 확인은 새 실행이 그 세대를 취소하지 않았다는 증거가 됩니다.
-- watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝납니다. `ready`를 기록한 취소된 프로세스는 모두 `signal`을 기록한 뒤 `complete`를 기록하고, 기록된 모든 프로세스는 5초 안에 사라집니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝납니다. `ready`를 기록한 취소된 프로세스는 모두 `signal`을 기록한 뒤 `complete`를 기록하고, 기록된 모든 프로세스는 5초 안에 사라집니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
   - `onStartWatch/interrupt=samePath`에서 시작 hook은 취소되지 않고 스스로 끝나므로, 정상 완료 판정에서 뺍니다.
 
 ## 설정
@@ -112,9 +112,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestRunInterrupt$' ./e2e/scenarios
@@ -124,10 +122,10 @@ make e2e-windows ARGS="-- -run '^TestRunInterrupt$'"
 
 - 하위 테스트 하나만 실행하려면 `-run '^TestRunInterrupt$/^changes$/^interrupt=samePath$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
-- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
+- 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/process_test.go`: `TestRunInterrupt`
-- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Await`, `Log`, `GenerationsLabeled`, `AwaitReadyGenerations`, `ProcessRecords`, `AssertRunning`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
-- `e2e/hookrec`: `--label` 옵션
+- `e2e/scenarios/process_test.go`에는 `TestRunInterrupt`, `changes/*` 하위 테스트의 watcher를 띄우는 `startLabeledChangeTrees`, 레이블별 세대를 확인하는 `labeledGenerations`, 취소 여부와 순서를 검사하는 `assertNotCanceled`·`assertEndedBeforeStart`가 있습니다.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `Log`, `Lines`, `GenerationsLabeled`, `AwaitReadyGenerations`, `ProcessRecords`, `AssertRunning`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/hookrec`에는 `--label` 옵션이 있습니다.

@@ -65,9 +65,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+Run these commands from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestGoldenPath$' ./e2e/scenarios
@@ -76,10 +74,9 @@ make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 ```
 
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 
 ## Related code
 
-- `e2e/scenarios/golden_path_test.go` defines `TestGoldenPath`.
+- `e2e/scenarios/golden_path_test.go` contains `TestGoldenPath`.
 - `e2e/scenarios/helpers_test.go`: `goldenFileName` is the test file name, `goldenConfig` builds the configuration, and `changeValues` and `expectedSequence` build the expected records.
-- `e2e/harness`: `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `AwaitLine`, `Write`, `Stop`, `Lines`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

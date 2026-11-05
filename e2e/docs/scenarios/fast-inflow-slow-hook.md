@@ -9,12 +9,16 @@
 
 ## What it checks and success criteria
 
-- **Completion of the inflow batch**: Only the `CREATE` and `WRITE` events for valid paths (`initial.txt`, `shared.txt`, `00.txt`–`23.txt`) that were actually received in the DEBUG log count. The path of the last `DONE:` record must equal the last received path, every hook that recorded `BEGIN` must have completed (`DONE:`) or been cancelled (`CANCEL`), and the log and records must stay unchanged for 120ms. The basis and limits of this judgment are in [Receive boundary checks in OS E2E](../reliability.md#receive-boundary-checks-in-os-e2e).
-  - The wait fails when neither the received events nor the records change for 10 seconds.
+- **Completion of the inflow batch**: Only the `CREATE` and `WRITE` events for valid paths (`initial.txt`, `shared.txt`, `00.txt`–`23.txt`) that were actually received in the DEBUG log count. How this is judged and its limits are in [Receive boundary checks in OS E2E](../reliability.md#receive-boundary-checks-in-os-e2e).
+  - The path of the last `DONE:` record must equal the last received path.
+  - Every hook that recorded `BEGIN` must have completed (`DONE:`) or been cancelled (`CANCEL`).
+  - The log and records must stay unchanged for 120ms.
 - **Sequential processing without interruption**: With `deliver=each/interrupt=none`, the number of `DONE:` records must equal the number of valid events received, and each of `00.txt`–`23.txt` must have at least one `DONE:` record. The baseline is the observed number of receipts, not the number of file operations.
 - **Isolated change**: The `DONE:` record for `last.txt`, written after the batch settles, must appear within 10 seconds.
 - **Excluded files**: Records up to shutdown must contain no line with `excluded.swp` or `readiness.probe`.
-- **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be exactly one `FINISH` record and no `BEGIN|` record after it. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- **Shutdown**: The watcher must exit with exit code 0 within 10 seconds of receiving the shutdown signal.
+  - There must be exactly one `FINISH` record and no `BEGIN|` record after it, so changes pending at shutdown are not run.
+  - Every hook process that recorded `BEGIN` must be gone within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 - **No notification**: After the watcher exits, there must be no `ERROR|` notification record. If there is any, the test prints the records and fails.
 
 ## Configuration
@@ -73,9 +77,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+The commands run from the repository root locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestFastInflowSlowHook$' ./e2e/scenarios
@@ -83,12 +85,12 @@ go run ./e2e/linux -- -run '^TestFastInflowSlowHook$'
 make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ```
 
-- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestFastInflowSlowHook$/^deliver=each$/^interrupt=none$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestFastInflowSlowHook$/^deliver=each$/^interrupt=none$'`.
 - The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 
-- `e2e/scenarios/reliability_test.go`: `TestFastInflowSlowHook`
-- `e2e/scenarios/error_notification_test.go`: `errorContexts`, which reads the notification records
-- `e2e/harness`: `Start`, `Hook`, `Await`, `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `CountRecord`, `Stop`, `AwaitDelayedHooksGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/reliability_test.go` contains `TestFastInflowSlowHook`.
+- `e2e/scenarios/error_notification_test.go` contains `errorContexts`, which reads the notification records.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `DelayedHookBegun`, `Lines`, `AwaitChangesComplete`, `AwaitLine`, `CountRecord`, `Log`, `Stop`, `ReadLinesLenient`, `AwaitDelayedHooksGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

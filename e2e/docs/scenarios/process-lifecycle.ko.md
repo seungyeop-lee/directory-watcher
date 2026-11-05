@@ -9,10 +9,10 @@
 
 - 시작 hook으로 만든 첫 세대의 부모·자식·손자가 모두 `ready`를 기록하고, `start`를 기록한 세 PID가 살아 있습니다.
 - 파일을 생성하면 변경 hook의 두 번째 세대가 준비되고, 그 프로세스가 살아 있습니다.
-- 첫 세대의 깊이 0·1·2 프로세스가 모두 `complete`를 기록한 뒤에 다른 세대의 첫 `start`가 기록됩니다. 첫 세대 프로세스는 5초 안에 모두 사라집니다.
+- 첫 세대의 깊이 0·1·2 프로세스가 모두 `complete`를 기록한 뒤에 다른 세대의 첫 `start`가 기록됩니다. 첫 세대 프로세스는 5초 안에 모두 사라집니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
 - watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝납니다. `ready`를 기록한 모든 프로세스는 `signal`을 기록한 뒤 `complete`를 기록합니다.
 - `records.log`의 마지막 두 줄은 `TARGET:onFinishWatch`, `GLOBAL:onFinishWatch` 순서입니다. 프로세스 기록도 같은 파일에 쌓이므로, 이 조건은 종료 hook이 현재 세대의 `complete`보다 뒤에 실행되었음을 뜻합니다.
-- 모든 세대의 프로세스가 5초 안에 사라집니다. 이 부재 확인은 테스트 본문에서 하므로 시나리오 정리 단계의 강제 종료보다 앞섭니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- 모든 세대의 프로세스가 5초 안에 사라집니다. 이 부재 확인은 테스트 본문에서 하므로 시나리오 정리 단계의 강제 종료보다 앞섭니다.
 
 ## 설정
 
@@ -59,9 +59,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestProcessLifecycle$' ./e2e/scenarios
@@ -70,9 +68,9 @@ make e2e-windows ARGS="-- -run '^TestProcessLifecycle$'"
 ```
 
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
-- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
+- 경합 시나리오를 함께 반복하는 명령은 [경합과 과부하 검증](../reliability.ko.md#경합과-과부하-검증)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/process_test.go`: `TestProcessLifecycle`, 세대 교체 순서를 검사하는 `assertCompletedBeforeRestart`
-- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `Stop`, `AssertGracefulCompletion`, `ProcessRecords`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/scenarios/process_test.go`에는 `TestProcessLifecycle`, 변경 파일을 내용 없이 만드는 `createWithoutWrite`, 세대 교체 순서를 검사하는 `assertEndedBeforeStart`가 있습니다.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `Await`, `AwaitProcessesGone`, `Stop`, `AssertGracefulCompletion`, `ProcessRecords`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

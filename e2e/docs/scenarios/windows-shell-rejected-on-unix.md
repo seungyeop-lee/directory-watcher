@@ -8,7 +8,7 @@
 
 - The process exits within 10 seconds with exit code 1.
 - The combined stdout and stderr, after trimming surrounding whitespace, is exactly two lines: `config: <path>` and then `Error: shell "cmd" runs only on Windows`.
-  - `<path>` is the path of the `config.yml` that `Launch` passes with `-c`.
+  - `<path>` is the path of the `config.yml` in the run folder that `Launch` passes with `-c`.
 - The record file remains empty, so neither global nor target lifecycle commands ran.
 
 ## Configuration
@@ -24,23 +24,24 @@ sequenceDiagram
     participant testCode as test
     participant watcherProc as watcher
     participant recordFile as records.log
-    testCode->>watcherProc: Launch shell: cmd
-    watcherProc->>watcherProc: validate shell before hooks
-    watcherProc-->>testCode: exact error and exit 1
-    testCode->>recordFile: assert no records
+    testCode->>watcherProc: Launch (shell: cmd)
+    watcherProc->>watcherProc: check the shell before running hooks
+    watcherProc-->>testCode: error output and exit code 1 (wait up to 10s)
+    testCode->>recordFile: check that there are no records
 ```
 
 ## Running
 
-- Run from the repository root.
-- This Unix-only shell rejection test is not selected on Windows.
+Run these commands from the repository root, locally and in Linux Docker, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestWindowsShellRejectedOnUnix$' ./e2e/scenarios
 go run ./e2e/linux -- -run '^TestWindowsShellRejectedOnUnix$'
 ```
 
+- This test checks only that Unix rejects `cmd`, so it uses a Unix-only build tag and does not run on Windows.
+
 ## Related code
 
-- `e2e/scenarios/shell_unix_test.go` defines `TestWindowsShellRejectedOnUnix`.
-- The test uses `NewScenario`, `Hook`, `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, and `Lines` from `e2e/harness`.
+- `e2e/scenarios/shell_unix_test.go` contains `TestWindowsShellRejectedOnUnix`.
+- `e2e/harness`: `NewScenario`, `Hook`, `Launch`, `WatcherBin`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

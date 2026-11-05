@@ -31,22 +31,24 @@ sequenceDiagram
     participant watcherProc as watcher
     participant hookProc as hookrec
     participant recordFile as records.log
-    testCode->>watcherProc: Start and observe readiness.probe
-    watcherProc->>hookProc: global and target start hooks
-    hookProc->>recordFile: directory then label
-    testCode->>watcherProc: create created.txt
-    watcherProc->>hookProc: target change hook
-    hookProc->>recordFile: directory then TARGET:change
-    testCode->>watcherProc: stop
-    watcherProc->>hookProc: target then global finish hooks
-    hookProc->>recordFile: directories and labels
-    watcherProc-->>testCode: exit 0
-    testCode->>recordFile: compare all ten records
+    testCode->>watcherProc: Start (readiness.probe 이벤트로 감시 준비 확인)
+    watcherProc->>hookProc: 전역·대상 시작 hook
+    hookProc->>recordFile: 작업 디렉터리, 레이블 순서로 기록
+    testCode->>recordFile: TARGET:start 대기 (최대 10초)
+    testCode->>watcherProc: created.txt 생성
+    watcherProc->>hookProc: 대상 변경 hook
+    hookProc->>recordFile: 작업 디렉터리, TARGET:change 기록
+    testCode->>recordFile: TARGET:change 대기 (최대 10초)
+    testCode->>watcherProc: 종료 신호
+    watcherProc->>hookProc: 대상, 전역 순서로 종료 hook
+    hookProc->>recordFile: 작업 디렉터리와 레이블 기록
+    watcherProc-->>testCode: 종료 코드 0 (최대 10초 대기)
+    testCode->>recordFile: 기록 열 줄 전체 비교
 ```
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestHookWorkingDirectory$' ./e2e/scenarios
@@ -54,10 +56,10 @@ go run ./e2e/linux -- -run '^TestHookWorkingDirectory$'
 make e2e-windows ARGS="-- -run '^TestHookWorkingDirectory$'"
 ```
 
-- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 VM을 켠 뒤 실행합니다.
+- UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/shell_test.go`에 `TestHookWorkingDirectory`를 정의합니다.
-- 테스트는 `e2e/harness`의 `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`를 사용합니다.
-- `e2e/hookrec/main.go`는 `--workdir`을 구현하고, `main_test.go`는 `TestWorkingDirectoryBeforeLine`으로 이를 검증합니다.
+- `e2e/scenarios/shell_test.go`에는 `TestHookWorkingDirectory`가 있습니다.
+- `e2e/harness`: `NewScenario`, `Hook`, `Start`, `Write`, `AwaitLine`, `Stop`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/hookrec/main.go`는 `--workdir` 옵션을 구현하고, `e2e/hookrec/main_test.go`의 `TestWorkingDirectoryBeforeLine`이 이 옵션을 확인합니다.

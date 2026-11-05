@@ -9,11 +9,11 @@
 
 - watcher가 종료 신호를 받고 25초 안에 종료 코드 0으로 끝납니다. 25초는 watcher가 hook의 프로세스를 강제로 끝내는 20초에 여유 5초를 더한 값입니다.
 - hook 프로그램이 끝까지 실행될 때만 남기는 `DONE` 기록이 없습니다.
-- `BEGIN`을 기록한 hook 프로세스는 모두 5초 안에 사라집니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- `BEGIN`을 기록한 hook 프로세스는 모두 5초 안에 사라집니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
 
 - hook 프로그램이 시작되는지는 취소 시점에 따라 달라지므로 `BEGIN`과 `CANCEL`은 요구하지 않습니다.
-- UTM VM(2026-11-04)에서는 PowerShell이 시작하는 중에 취소하면 프로그램을 시작하기 전에 PowerShell이 끝났고, Windows 오류 보고(`wermgr.exe`)가 실행되는 동안 5초쯤 걸리기도 했습니다.
-- 그보다 늦게 취소하면 실행 중인 프로그램이 신호를 받고 `CANCEL`을 기록했습니다.
+- PowerShell이 시작하는 중에 취소하면 PowerShell은 프로그램을 시작하기 전에 끝나며, Windows 오류 보고(`wermgr.exe`)가 실행되면 끝나기까지 5초쯤 걸릴 수 있습니다.
+- 그보다 늦게 취소하면 실행 중인 프로그램이 신호를 받고 `CANCEL`을 기록합니다.
 
 ## 설정
 
@@ -53,18 +53,16 @@ sequenceDiagram
 
 ## 실행
 
-- 이 테스트는 Windows에서만 실행됩니다.
-
-저장소 루트에서 UTM Windows VM으로 실행합니다.
+이 테스트는 Windows 전용 build tag가 붙어 있어 Windows에서만 실행되므로, 저장소 루트에서 UTM Windows VM으로 실행합니다.
 
 ```sh
 make e2e-windows ARGS="-- -run '^TestCanceledPowershellHookStops$'"
 ```
 
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
-- Windows 호스트에서 직접 실행하려면 [Windows 실행 명령](../windows.ko.md#실행-명령)을 참고합니다.
+- 하위 테스트 하나만 실행하려면 `-run '^TestCanceledPowershellHookStops$/^after=500ms$'`처럼 지정합니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/windows_cancel_test.go`: `TestCanceledPowershellHookStops`
-- `e2e/harness`: `Launch`, `Hook`, `Await`, `Log`, `StopWithin`, `CountRecord`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/scenarios/windows_cancel_test.go`에는 `TestCanceledPowershellHookStops`, hook 명령을 작은따옴표 없이 만드는 `unquotedHook`이 있습니다.
+- `e2e/harness`: `NewScenario`, `Launch`, `WatcherBin`, `Hook`, `Await`, `Log`, `StopWithin`, `Lines`, `CountRecord`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

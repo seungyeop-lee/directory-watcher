@@ -65,9 +65,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestGoldenPath$' ./e2e/scenarios
@@ -76,10 +74,9 @@ make e2e-windows ARGS="-- -run '^TestGoldenPath$'"
 ```
 
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
-- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/golden_path_test.go`에 `TestGoldenPath`를 정의합니다.
+- `e2e/scenarios/golden_path_test.go`에는 `TestGoldenPath`가 있습니다.
 - `e2e/scenarios/helpers_test.go`: `goldenFileName`은 테스트 파일 이름이고, `goldenConfig`는 설정을, `changeValues`와 `expectedSequence`는 기대 기록을 만듭니다.
-- `e2e/harness`: `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `AwaitLine`, `Write`, `Stop`, `Lines`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

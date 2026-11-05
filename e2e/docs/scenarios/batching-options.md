@@ -3,17 +3,18 @@
 🇺🇸 English | 🇰🇷 [한국어](batching-options.ko.md)
 
 - Checks `hookBatch.deliver: lastPerPath` and `dirBatch.waitMillisecond: 0` through the actual watcher binary, OS events, and shell hooks.
-- Maximum waits during continued inflow are not checked here: `TestMaxWaitSendsRunWhileEventsKeepArriving` in `internal/app/service/runner_watch_target_test.go` checks them for `hookBatch` and `dirBatch` with a controlled event source.
+- Maximum waits during continued inflow are checked by `TestMaxWaitSendsRunWhileEventsKeepArriving` in `internal/app/service/runner_watch_target_test.go`.
 
 ## What it checks and success criteria
 
 - `lastPerPath` produces one final change per path in the order of each path's last received change: a new file remains `C` after updating it, an existing file becomes `U`, a created-then-deleted file disappears, and deleting a folder drops its descendant's `D`.
   - The expected order comes from actual DEBUG receipts, not file-operation order; folder collection is disabled so it cannot hide descendant deletion before hook batching.
+  - After each action, the test confirms within 5 seconds that the DEBUG log received that path before moving to the next action.
+  - The test waits up to 15 seconds until the records equal the three final changes and neither the log nor the records change for 120ms.
 - With `dirBatch.waitMillisecond: 0`, the new folder and both contained files reach the hook, with one record per received `CREATE`, including duplicate receipts.
-- Completion uses the harness's actual-receipt boundary and 120ms observed quiet period, not a fixed sleep or an assumed correspondence between file operations and OS notifications.
-  - The completion wait fails when neither the received events nor the records change for 10 seconds, so a received `CREATE` whose hook leaves no record fails the subtest.
+  - Completion follows [Receive boundary checks in OS E2E](../reliability.md#receive-boundary-checks-in-os-e2e), so a received `CREATE` whose hook leaves no record fails the subtest after 10 seconds.
 - All subtests stop the watcher gracefully with exit code 0 and require `PASS` without `SKIP` on macOS, Linux Docker, and UTM Windows.
-- On 2026-11-04, Windows ARM64 repeated `lastPerPath` fails: duplicate folder `REMOVE` receipts leave a folder `D` with `IsDir: false` and a descendant `D`; `dirBatchWaitZero` passes. The test retains the documented contract rather than accepting this result.
+- Repeated runs on Windows ARM64 sometimes fail `lastPerPath`: after duplicate folder `REMOVE` receipts, the folder `D` has `IsDir` `false` and a descendant `D` remains. The test retains the documented contract rather than accepting this result.
 - The contracts are [Hook batching](../../../docs/guide/running.md#waiting-and-merging-with-hookbatch) and [Folder event collection](../../../docs/guide/events.md#collecting-folder-events).
 
 ## Configuration
@@ -25,6 +26,11 @@
 
 - All subtests exclude `**/*.probe`, select file events `CUD`, and use the default folder events and sequential execution.
 - Hooks record `CHANGE:<absolute path>`, except `lastPerPath`, which records `CHANGE:<event>,<isDir>,<absolute path>`.
+
+## Subtests
+
+- `lastPerPath` checks final per-path changes, last-receipt order, transient removal, and deleted descendant filtering in one wait.
+- `dirBatchWaitZero` checks forwarding of a folder and its contained files without folder collection.
 
 ## Sequence
 
@@ -52,25 +58,22 @@ sequenceDiagram
     watcher-->>testCode: exit 0
 ```
 
-## Subtests
-
-- `lastPerPath` checks final per-path changes, last-receipt order, transient removal, and deleted descendant filtering in one wait.
-- `dirBatchWaitZero` checks forwarding of a folder and its contained files without folder collection.
-
 ## Running
 
-- Run from the repository root after preparing Linux Docker and the UTM VM as described in [UTM Windows E2E](../windows-utm.md).
+The commands run from the repository root locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
-go test -count=3 -v -run '^TestBatchingOptions$' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run '^TestBatchingOptions$'
-make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestBatchingOptions$'"
+go test -count=1 -v -run '^TestBatchingOptions$' ./e2e/scenarios
+go run ./e2e/linux -- -run '^TestBatchingOptions$'
+make e2e-windows ARGS="-- -run '^TestBatchingOptions$'"
 ```
 
-- This timing-sensitive scenario is included in the [race and overload repeat list](../reliability.md#race-and-overload-verification), not in loss notification or Windows graceful-lifecycle lists.
+- Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
+- To run a single subtest, specify it as in `-run '^TestBatchingOptions$/^lastPerPath$'`.
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 
-- `e2e/scenarios/batching_test.go` contains `TestBatchingOptions`, its configuration, and DEBUG receipt parsing.
-- `e2e/scenarios/helpers_test.go`: `mkdirAll` and `createEmpty` create folders and empty files.
-- `e2e/harness` supplies `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `AwaitChangesComplete`, `Lines`, `Log`, `CountRecord`, and `Stop`; their responsibilities are in [Harness structure](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/batching_test.go` contains `TestBatchingOptions`, `batchConfig`, which builds the configuration, and `batchReceipts`, which reads the DEBUG receive order.
+- `e2e/scenarios/helpers_test.go` contains `mkdirAll` and `createEmpty`, which create folders and empty files.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `AwaitChangesComplete`, `Lines`, `Log`, `CountRecord`, `Stop`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

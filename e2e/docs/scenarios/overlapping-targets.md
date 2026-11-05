@@ -13,7 +13,7 @@
 - In the first two subtests, the records of `a.txt` must split into one `BEFORE`, `onChange`, `AFTER` sequence per target.
   - Global records do not show which target ran them, so at no point in the records may `onChange` records outnumber `BEFORE` records, or `AFTER` records outnumber `onChange` records.
   - The order between the two targets is not checked, because it is not fixed.
-- In the slow subtest, shutdown cancels the parent's delayed hook, and its process must disappear within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds at the first observation counts as gone ([liveness judgment](../harness.md#code-locations-by-responsibility)).
+- In the slow subtest, shutdown cancels the parent's delayed hook, and its process must disappear within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 - That each target uses its own OS watch resources for the overlapping folders, and that `PARENT` with `api/**` does not add `api` to its watch list, are not checked, because hook records cannot show them.
 
 ## Configuration
@@ -73,9 +73,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+Run these commands from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestOverlappingTargets$' ./e2e/scenarios
@@ -84,10 +82,9 @@ make e2e-windows ARGS="-- -run '^TestOverlappingTargets$'"
 ```
 
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 
 ## Related code
 
-- `e2e/scenarios/overlapping_targets_test.go`: `TestOverlappingTargets` and its configuration, sentinel, and record order checks.
-- `e2e/scenarios/helpers_test.go`: `mkdirAll` and `createEmpty`.
-- `e2e/harness`: `Start`, `Hook`, `HookrecBin`, `Await`, `AwaitLine`, `Lines`, `CountRecord`, `DelayedHookBegun`, `Log`, `Stop`, and `AwaitDelayedHooksGone`. Their locations and responsibilities are in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/overlapping_targets_test.go` contains `TestOverlappingTargets`; `startOverlapping`, which builds the configuration and waits for each target's `START` record; `awaitSentinel`, which creates and waits for a sentinel; `assertRunPerTarget`, which checks the record order per target; and `stopWithoutErrors`, which checks a shutdown without `[ERROR]` lines.
+- `e2e/scenarios/helpers_test.go`: `mkdirAll` and `createEmpty` create folders and empty files.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `HookrecBin`, `Await`, `AwaitLine`, `Lines`, `CountRecord`, `DelayedHookBegun`, `Log`, `Stop`, `AwaitDelayedHooksGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

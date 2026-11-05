@@ -10,7 +10,7 @@
 - The parent, child, and grandchild of two generations record `ready`, and the PIDs that recorded `start` are alive. A `hookrec` tree does not end before it gets a signal, so two ready generations mean that two runs run at the same time.
 - The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`.
 - The last line of `records.log` is `TARGET:onFinishWatch`. Process records go to the same file, so this condition means the finish hook ran after the `complete` of both generations.
-- The processes of both generations are gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- The processes of both generations are gone within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 
 ## Configuration
 
@@ -50,10 +50,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+The commands run from the repository root locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestConcurrentRunsShutdown$' ./e2e/scenarios
@@ -62,9 +59,9 @@ make e2e-windows ARGS="-- -run '^TestConcurrentRunsShutdown$'"
 ```
 
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 
-- `e2e/scenarios/process_test.go`: `TestConcurrentRunsShutdown`
-- `e2e/harness`: `Start`, `Hook`, `Write`, `AwaitReadyGenerations`, `AssertRunning`, `Stop`, `ProcessRecords`, `AssertGracefulCompletion`, `Lines`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/process_test.go` contains `TestConcurrentRunsShutdown`.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `AwaitReadyGenerations`, `AssertRunning`, `Stop`, `ProcessRecords`, `AssertGracefulCompletion`, `Lines`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

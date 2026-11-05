@@ -22,19 +22,28 @@ if ($LASTEXITCODE -ne 0) { throw "Windows lifecycle failed" }
 - A graceful shutdown request sends `CTRL_BREAK_EVENT` only to that group on the same console.
 - [Go delivers CTRL+BREAK as `os.Interrupt`](https://github.com/golang/go/blob/go1.27.0/src/os/signal/doc.go#L213-L220), so the existing SIGINT handling of the CLI is used.
 - Neither a group-targeted `CTRL_C_EVENT` nor `TASKKILL /F` is used as evidence of graceful shutdown.
-- Helper processes inherit the console and group, handle the signal, and wait for their descendants to exit.
-- The same graceful shutdown guarantee does not apply to arbitrary external programs that create a new console or ignore the signal.
+- Helper processes inherit the console and the process group.
+- The same graceful shutdown is not guaranteed for external programs that create a new console or ignore the signal ([Process trees](harness.md#process-trees)).
 - The watcher forcibly ends hook processes that are still running 20 seconds after the first CTRL+BREAK through that hook's Job Object, and this termination is not a graceful shutdown ([Overload and shutdown](../../docs/guide/running.md#overload-and-shutdown)).
 
 ## Hook cancellation checks
 
-- The dates below are when each check was confirmed on the UTM VM (Windows 11 ARM64).
-
 The Windows E2E runs the watcher without Git Bash and checks that the watcher stops canceled hooks.
 
-- For `run.interrupt: oldest` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-04).
-- On shutdown, the parent, child, and grandchild processes of two hooks that run at the same time with `run.concurrency: 2` all end on the signal before the finish hook runs: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md) (2026-11-04).
-- A `powershell` hook canceled 0–1000 ms after it starts does not run its program to completion: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) (2026-11-04).
+- For `run.interrupt: oldest` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md).
+- On shutdown, the parent, child, and grandchild processes of two hooks that run at the same time with `run.concurrency: 2` all end on the signal before the finish hook runs: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md).
+- A `powershell` hook canceled 0–1000 ms after it starts does not run its program to completion: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md).
+
+The unit tests in `internal/process/process_windows_test.go`, not the E2E, check the behaviors below.
+
+| Behavior | Test |
+|---|---|
+| A program that `cmd` starts after the first CTRL+BREAK also receives CTRL+BREAK and ends (separators `&`, `&&`, `\|\|`) | `TestRunCommandSendsBreakAgainToProgramStartedAfterBreak` |
+| A process created before the first CTRL+BREAK but attached to the console after it also receives CTRL+BREAK and ends | `TestRunCommandSendsBreakAgainToProcessAttachedToConsoleAfterBreak` |
+| A descendant started just before the first CTRL+BREAK is sent receives CTRL+BREAK after it has run for 500ms, and ends | `TestRunCommandDelaysBreakForDescendantStartedJustBeforeBreak` |
+| Processes still running 20 seconds after the first CTRL+BREAK are forcibly ended (the test shortens the 20 seconds to 1 second) | `TestRunCommandEndsProcessTreeAfterGrace` |
+
+- The contract for these behaviors is in [Overload and shutdown](../../docs/guide/running.md#overload-and-shutdown).
 
 ## CI steps
 
@@ -44,36 +53,31 @@ The Windows E2E runs the watcher without Git Bash and checks that the watcher st
 - The earlier failure remains, so the job still fails in the end, and the diagnostics upload step always runs.
 - Apart from the Go build cache, **the test result cache is not reused**.
 - The `Verify Windows error notification process trees` step runs `TestEventLossNotificationCLI` and saves the test output to `notification.log`.
-- `notification.log` holds the results of the checks for a single notification, the first error, and the elapsed time.
-- This step runs with `DW_E2E_KEEP=1` to keep the run folders, so each run's `watcher.log` holds the actual error diagnostics.
-- What each mode checks and the liveness record files left in the run folder are in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) document.
-- The Windows notification runner assigns the parent to a separate Job Object while it is suspended, before it creates any descendants.
-- Even after the parent's exit 7 or exit 0, it terminates the descendants in that Job and waits, within the existing cleanup limit, until there are no active processes.
-- The conditions that check this cleanup are in [Extra checks for tree modes](scenarios/event-loss-notification-cli.md#extra-checks-for-tree-modes).
-- Normal hooks also run each command in its own Job Object, but the descendants that a hook leaves when it finishes without being canceled are not ended.
+  - `notification.log` holds the results of the checks for a single notification, the first error, and the elapsed time.
+  - This step runs with `DW_E2E_KEEP=1` to keep the run folders, so each run's `watcher.log` holds the actual error diagnostics.
+  - What each mode checks and the liveness record files left in the run folder are in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md) document, and how the notification's descendants are cleaned up on Windows is in [Descendant cleanup by platform](scenarios/event-loss-notification-cli.md#descendant-cleanup-by-platform).
 
 ## Checking CI results
 
 - In GitHub Actions, open `ci` → `test (windows-latest)` for **the commit SHA you are verifying**.
-- Check that the four combinations of `TestFastInflowSlowHook`, `TestQueueWarningCLI`, `TestConcurrentRunsShutdown`, the four subtests of `TestRunInterrupt`, the three separators of `TestRunCommandSendsBreakAgainToProgramStartedAfterBreak`, and the eleven cancel points of `TestCanceledPowershellHookStops` in the `go test -count=1 -race ./...` step, the six modes in the notification verification step, and the three tests and two option combinations in the repeat step show `PASS` and no `SKIP`, and that the intentional failure verification step succeeded.
-- In the same `go test -count=1 -race ./...` step, also check that both subtests of [`TestBatchingOptions`](scenarios/batching-options.md) show `PASS` without `SKIP`.
+- Check that the four combinations of `TestFastInflowSlowHook`, `TestQueueWarningCLI`, `TestConcurrentRunsShutdown`, the four subtests of `TestRunInterrupt`, the two subtests of [`TestBatchingOptions`](scenarios/batching-options.md), the three separators of `TestRunCommandSendsBreakAgainToProgramStartedAfterBreak`, and the eleven cancel points of `TestCanceledPowershellHookStops` in the `go test -count=1 -race ./...` step show `PASS` and no `SKIP`.
+- Check that the six modes in the notification verification step and the three tests and two option combinations in the repeat step show `PASS` and no `SKIP`.
+- Check that the intentional failure verification step `Verify Windows failure and timeout diagnostics` succeeded.
 - From the `e2e-diagnostics-windows-latest` artifact, download the records from before and after notification cleanup and `notification.log`, `failure.log`, and `timeout.log`.
 - A past success on a different SHA, a cross-compilation, or a Linux Docker result is not evidence of a Windows run for that commit.
 - If there is no Windows run result for that commit, leave the Windows item as `Not verified`.
-- Run the items that the UTM VM can check with [Running E2E on a UTM Windows VM](windows-utm.md), and check the `-race` and Windows x64 items only with this CI result.
+- Check `-race` and the Windows x64 behavior only with this CI result ([Differences between Windows ARM64 and x64](windows-utm.md#differences-between-windows-arm64-and-x64)).
 
 ## Failure analysis
 
 - When Windows fails, first compare `records.log.processes`, written **before cleanup**, with the last `signal` and `complete` in `records.log`.
 - `records.log.processes` has one line per process tree process (`run=`, with generation and depth) and per delayed hook (`delayed=`, with its record), each holding the PID, liveness, first observation time, creation time, process access error, wait result, the program of the handle kept from the first observation (`held-image`), and the program that holds the PID now (`current-image`).
+  - `open-error=PID reused by another program: <program path>` means that another program held the PID at the first observation, so the process was judged gone ([Process liveness and forced cleanup](harness.md#process-liveness-and-forced-cleanup)).
 - `cleanup.log` shows the state **after cleanup** and does not replace the graceful shutdown judgment.
 - For `GenerateConsoleCtrlEvent` or `AllocConsole` errors, check the console attachment and the process groups on the same console.
 - If a hook or the watcher exited with 0xc0000142, read `dll-init-failed.log` in that run folder as in [A hook exits with 0xc0000142](windows-utm.md#a-hook-exits-with-0xc0000142).
-- Access-denied and wait API errors are treated as alive and fail the test.
-- The handle opened at the first observation is kept until after cleanup to avoid confusion from PID reuse, and a PID that a program other than `hookrec` already held at that observation is judged gone with `open-error=PID reused by another program: <program path>`.
-- Failure cleanup terminates only the recorded helper binary handles of that run, and if the watcher is still alive, applies `TASKKILL /T /F` only to that watcher's tree.
 
-To deliberately exercise the cleanup path, run the commands below.
+To deliberately exercise the cleanup path, run the PowerShell commands below.
 
 ```powershell
 $env:DW_E2E_FAULT = 'failure' # run timeout the same way
@@ -81,7 +85,5 @@ go test -count=1 -v -timeout=2m -run '^TestProcessLifecycle$' ./e2e/scenarios
 Remove-Item Env:DW_E2E_FAULT
 ```
 
-- For these commands, a nonzero exit is the expected result.
-- Check the diagnostics files at the `diagnostics retained:` path and the three `alive=false` entries in `cleanup.log`.
-- `DW_E2E_DIAGNOSTICS` sets the parent directory for diagnostics, and CI uses `${{ runner.temp }}/dw-e2e`.
-- The list of diagnostics files and the same checks on macOS and Linux are in [E2E failure and timeout diagnostics and isolation](diagnostics.md).
+- What `failure` and `timeout` do, the expected result, and the diagnostics to check are in [Intentional failures and timeouts](diagnostics.md#intentional-failures-and-timeouts).
+- On Windows, also check `records.log.processes` at the `diagnostics retained:` path.

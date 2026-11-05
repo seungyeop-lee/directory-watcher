@@ -11,7 +11,7 @@
 - After each new generation becomes ready, waiting up to 10 seconds, the test checks which generations the new run canceled:
   - A canceled generation records `complete` for its parent, child, and grandchild before the new generation records its first `start`, and its processes are gone within 5 seconds.
   - A generation that must not be canceled has no `signal` record, and its processes are alive. A new run starts only after the runs it canceled have ended, so this check after the new generation is ready shows that the new run did not cancel it.
-- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every canceled process that recorded `ready` records `signal` and then `complete`, and every recorded process is gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every canceled process that recorded `ready` records `signal` and then `complete`, and every recorded process is gone within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
   - In `onStartWatch/interrupt=samePath`, the start hook ends on its own and is not canceled, so it is left out of the graceful completion check.
 
 ## Configuration
@@ -112,9 +112,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+Run these commands from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestRunInterrupt$' ./e2e/scenarios
@@ -124,10 +122,10 @@ make e2e-windows ARGS="-- -run '^TestRunInterrupt$'"
 
 - To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestRunInterrupt$/^changes$/^interrupt=samePath$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 
-- `e2e/scenarios/process_test.go`: `TestRunInterrupt`
-- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Await`, `Log`, `GenerationsLabeled`, `AwaitReadyGenerations`, `ProcessRecords`, `AssertRunning`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
-- `e2e/hookrec`: the `--label` option
+- `e2e/scenarios/process_test.go` contains `TestRunInterrupt`, `startLabeledChangeTrees`, which starts the watcher of the `changes/*` subtests, `labeledGenerations`, which checks the generations of a label, and `assertNotCanceled` and `assertEndedBeforeStart`, which check cancellation and order.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `Write`, `Await`, `Log`, `Lines`, `GenerationsLabeled`, `AwaitReadyGenerations`, `ProcessRecords`, `AssertRunning`, `Stop`, `AssertGracefulCompletion`, `AwaitProcessesGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/hookrec` implements the `--label` option.

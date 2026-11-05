@@ -13,7 +13,7 @@
 - 앞의 두 하위 테스트에서 `a.txt`의 기록은 대상마다 `BEFORE`, `onChange`, `AFTER` 순서 하나씩으로 나뉘어야 합니다.
   - 전역 hook의 기록은 어느 대상이 실행했는지 드러내지 않으므로, 기록의 어느 지점에서도 `onChange` 기록이 `BEFORE` 기록보다 많거나 `AFTER` 기록이 `onChange` 기록보다 많으면 실패합니다.
   - 두 대상 사이의 순서는 정해져 있지 않으므로 확인하지 않습니다.
-- 느린 hook 하위 테스트에서는 종료 신호가 상위 대상의 지연 hook을 취소하고, 그 프로세스가 5초 안에 사라져야 합니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- 느린 hook 하위 테스트에서는 종료 신호가 상위 대상의 지연 hook을 취소하고, 그 프로세스가 5초 안에 사라져야 합니다([생존 판정](../harness.ko.md#프로세스-생존-판정과-강제-정리)).
 - 겹치는 폴더에 대상마다 OS 감시 자원을 따로 쓰는지와, `api/**`를 둔 `PARENT`가 `api`를 감시 목록에 넣지 않는지는 hook 기록으로 드러나지 않으므로 확인하지 않습니다.
 
 ## 설정
@@ -73,9 +73,7 @@ sequenceDiagram
 
 ## 실행
 
-- 저장소 루트에서 실행합니다.
-
-차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
+저장소 루트에서 차례로 로컬, Linux Docker, UTM Windows VM에서 실행하는 명령입니다.
 
 ```sh
 go test -count=1 -v -run '^TestOverlappingTargets$' ./e2e/scenarios
@@ -84,10 +82,9 @@ make e2e-windows ARGS="-- -run '^TestOverlappingTargets$'"
 ```
 
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
-- Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/overlapping_targets_test.go`: `TestOverlappingTargets`와 설정, 표지, 기록 순서 확인입니다.
-- `e2e/scenarios/helpers_test.go`: `mkdirAll`, `createEmpty`입니다.
-- `e2e/harness`: `Start`, `Hook`, `HookrecBin`, `Await`, `AwaitLine`, `Lines`, `CountRecord`, `DelayedHookBegun`, `Log`, `Stop`, `AwaitDelayedHooksGone`입니다. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/scenarios/overlapping_targets_test.go`에는 `TestOverlappingTargets`, 설정을 만들고 대상마다 `START` 기록을 기다리는 `startOverlapping`, 표지를 만들고 기다리는 `awaitSentinel`, 대상별 기록 순서를 확인하는 `assertRunPerTarget`, `[ERROR]` 줄 없는 종료를 확인하는 `stopWithoutErrors`가 있습니다.
+- `e2e/scenarios/helpers_test.go`: `mkdirAll`과 `createEmpty`는 폴더와 빈 파일을 만듭니다.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `HookrecBin`, `Await`, `AwaitLine`, `Lines`, `CountRecord`, `DelayedHookBegun`, `Log`, `Stop`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

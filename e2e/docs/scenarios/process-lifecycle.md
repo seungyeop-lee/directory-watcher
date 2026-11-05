@@ -9,10 +9,10 @@
 
 - The parent, child, and grandchild of the first generation, created by the start hook, all record `ready`, and the three PIDs that recorded `start` are alive.
 - Creating a file makes the second generation of the change hook ready, and its processes are alive.
-- The first `start` of another generation is recorded only after the depth 0, 1, and 2 processes of the first generation have all recorded `complete`. All first-generation processes are gone within 5 seconds.
+- The first `start` of another generation is recorded only after the depth 0, 1, and 2 processes of the first generation have all recorded `complete`. All first-generation processes are gone within 5 seconds ([liveness check](../harness.md#process-liveness-and-forced-cleanup)).
 - The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal. Every process that recorded `ready` records `signal` and then `complete`.
 - The last two lines of `records.log` are `TARGET:onFinishWatch` and `GLOBAL:onFinishWatch`, in that order. Process records go to the same file, so this condition means the finish hooks ran after the current generation's `complete`.
-- The processes of every generation are gone within 5 seconds. This absence check happens in the test body, so it comes before the forced termination in the scenario cleanup step. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- The processes of every generation are gone within 5 seconds. This absence check happens in the test body, so it comes before the forced termination in the scenario cleanup step.
 
 ## Configuration
 
@@ -59,9 +59,7 @@ sequenceDiagram
 
 ## Running
 
-- Run from the repository root.
-
-The commands run locally, in Linux Docker, and on the UTM Windows VM, in that order.
+Run these commands from the repository root, locally, in Linux Docker, and on the UTM Windows VM, in that order.
 
 ```sh
 go test -count=1 -v -run '^TestProcessLifecycle$' ./e2e/scenarios
@@ -70,9 +68,9 @@ make e2e-windows ARGS="-- -run '^TestProcessLifecycle$'"
 ```
 
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
-- To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
+- The commands that repeat the race scenarios together are in [Race and overload verification](../reliability.md#race-and-overload-verification).
 
 ## Related code
 
-- `e2e/scenarios/process_test.go`: `TestProcessLifecycle`, and `assertCompletedBeforeRestart`, which checks the order of generation replacement
-- `e2e/harness`: `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `Stop`, `AssertGracefulCompletion`, `ProcessRecords`, `Lines`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/scenarios/process_test.go` contains `TestProcessLifecycle`; `createWithoutWrite`, which creates the change file without content; and `assertEndedBeforeStart`, which checks the order of generation replacement.
+- `e2e/harness`: `NewScenario`, `Start`, `Hook`, `AwaitReadyGenerations`, `AssertRunning`, `Await`, `AwaitProcessesGone`, `Stop`, `AssertGracefulCompletion`, `ProcessRecords`, `Lines`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
