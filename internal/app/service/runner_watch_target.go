@@ -152,7 +152,7 @@ func (r *watchTargetRunner) Run() error {
 			if !ok {
 				return &FatalError{Path: r.path, Cause: errors.New("watcher error channel closed unexpectedly")}
 			}
-			if errors.Is(err, syscall.EINTR) {
+			if errors.Is(err, syscall.EINTR) || isGoneWatchError(err) {
 				continue
 			}
 			// fsnotify의 kqueue 구현은 지운 파일의 경로에 새로 생긴 파일을 감시하려다 그 파일이 이미 사라졌으면 그
@@ -165,6 +165,14 @@ func (r *watchTargetRunner) Run() error {
 			}
 		}
 	}
+}
+
+// isGoneWatchError는 watcher의 오류 err가 이미 사라진 폴더의 감시를 풀지 못한 것인지 판단한다.
+//
+// fsnotify의 inotify 구현은 감시 중인 폴더가 옮겨지면 그 폴더의 감시를 풀고, 실패하면 오류를 보낸다. 폴더를 옮긴
+// 직후 지우면 커널이 감시를 먼저 없애므로 EINVAL로 실패하는데, 감시는 이미 풀렸으므로 감시를 계속해도 된다.
+func isGoneWatchError(err error) bool {
+	return inotifyOS && errors.Is(err, syscall.EINVAL)
 }
 
 // errStopped는 감시 루프가 r.stop이 닫혀 멈췄음을 알린다.

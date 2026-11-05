@@ -563,14 +563,18 @@ func (t *watchTree) retireWatcher() iter.Seq[fsnotify.Event] {
 	}
 }
 
-// pumpEvents는 Windows에서 w의 이벤트와 오류를 쉬지 않고 받아 두었다가 돌려주는 채널로 차례로 넘기고, 다른
-// 운영체제에서는 w의 채널을 그대로 돌려준다. w를 닫으면 받아 둔 이벤트를 모두 넘긴 뒤 두 채널을 닫고, 받아 둔
-// 오류는 버린다. stop이 닫히면 받는 이벤트를 넘기지 않고 버린다.
+// pumpEvents는 Windows에서 w의 이벤트와 오류를 쉬지 않고 받아 두었다가 돌려주는 채널로 차례로 넘긴다. inotify를
+// 쓰는 Linux에서는 오류만 pumpErrors로 받아 두고, 다른 운영체제에서는 w의 채널을 그대로 돌려준다. Windows에서
+// w를 닫으면 받아 둔 이벤트를 모두 넘긴 뒤 두 채널을 닫고, 받아 둔 오류는 버린다. stop이 닫히면 받는 이벤트를
+// 넘기지 않고 버린다.
 //
 // fsnotify의 Windows 구현은 Add와 Remove를 이벤트를 보내는 goroutine에서 처리하고, 그 goroutine은 이벤트를
 // 받을 때까지 다른 일을 하지 않는다. 감시 루프가 Add나 Remove를 부르는 동안 이벤트를 받지 않으면 서로를 기다려
 // 멈추므로, 이벤트를 따로 받아 둔다.
 func pumpEvents(w *fsnotify.Watcher, stop <-chan struct{}) (<-chan fsnotify.Event, <-chan error) {
+	if inotifyOS {
+		return w.Events, pumpErrors(w.Errors, stop)
+	}
 	if runtime.GOOS != "windows" {
 		return w.Events, w.Errors
 	}
@@ -620,4 +624,40 @@ func pumpEvents(w *fsnotify.Watcher, stop <-chan struct{}) (<-chan fsnotify.Even
 		}
 	}()
 	return events, errs
+}
+
+// pumpErrors는 errs의 오류를 쉬지 않고 받아 두었다가 돌려주는 채널로 차례로 넘긴다. errs가 닫히면 받아 둔 오류를
+// 버리고 돌려준 채널을 닫는다. stop이 닫히면 errs가 닫힐 때까지 받기만 한다.
+//
+// fsnotify의 inotify 구현은 감시 중인 폴더가 옮겨지면 Add와 Remove가 쓰는 잠금을 쥔 채 그 폴더의 감시를 풀다
+// 생긴 오류를 보낸다. 감시 루프가 Add나 Remove를 부르는 동안 오류를 받지 않으면 서로를 기다려 멈추므로, 오류를
+// 따로 받아 둔다.
+func pumpErrors(errs <-chan error, stop <-chan struct{}) <-chan error {
+	out := make(chan error)
+	go func() {
+		defer close(out)
+		var queue []error
+		for {
+			var send chan<- error
+			var next error
+			if len(queue) > 0 {
+				send, next = out, queue[0]
+			}
+			select {
+			case <-stop:
+				// 감시 루프가 끝났으므로 errs가 닫힐 때까지 받기만 한다.
+				for range errs {
+				}
+				return
+			case err, ok := <-errs:
+				if !ok {
+					return
+				}
+				queue = append(queue, err)
+			case send <- next:
+				queue = queue[1:]
+			}
+		}
+	}()
+	return out
 }

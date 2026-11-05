@@ -1110,6 +1110,25 @@ func TestFolderRecreatedAfterMoveOutIsWatched(t *testing.T) {
 	}
 }
 
+// 감시 중인 폴더를 감시 대상 밖으로 옮기고 곧바로 지워도, runner가 멈추지 않고 옛 경로의 삭제(D)를 hook에
+// 넘기는지 확인한다. fsnotify의 inotify 구현은 옮긴 폴더의 감시를 풀다 실패하면 오류를 보내는데, 그 폴더가 이미
+// 지워졌으면 EINVAL로 실패한다. 이 오류를 보내는 동안 감시 루프가 Remove를 부르면 서로를 기다려 멈춘다.
+func TestFolderRemovedRightAfterMoveOutKeepsWatching(t *testing.T) {
+	f := newRenameFixture(t)
+	f.start(nil)
+	for range 10 {
+		f.write("src/d/f.txt")
+		f.changes()
+		f.move("src/d", "../outside/d")
+		if err := os.RemoveAll(filepath.Join(f.outside, "d")); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := f.changes(), []string{"D src/d/"}; !slices.Equal(got, want) {
+			t.Fatalf("hook events = %v, want %v", got, want)
+		}
+	}
+}
+
 // 옛 경로가 exclude에 맞으면 이름을 바꾸거나 옮겨도 hook이 삭제(D)를 받지 않는지 확인한다.
 func TestRenameFromExcludedPathDoesNotNotifyDelete(t *testing.T) {
 	f := newRenameFixture(t)
