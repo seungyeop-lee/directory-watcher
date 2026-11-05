@@ -96,6 +96,12 @@ func (r *watchTargetRunner) Run() error {
 		return &FatalError{Path: r.path, Cause: r.initErr}
 	}
 	defer r.tree.close()
+	select {
+	case <-r.stop:
+		r.dispatcher.skip()
+		return nil
+	default:
+	}
 	if err := r.tree.add(); err != nil {
 		r.dispatcher.skip()
 		return &FatalError{Path: r.path, Cause: err}

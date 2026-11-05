@@ -12,6 +12,7 @@ import (
 
 type globalRunner struct {
 	watchCtx *process.WatcherContext
+	startCtx *process.WatcherContext
 	mode     process.CommandMode
 
 	onStartWatch  domain.Cmd
@@ -24,8 +25,10 @@ type globalRunner struct {
 }
 
 func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger, mode process.CommandMode) *globalRunner {
+	base := process.NewWatcherContext("[GLOBAL]", mode)
 	return &globalRunner{
-		watchCtx:       process.NewWatcherContext("[GLOBAL]", mode),
+		watchCtx:       base,
+		startCtx:       base.NewRun(),
 		mode:           mode,
 		onStartWatch:   commandSet.LifeCycle.OnStartWatch,
 		onFinishWatch:  commandSet.LifeCycle.OnFinishWatch,
@@ -37,7 +40,7 @@ func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger, m
 
 func (g *globalRunner) CallOnStartWatch() {
 	err := g.printInfo("CallOnStartWatch", g.onStartWatch, func() error {
-		return g.onStartWatch.Run(g.watchCtx.WithHook("onStartWatch"), "", nil)
+		return g.onStartWatch.Run(g.startCtx.WithHook("onStartWatch"), "", nil)
 	})
 	if err != nil {
 		g.logger.Error(err.Error())

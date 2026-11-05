@@ -201,10 +201,12 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
   - `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다.
   - 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다.
   - 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, watcher는 종료 코드 1로 끝납니다.
-- 종료 신호를 받으면 watcher는 실행 중인 대상 `onStartWatch`와 변경 실행을 모두 취소하고, 기다리던 변경을 버립니다.
+- 종료 신호를 받으면 watcher는 실행 중인 전역·대상 `onStartWatch`와 변경 실행을 모두 취소하고, 기다리던 변경을 버립니다.
   - 이벤트 처리와 취소한 실행이 모두 멈출 때까지 기다린 뒤 종료 hook을 실행합니다.
   - 감시 대상은 서로 기다리지 않고 따로 멈춥니다.
   - 종료 hook은 다른 hook과 같은 규칙으로 명령을 실행하며, 따로 실행 제한 시간이 없습니다.
+- 전역 `onStartWatch`가 종료 신호로 취소되면 어느 대상도 감시를 시작하지 않고, 대상의 시작·종료 hook도 실행하지 않습니다.
+  - 전역 `onFinishWatch`는 취소한 전역 시작 hook이 멈춘 뒤 취소되지 않은 context로 실행합니다.
 - macOS와 Linux에서 취소된 hook은 SIGTERM을 받고, hook이 시작한 프로세스도 함께 SIGTERM을 받습니다.
 - macOS와 Linux에서 SIGTERM을 보내고 20초가 지나도 hook의 `sh` 프로세스가 실행 중이면, watcher는 그 프로세스를 SIGKILL로 끝냅니다.
   - 교체와 종료는 이 프로세스가 끝날 때까지 기다리므로, `trap '' TERM`을 실행한 hook처럼 `sh`가 SIGTERM을 무시하는 hook은 교체와 종료를 최대 20초 늦춥니다.

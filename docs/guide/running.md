@@ -199,10 +199,12 @@ Error context is passed as environment variables, never interpolated into comman
   - This happens when its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list.
   - Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either.
   - The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the watcher exits with code 1.
-- A shutdown signal cancels every running target `onStartWatch` and change run and discards pending changes.
+- A shutdown signal cancels every running global or target `onStartWatch` and change run and discards pending changes.
   - The finish hooks run once event handling and every canceled run have stopped.
   - Targets stop independently, without waiting for each other.
   - Finish hooks run their commands by the same rules as other hooks and have no time limit of their own.
+- If shutdown cancels global `onStartWatch`, no target starts watching, and no target startup or finish hook runs.
+  - Global `onFinishWatch` still runs after the canceled global startup has stopped, with a context that is not canceled.
 - On macOS and Linux, a canceled hook gets SIGTERM, and so do the processes it started.
 - On macOS and Linux, if the hook's `sh` process is still running 20 seconds after SIGTERM, the watcher ends that process with SIGKILL.
   - Replacement and shutdown wait until this process has ended, so a hook whose `sh` ignores SIGTERM, for example after `trap '' TERM`, delays them by up to 20 seconds.

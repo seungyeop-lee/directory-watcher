@@ -64,6 +64,10 @@ func (r *runner) Errors() <-chan error { return r.errors }
 
 func (r *runner) Stop() {
 	r.stopOnce.Do(func() {
+		for _, target := range r.watchTargets {
+			target.stopAccepting()
+		}
+		r.global.startCtx.Cancel()
 		setsWg := sync.WaitGroup{}
 		for _, target := range r.watchTargets {
 			setsWg.Add(1)

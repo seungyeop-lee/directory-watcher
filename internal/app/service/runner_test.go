@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -326,5 +327,118 @@ func TestRunnerPassesCommandModeToGlobalAndTargetHooks(t *testing.T) {
 	want := []string{"global onStartWatch {Silent:false DryRun:true}", "target onStartWatch {Silent:false DryRun:true}"}
 	if got := calls.list(); !slices.Equal(got, want) {
 		t.Fatalf("hook calls = %q, want %q", got, want)
+	}
+}
+
+func TestRunnerStopCancelsGlobalStartBeforeTargets(t *testing.T) {
+	ready := filepath.Join(t.TempDir(), "ready")
+	set := testCommandSet(t.TempDir(), t.TempDir())
+	start := fmt.Sprintf(`echo ready > "%s"; sleep 600`, ready)
+	if runtime.GOOS == "windows" {
+		t.Setenv("DW_GLOBAL_STARTUP_READY", ready)
+		start = testBinaryCommand(t, "-test.run=^TestGlobalStartupSleepProcess$")
+	}
+	set.Global.LifeCycle.OnStartWatch = command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: start})
+	var globalFinished, targetStarted, targetFinished atomic.Int32
+	set.Global.LifeCycle.OnFinishWatch = runnerCommand(func(ctx *process.WatcherContext, _ *domain.Event) error {
+		if err := ctx.Context().Err(); err != nil {
+			t.Errorf("global finish inherited canceled startup: %v", err)
+		}
+		globalFinished.Add(1)
+		return nil
+	})
+	for n := range set.WatchTargets {
+		set.WatchTargets[n].LifeCycle.OnStartWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+			targetStarted.Add(1)
+			return nil
+		})
+		set.WatchTargets[n].LifeCycle.OnFinishWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+			targetFinished.Add(1)
+			return nil
+		})
+	}
+	r := NewRunner(set, newMockLogger(), process.CommandMode{})
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
+	go r.Run()
+	stopped := make(chan struct{})
+	t.Cleanup(func() {
+		r.global.startCtx.Cancel()
+		cleaned := make(chan struct{})
+		go func() { r.Stop(); close(cleaned) }()
+		select {
+		case <-cleaned:
+		case <-time.After(25 * time.Second):
+			t.Error("runner did not release startup process")
+		}
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("global startup command did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	before := time.Now()
+	go func() { r.Stop(); close(stopped) }()
+	select {
+	case <-stopped:
+	case <-time.After(25 * time.Second):
+		t.Fatal("Stop did not cancel the global sleep 600 within the cleanup limit")
+	}
+	t.Logf("global startup cancellation and shutdown took %s", time.Since(before))
+	r.Stop()
+	if globalFinished.Load() != 1 || targetStarted.Load() != 0 || targetFinished.Load() != 0 {
+		t.Fatalf("finish/start hooks: global finish=%d, target start=%d, target finish=%d", globalFinished.Load(), targetStarted.Load(), targetFinished.Load())
+	}
+	for _, target := range r.watchTargets {
+		if target.watching {
+			t.Error("target began watching after global startup cancellation")
+		}
+	}
+}
+
+func TestGlobalStartupSleepProcess(t *testing.T) {
+	ready := os.Getenv("DW_GLOBAL_STARTUP_READY")
+	if ready == "" {
+		return
+	}
+	if err := os.WriteFile(ready, []byte("ready"), 0600); err != nil {
+		os.Exit(3)
+	}
+	time.Sleep(600 * time.Second)
+	os.Exit(0)
+}
+
+func TestRunnerWaitsForGlobalStartBeforeTargets(t *testing.T) {
+	set := testCommandSet(t.TempDir())
+	entered, release, targetStarted := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	set.Global.LifeCycle.OnStartWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+		close(entered)
+		<-release
+		return nil
+	})
+	set.WatchTargets[0].LifeCycle.OnStartWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+		close(targetStarted)
+		return nil
+	})
+	r := NewRunner(set, newMockLogger(), process.CommandMode{})
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
+	go r.Run()
+	t.Cleanup(r.Stop)
+	<-entered
+	select {
+	case <-targetStarted:
+		close(release)
+		t.Fatal("target startup ran before global startup completed")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-targetStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("target startup did not run after global startup completed")
 	}
 }
