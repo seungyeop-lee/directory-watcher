@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -57,6 +58,57 @@ func TestUnknownFlagPrintsUsage(t *testing.T) {
 	}
 	if !strings.Contains(stdout+stderr, "Usage:") {
 		t.Fatalf("usage missing for an unknown flag:\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+// flagGroups는 usage 출력을 "Flags:"처럼 콜론으로 끝나는 머리줄로 나누어, 머리줄마다 그 아래에 나온 flag의 긴 이름을 돌려준다.
+func flagGroups(usage string) map[string][]string {
+	groups := map[string][]string{}
+	header := ""
+	for _, line := range strings.Split(usage, "\n") {
+		if strings.HasSuffix(line, ":") && !strings.HasPrefix(line, " ") {
+			header = line
+			continue
+		}
+		if _, after, found := strings.Cut(line, "--"); found && strings.HasPrefix(strings.TrimSpace(line), "-") {
+			name, _, _ := strings.Cut(after, " ")
+			groups[header] = append(groups[header], name)
+		}
+	}
+	return groups
+}
+
+// setInstalledCommand는 rootCmd의 Use와 Version을 Execute가 정하는 값처럼 채워, -h와 -v가 실제 실행처럼 나오게 한다.
+func setInstalledCommand(t *testing.T) {
+	t.Helper()
+	use, version := rootCmd.Use, rootCmd.Version
+	rootCmd.Use, rootCmd.Version = "directory-watcher", "v0.0.0"
+	t.Cleanup(func() { rootCmd.Use, rootCmd.Version = use, version })
+	// cobra는 처음 실행할 때의 Use로 -h와 -v의 설명을 만든다. 앞선 테스트가 Use 없이 실행했으면 "for this command"로
+	// 끝나므로, Execute가 Use를 정한 뒤 처음 실행하는 실제 실행과 같게 맞춘다.
+	for _, name := range []string{"help", "version"} {
+		if flag := rootCmd.Flags().Lookup(name); flag != nil {
+			flag.Usage = name + " for directory-watcher"
+		}
+	}
+}
+
+func TestUsageShowsLogLevelInMaintenanceFlags(t *testing.T) {
+	setInstalledCommand(t)
+	want := map[string][]string{
+		"Flags:":             {"config-path", "dry-run", "help", "silent", "version"},
+		"Maintenance Flags:": {"log-level"},
+	}
+	for name, args := range map[string][]string{
+		"--help":       {"--help"},
+		"unknown flag": {"--no-such-flag"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			stdout, stderr, _ := executeRoot(t, args...)
+			if got := flagGroups(stdout + stderr); !reflect.DeepEqual(got, want) {
+				t.Fatalf("flag groups = %v, want %v; output:\n%s%s", got, want, stdout, stderr)
+			}
+		})
 	}
 }
 
@@ -219,14 +271,7 @@ func TestSilentWithDryRunStopsBeforeWatching(t *testing.T) {
 
 // 설치 문서 두 판의 명령줄 옵션 블록은 directory-watcher --help의 출력을 옮겨 적은 것이다.
 func TestInstallationGuideShowsHelpOutput(t *testing.T) {
-	use, version := rootCmd.Use, rootCmd.Version
-	rootCmd.Use, rootCmd.Version = "directory-watcher", "v0.0.0"
-	t.Cleanup(func() { rootCmd.Use, rootCmd.Version = use, version })
-	// cobra는 처음 실행할 때의 Use로 -h 설명을 만든다. 앞선 테스트가 Use 없이 실행했으면 "help for this command"가
-	// 되므로, Execute가 Use를 정한 뒤 처음 실행하는 실제 실행과 같게 맞춘다.
-	if help := rootCmd.Flags().Lookup("help"); help != nil {
-		help.Usage = "help for directory-watcher"
-	}
+	setInstalledCommand(t)
 	help, _, err := executeRoot(t, "--help")
 	if err != nil {
 		t.Fatal(err)

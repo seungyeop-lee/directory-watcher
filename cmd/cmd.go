@@ -3,10 +3,12 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/app/domain"
@@ -16,6 +18,7 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var (
@@ -43,12 +46,34 @@ func Execute() {
 	}
 }
 
+// maintenanceFlags는 개발과 유지보수에 쓰는 flag다. usage는 이 flag를 일반 flag와 다른 절에 보여 준다.
+var maintenanceFlags = pflag.NewFlagSet("maintenance", pflag.ContinueOnError)
+
 func init() {
-	rootCmd.Flags().StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
+	maintenanceFlags.StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
+	rootCmd.Flags().AddFlagSet(maintenanceFlags)
 	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
 	rootCmd.Flags().BoolP("silent", "s", false, "don't print hook commands before running them")
 	rootCmd.Flags().BoolP("dry-run", "n", false, "print hook commands without running them")
 	rootCmd.MarkFlagsMutuallyExclusive("silent", "dry-run")
+	rootCmd.SetUsageFunc(printUsage)
+}
+
+// printUsage는 cobra의 기본 usage와 같은 형식으로 쓰되, maintenanceFlags를 Maintenance Flags 절로 떼어 낸다.
+// --help와 잘못된 flag가 모두 이 함수로 usage를 출력한다. rootCmd에는 하위 명령, 별칭, 예시가 없어서 기본 usage의
+// 그 절들은 옮기지 않았다.
+func printUsage(cmd *cobra.Command) error {
+	general := pflag.NewFlagSet("general", pflag.ContinueOnError)
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if maintenanceFlags.Lookup(f.Name) == nil {
+			general.AddFlag(f)
+		}
+	})
+	_, err := fmt.Fprintf(cmd.OutOrStderr(), "Usage:\n  %s\n\nFlags:\n%s\n\nMaintenance Flags:\n%s\n",
+		cmd.UseLine(),
+		strings.TrimRight(general.FlagUsages(), "\n"),
+		strings.TrimRight(maintenanceFlags.FlagUsages(), "\n"))
+	return err
 }
 
 var rootCmd = &cobra.Command{

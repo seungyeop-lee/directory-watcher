@@ -30,9 +30,11 @@ Flags:
   -c, --config-path string   set config path (default "config.yml")
   -n, --dry-run              print hook commands without running them
   -h, --help                 help for directory-watcher
-  -l, --log-level string     set log level (default "ERROR")
   -s, --silent               don't print hook commands before running them
   -v, --version              version for directory-watcher
+
+Maintenance Flags:
+  -l, --log-level string   set log level (default "ERROR")
 ```
 
 - watcher는 hook 명령을 실행하기 전에 그 명령을 출력합니다. `-s`와 `-n`은 [hook 명령 출력](running.ko.md#hook-명령-출력)을 참고하세요.

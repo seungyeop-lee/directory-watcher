@@ -19,6 +19,11 @@
 - 저장소 루트에서 문서와 코드가 같은지 보는 테스트는 예외라서, 같은 이름의 본체 파일이 없어도 된다.
 - 한 패키지의 여러 테스트 파일이 함께 쓰는 helper는 그 패키지의 `helpers_test.go`에 둔다. 이 파일은 같은 이름의 본체 파일이 없어도 된다.
 
+# 로그 레벨
+
+- 로그 레벨(`-l`/`--log-level`)은 개발과 유지보수에 쓰는 설정이라서, 사용자가 신경 쓰지 않아도 되게 한다.
+- `--help`는 이 flag를 `Maintenance Flags:` 절에 따로 보여 준다. 개발과 유지보수에 쓰는 flag를 새로 더하면 `cmd/cmd.go`의 `maintenanceFlags`에 정의한다.
+
 # 검증
 
 - Windows 동작을 확인해야 하면, Windows 환경이 없다고 판단하기 전에 `/Applications/UTM.app/Contents/MacOS/utmctl list`로 UTM VM을 찾는다. VM이 있으면 [UTM Windows VM에서 E2E 실행](e2e/docs/windows-utm.ko.md)을 읽고 `make e2e-windows-all ARGS="-vm=<VM 이름>"`으로 게스트에서 테스트를 실행한다. `./e2e/scenarios` 밖의 패키지를 함께 실행하는 방법과 이 VM으로 대신할 수 없는 Windows 검증도 그 문서에 있다.
