@@ -376,6 +376,21 @@ func TestWatchTreeAddFailsWhenTargetRemovedBeforeAdd(t *testing.T) {
 	}
 }
 
+// 감시를 시작할 때 add가 감시 대상 폴더를 확인한 뒤 addDirTree가 훑기 전에 그 폴더가 지워지면, 감시를 시작하지
+// 못했다는 오류를 돌려주는지 확인한다. add에는 확인과 훑기 사이에 끼어들 곳이 없어, add가 하는 순서대로 부른다.
+func TestWatchTreeAddFailsWhenTargetRemovedBeforeWalk(t *testing.T) {
+	f := newTreeFixture(t, domain.WatchOption{SubDir: true})
+	if err := f.tree.resolveLinkedPath(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(f.root); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tree.addDirTree(f.tree.root); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("addDirTree(root) = %v, want an error wrapping fs.ErrNotExist", err)
+	}
+}
+
 // 감시 중에 생긴 폴더가 handleEvent가 확인한 뒤 addDirTree가 훑기 전에 지워지면, 그 폴더를 기록에 남기지 않는지
 // 확인한다. 기록이 남으면 같은 경로에 다시 만든 폴더를 있던 폴더로 보아 생성을 hook에 넘기지 않는다.
 func TestWatchTreeForgetsAddedFolderRemovedBeforeWalk(t *testing.T) {
