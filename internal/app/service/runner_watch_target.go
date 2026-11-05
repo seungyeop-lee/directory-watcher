@@ -44,6 +44,8 @@ type watchTargetRunner struct {
 	hookBatcher  *hookBatcher
 	dispatcher   *dispatcher
 	removedDirs  *removedDirRecords
+	// createdEarly는 kqueue에서 fsnotify의 Create보다 먼저 handleEvent가 생성으로 넘긴 경로다. recreatedAfterRemove를 본다.
+	createdEarly map[string]struct{}
 
 	logger     helper.Logger
 	initErr    error
@@ -69,14 +71,15 @@ func NewWatchTargetRunner(globalCommandSet domain.GlobalCommandSet, commandSet d
 	stop := make(chan struct{})
 
 	result := &watchTargetRunner{
-		path:        commandSet.Path,
-		hookBatcher: newHookBatcher(commandSet.Option),
-		dispatcher:  newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
-		removedDirs: newRemovedDirRecords(),
-		logger:      logger,
-		initErr:     err,
-		stop:        stop,
-		done:        make(chan struct{}),
+		path:         commandSet.Path,
+		hookBatcher:  newHookBatcher(commandSet.Option),
+		dispatcher:   newDispatcher(hooks, commandSet.Option.Queue.Size, warner, stop),
+		removedDirs:  newRemovedDirRecords(),
+		createdEarly: map[string]struct{}{},
+		logger:       logger,
+		initErr:      err,
+		stop:         stop,
+		done:         make(chan struct{}),
 	}
 	result.tree = newWatchTree(commandSet.Path, commandSet.Option.Watch, watcher, stop, logger)
 	result.renamePairer = newRenamePairer(result.tree.renamedFrom, logger)
@@ -207,9 +210,16 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	if r.tree.isUnreleased(ev.Name) {
 		return nil
 	}
-	var isDir, existed, recreated bool
+	var isDir, existed, recreated, reappeared bool
 	switch {
 	case ev.Op.Has(fsnotify.Create):
+		if _, ok := r.createdEarly[ev.Name]; ok {
+			delete(r.createdEarly, ev.Name)
+			// handleEvent가 이미 생성으로 넘긴 항목의 Create가 늦게 왔으므로 버린다.
+			if _, recorded := r.tree.recorded(ev.Name); recorded {
+				return nil
+			}
+		}
 		r.removedDirs.forgetUnder(ev.Name)
 		r.renamePairer.forgetSelfRename(ev.Name)
 		if r.tree.isUnreleasedDir(ev.Name) {
@@ -234,6 +244,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		if r.renamePairer.isSelfRename(ev) {
 			return nil
 		}
+		delete(r.createdEarly, ev.Name)
 		// 사라진 경로는 디스크에서 폴더인지 알 수 없으므로 기록에 적어 둔 폴더인지로 판단한다.
 		var wasDir bool
 		wasDir, existed = r.tree.recorded(ev.Name)
@@ -243,6 +254,7 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 		isDir = r.tree.unwatchTree(ev.Name) || wasDir
 		if isDir {
 			r.removedDirs.add(ev.Name)
+			reappeared = recreatedAfterRemove(ev.Name)
 		}
 		if isDir && inotifyOS && ev.Op.Has(fsnotify.Rename) {
 			r.renamePairer.addSelfRename(ev.Name)
@@ -271,7 +283,29 @@ func (r *watchTargetRunner) handleEvent(ev fsnotify.Event) error {
 	if r.tree.isExcluded(ev.Name) {
 		return nil
 	}
-	return r.enqueue(r.dirBatcher.add(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed, recreated: recreated}))
+	if err := r.enqueue(r.dirBatcher.add(change{Event: domain.Event{Path: domain.Path(ev.Name), Operation: domain.Operation(ev.Op), IsDir: isDir}, existed: existed, recreated: recreated})); err != nil || !reappeared {
+		return err
+	}
+	if err := r.handleEvent(fsnotify.Event{Name: ev.Name, Op: fsnotify.Create}); err != nil {
+		return err
+	}
+	r.createdEarly[ev.Name] = struct{}{}
+	return nil
+}
+
+// recreatedAfterRemove는 kqueue에서 사라진 폴더의 경로 path에 새 항목이 이미 다시 생겼는지 판단한다.
+//
+// fsnotify의 kqueue 구현은 부모 폴더의 항목이 바뀌면 부모 폴더를 다시 읽어, 본 적 없는 이름에만 Create를 보낸다.
+// 사라진 폴더의 이름은 그 폴더의 Rename이나 Remove를 처리할 때에야 본 적 없는 이름으로 돌린다. 그래서 폴더를 옮기거나
+// 지운 직후 같은 경로에 항목이 생겼는데 fsnotify가 부모 폴더를 그 Rename이나 Remove보다 먼저 다시 읽으면, 새 항목의
+// Create는 부모 폴더가 다시 바뀔 때까지 오지 않는다. handleEvent는 새 항목을 디스크에서 확인하면 곧바로 생성으로 넘기고,
+// 늦게 온 Create는 createdEarly로 알아보고 버린다.
+func recreatedAfterRemove(path string) bool {
+	if !kqueueOS {
+		return false
+	}
+	_, err := os.Lstat(path)
+	return err == nil
 }
 
 // enqueue는 dirBatcher가 돌려준 실행 runs를 dispatcher의 대기열에 넣고, dirBatcher가 runs 뒤의 변경을 넘기다 겪은

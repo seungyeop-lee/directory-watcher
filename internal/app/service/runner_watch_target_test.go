@@ -179,6 +179,50 @@ func TestDeletedFolderRecreationStartsNewLifecycle(t *testing.T) {
 	}
 }
 
+// kqueue(macOS)에서 감시 중인 폴더를 옮기거나 지운 직후 같은 경로에 폴더를 다시 만들면, fsnotify는 새 폴더의 Create를
+// 보내지 않거나 부모 폴더가 다시 바뀔 때에야 보낸다. 어느 쪽이든 hook이 옛 폴더의 D 다음에 새 폴더의 C를 한 번씩 받고,
+// 새 폴더를 감시하는지 확인한다.
+func TestFolderRecreatedBeforeItsRemoveArrives(t *testing.T) {
+	if !kqueueOS {
+		t.Skip("only fsnotify's kqueue backend drops the Create of a folder recreated at the same path")
+	}
+	for _, op := range []fsnotify.Op{fsnotify.Rename, fsnotify.Remove} {
+		for _, lateCreate := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%v/lateCreate=%v", op, lateCreate), func(t *testing.T) {
+				root := t.TempDir()
+				path := filepath.Join(root, "d")
+				mkdir(t, path)
+				option := hookBatchOption(0, 0, domain.DeliverEach)
+				option.DirBatch = domain.DirBatchOption{}
+				r := deletionRunner(t, root, option)
+				if op == fsnotify.Rename {
+					if err := os.Rename(path, filepath.Join(t.TempDir(), "d")); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					removeAll(t, path)
+				}
+				mkdir(t, path)
+				sendDeletionEvent(t, r, op, "d")
+				if lateCreate {
+					sendDeletionEvent(t, r, fsnotify.Create, "d")
+				}
+				var got []string
+				for _, run := range flushDeletionRuns(t, r) {
+					got = append(got, describeRun(t, root, run))
+				}
+				if want := []string{"D d/", "C d/"}; !slices.Equal(got, want) {
+					t.Fatalf("runs = %v, want %v", got, want)
+				}
+				assertRecorded(t, r.tree, root, "d", true, true)
+				if !slices.ContainsFunc(r.tree.watcher.WatchList(), func(p string) bool { return filepath.Clean(p) == path }) {
+					t.Errorf("recreated folder is not watched (%v)", r.tree.watcher.WatchList())
+				}
+			})
+		}
+	}
+}
+
 // 이름이 매번 다른 폴더를 지워도, 지운 폴더의 기록은 중복 REMOVE가 올 수 있는 운영체제에서 removedDirTTL 안에 지운
 // 폴더만 남고 그 밖의 운영체제에서는 생기지 않는지 확인한다. 어느 쪽이든 폴더마다 폴더 삭제 하나만 hook에 간다.
 func TestRemovedFolderRecordsExpire(t *testing.T) {
