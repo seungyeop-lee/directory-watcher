@@ -161,12 +161,16 @@ func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err 
 	cmd := exec.Command(req.Go, req.Args...)
 	cmd.Dir = filepath.Join(dir, "src")
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	// 하네스는 PATH에 있는 "go"로 빌드하는데, Guest Agent의 PATH에는 Go가 없다. TEMP를
-	// 이 실행 디렉터리 안에 두면 테스트 바이너리와 실행 디렉터리도 그 안에 생기므로,
-	// 남은 프로세스를 경로로 찾을 수 있다.
+	// 하네스는 PATH에 있는 "go"로 빌드하는데, Guest Agent의 PATH에는 Go가 없다.
+	// stopLeftovers가 남은 프로세스를 실행 파일 경로로 찾도록, go가 테스트 바이너리를
+	// 빌드하는 GOTMPDIR를 이 실행 디렉터리 안에 둔다. 하네스도 watcher·hookrec 바이너리를
+	// GOTMPDIR에 빌드하고(harness.Run), t.TempDir도 GOTMPDIR 안에 폴더를 만든다.
+	// TEMP·TMP만으로는 부족하다: Guest Agent는 SYSTEM 계정으로 실행되고, Go의 os.TempDir가
+	// 쓰는 GetTempPath2는 SYSTEM 프로세스에 TEMP·TMP와 관계없이 C:\Windows\SystemTemp를
+	// 돌려준다.
 	cmd.Env = append(os.Environ(),
 		"PATH="+filepath.Dir(req.Go)+";"+os.Getenv("PATH"),
-		"TEMP="+tmp, "TMP="+tmp,
+		"GOTMPDIR="+tmp, "TEMP="+tmp, "TMP="+tmp,
 		"DW_E2E_DIAGNOSTICS="+filepath.Join(dir, "diagnostics"))
 	cmd.Env = append(cmd.Env, req.Env...)
 	if err := cmd.Start(); err != nil {
@@ -200,8 +204,8 @@ func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err 
 }
 
 // stopLeftovers는 실행 파일이 dir 안에 있는 프로세스 가운데 이 프로그램을 뺀 나머지를
-// 종료하고 알린다. dir 안에는 이번 실행의 테스트 바이너리와, 그 바이너리가 빌드한
-// watcher와 hookrec 바이너리만 있다.
+// 종료하고 알린다. dir 안의 실행 파일은 이 프로그램 말고는 모두 이번 실행의 go와
+// 테스트가 GOTMPDIR에 빌드한 것이다(goTest 참고).
 func stopLeftovers(dir string) []string {
 	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {

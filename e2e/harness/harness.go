@@ -48,7 +48,10 @@ func Run(m *testing.M) (code int) {
 	if testing.Short() {
 		return m.Run()
 	}
-	dir, err := os.MkdirTemp("", "dw-e2e-bin-*")
+	// 바이너리 폴더는 go가 테스트 바이너리를 빌드하는 GOTMPDIR에 함께 만든다. Windows E2E
+	// 게스트는 GOTMPDIR를 실행 디렉터리 안에 두고, 실행이 끝나면 그 경로의 프로세스를
+	// 정리한다(e2e/windows/guest의 goTest). 비어 있으면 os.TempDir를 쓴다.
+	dir, err := os.MkdirTemp(os.Getenv("GOTMPDIR"), "dw-e2e-bin-*")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
