@@ -2,19 +2,23 @@ package main
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode"
 )
 
-// 이 파일의 테스트는 e2e 문서에 손으로 적은 시나리오 목록과 그 목록을 가리키는 개수 낱말, 오류 주입 명령의 -run 대상이 e2e/scenarios의 시나리오와 맞는지 확인한다.
+// 이 파일의 테스트는 e2e 문서에 손으로 적은 시나리오 목록과 그 목록을 가리키는 개수 낱말, 오류 주입 명령의 -run 대상, 시나리오 문서의 하위 테스트 목록이 e2e/scenarios의 시나리오와 맞는지 확인한다.
 // 목록을 넣는 곳과 조건은 e2e/docs/harness.md "Writing a new scenario"의 5–7단계가 정한다.
-// 실패하면 보고된 목록의 시나리오 이름이나 문구의 개수를 고치고, 한국어판과 영어판을 함께 고친다.
+// 실패하면 보고된 목록의 시나리오 이름이나 하위 테스트 이름, 문구의 개수를 고치고, 한국어판과 영어판을 함께 고친다.
 
 const (
 	e2eScenariosDir = "e2e/scenarios"
@@ -33,6 +37,9 @@ type e2eDocLanguage struct {
 	windowsCIStepsSection string
 	windowsCIResult       string
 	utmSelectionSection   string
+	// subtestsSection은 시나리오 문서의 하위 테스트 절 제목이고, subtestColumns는 하위 테스트 이름을 적는 표의 첫 칸 머리말이다.
+	subtestsSection string
+	subtestColumns  []string
 	// 아래 문구는 windows 문서가 Windows CI의 정상 종료 반복 목록과 알림 트리 검증 목록을 이름 없이 개수로 가리키는 곳이다.
 	// 첫 묶음이 개수 낱말이다.
 	ciStepsLifecycleTests        *regexp.Regexp
@@ -51,6 +58,8 @@ var e2eDocLanguages = []e2eDocLanguage{
 		windowsCIStepsSection:        "## CI steps",
 		windowsCIResult:              "## Checking CI results",
 		utmSelectionSection:          "### Test selection, repetition, and time limits",
+		subtestsSection:              "## Subtests",
+		subtestColumns:               []string{"Subtest", "Mode"},
 		ciStepsLifecycleTests:        regexp.MustCompile(`repeat of the (\w+) tests in \[Run commands\]`),
 		ciResultLifecycleTests:       regexp.MustCompile(`the (\w+) tests and \w+ option combinations in the repeat step`),
 		ciResultLifecycleSubtests:    regexp.MustCompile(`the \w+ tests and (\w+) option combinations in the repeat step`),
@@ -65,6 +74,8 @@ var e2eDocLanguages = []e2eDocLanguage{
 		windowsCIStepsSection:        "## CI 단계",
 		windowsCIResult:              "## CI 결과 확인",
 		utmSelectionSection:          "### 테스트 선택·반복·시간 제한",
+		subtestsSection:              "## 하위 테스트",
+		subtestColumns:               []string{"하위 테스트", "모드"},
 		ciStepsLifecycleTests:        regexp.MustCompile(`\(#실행-명령\)에 나온 (\S+) 테스트`),
 		ciResultLifecycleTests:       regexp.MustCompile(`반복 단계의 (\S+) 테스트와 \S+ 옵션 조합`),
 		ciResultLifecycleSubtests:    regexp.MustCompile(`반복 단계의 \S+ 테스트와 (\S+) 옵션 조합`),
@@ -391,32 +402,214 @@ func checkCountWord(t *testing.T, file, doc string, phrase *regexp.Regexp, want 
 	}
 }
 
-var stringRange = regexp.MustCompile(`range \[\]string\{([^}]*)\}`)
+// scenarioSubtests는 시나리오 하나가 t.Run으로 만드는 하위 테스트의 이름이다. 이름을 소스에서 읽지 못하면 err에 그 까닭이 있다.
+type scenarioSubtests struct {
+	names []string
+	err   error
+}
 
-// subtestCount는 시나리오 source가 만드는 하위 테스트 수이고, t.Run이 없으면 0이다.
-// 첫 t.Run 앞에 있는 []string 목록의 for 문이 모두 t.Run을 감싼다고 보고 목록 길이를 곱한다. 그런 for 문이 없으면 name과 함께 알린다.
-func subtestCount(t *testing.T, name, source string) int {
+// e2eScenarioSubtests는 e2eScenarioSources의 시나리오마다 하위 테스트 이름을 소스에서 읽는다.
+// e2eScenarioSources처럼 빌드 태그가 붙은 파일도 OS와 관계없이 읽으려고, 컴파일하지 않고 구문 트리만 만든다.
+func e2eScenarioSubtests(t *testing.T) map[string]scenarioSubtests {
 	t.Helper()
-	beforeRun, _, found := strings.Cut(source, "t.Run(")
-	if !found {
-		return 0
+	scenarios := e2eScenarioSources(t)
+	files, err := filepath.Glob(filepath.Join(e2eScenariosDir, "*_test.go"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	loops := stringRange.FindAllStringSubmatch(beforeRun, -1)
-	if len(loops) == 0 {
-		t.Errorf("%s: cannot count subtests: t.Run is not inside a range over a []string literal", name)
-		return 0
+	fset := token.NewFileSet()
+	subtests := map[string]scenarioSubtests{}
+	for _, file := range files {
+		syntax, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range syntax.Decls {
+			fn, isFunc := decl.(*ast.FuncDecl)
+			if !isFunc || fn.Recv != nil {
+				continue
+			}
+			if _, isScenario := scenarios[fn.Name.Name]; !isScenario {
+				continue
+			}
+			r := subtestReader{fset: fset, locals: map[string]ast.Expr{}}
+			r.walk(fn.Body, map[string]any{}, false)
+			subtests[fn.Name.Name] = scenarioSubtests{r.names, r.err}
+		}
 	}
-	count := 1
-	for _, loop := range loops {
-		count *= len(strings.Split(loop[1], ","))
+	return subtests
+}
+
+// subtestReader는 시나리오 함수에서 t.Run의 첫 인자를 실행하지 않고 계산한다.
+// 이름은 문자열·정수·bool 리터럴, 리터럴 slice를 도는 range 변수와 그 struct 필드, 문자열 +, fmt.Sprintf로 만든 것만 읽는다.
+// range가 도는 slice는 리터럴이거나, 리터럴을 := 로 받은 지역 변수여야 한다.
+type subtestReader struct {
+	fset *token.FileSet
+	// locals는 := 로 선언한 지역 변수의 오른쪽 식이다.
+	locals map[string]ast.Expr
+	names  []string
+	err    error
+}
+
+// walk는 node 안의 t.Run마다 이름을 계산해 names에 더한다. env는 둘러싼 range 변수의 값이다.
+// inUnknownLoop이면 t.Run이 몇 번 도는지 알 수 없으므로, t.Run을 만나면 err에 알린다.
+func (r *subtestReader) walk(node ast.Node, env map[string]any, inUnknownLoop bool) {
+	ast.Inspect(node, func(n ast.Node) bool {
+		if r.err != nil {
+			return false
+		}
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			if n.Tok == token.DEFINE && len(n.Lhs) == len(n.Rhs) {
+				for i, lhs := range n.Lhs {
+					if id, ok := lhs.(*ast.Ident); ok {
+						r.locals[id.Name] = n.Rhs[i]
+					}
+				}
+			}
+		case *ast.ForStmt:
+			r.walk(n.Body, env, true)
+			return false
+		case *ast.RangeStmt:
+			r.walkRange(n, env, inUnknownLoop)
+			return false
+		case *ast.CallExpr:
+			if !isCall(n, "t", "Run") {
+				break
+			}
+			position := r.fset.Position(n.Pos())
+			if inUnknownLoop {
+				r.err = fmt.Errorf("%s: cannot read subtest names: t.Run is inside a loop whose values are not literals", position)
+				return false
+			}
+			name, ok := r.eval(n.Args[0], env)
+			if s, isString := name.(string); ok && isString {
+				r.names = append(r.names, s)
+			} else {
+				r.err = fmt.Errorf("%s: cannot read the subtest name from the first argument of t.Run", position)
+			}
+			// 하위 테스트의 본문은 읽지 않는다.
+			return false
+		}
+		return true
+	})
+}
+
+// walkRange는 loop가 리터럴 slice를 돌면 요소마다 range 변수를 그 값으로 두고 본문을 읽는다.
+// 리터럴이 아닌 것을 돌면 본문을 몇 번 도는지 모르는 반복으로 읽는다.
+func (r *subtestReader) walkRange(loop *ast.RangeStmt, env map[string]any, inUnknownLoop bool) {
+	x := loop.X
+	if id, ok := x.(*ast.Ident); ok {
+		x = r.locals[id.Name]
 	}
-	return count
+	list, isLiteral := x.(*ast.CompositeLit)
+	if !isLiteral {
+		r.walk(loop.Body, env, true)
+		return
+	}
+	value, _ := loop.Value.(*ast.Ident)
+	for _, elt := range list.Elts {
+		inner := maps.Clone(env)
+		if value != nil {
+			// 읽지 못한 요소의 range 변수가 바깥 range 변수의 값을 쓰지 않게 지운다.
+			delete(inner, value.Name)
+			if v, ok := r.eval(elt, env); ok {
+				inner[value.Name] = v
+			}
+		}
+		r.walk(loop.Body, inner, inUnknownLoop)
+	}
+}
+
+// eval은 expr의 값을 string, int, bool, 또는 struct 리터럴의 필드 이름과 값을 담은 map으로 계산한다.
+// struct 리터럴에서 계산하지 못한 필드는 빼고, 그 밖의 식을 계산하지 못하면 ok가 false다.
+func (r *subtestReader) eval(expr ast.Expr, env map[string]any) (value any, ok bool) {
+	switch e := expr.(type) {
+	case *ast.ParenExpr:
+		return r.eval(e.X, env)
+	case *ast.BasicLit:
+		var err error
+		switch e.Kind {
+		case token.STRING:
+			value, err = strconv.Unquote(e.Value)
+			return value, err == nil
+		case token.INT:
+			value, err = strconv.Atoi(e.Value)
+			return value, err == nil
+		}
+	case *ast.Ident:
+		if v, found := env[e.Name]; found {
+			return v, true
+		}
+		switch e.Name {
+		case "true":
+			return true, true
+		case "false":
+			return false, true
+		}
+	case *ast.SelectorExpr:
+		x, _ := r.eval(e.X, env)
+		if fields, isStruct := x.(map[string]any); isStruct {
+			v, found := fields[e.Sel.Name]
+			return v, found
+		}
+	case *ast.BinaryExpr:
+		x, _ := r.eval(e.X, env)
+		y, _ := r.eval(e.Y, env)
+		xs, isString := x.(string)
+		ys, alsoString := y.(string)
+		if e.Op == token.ADD && isString && alsoString {
+			return xs + ys, true
+		}
+	case *ast.CallExpr:
+		if !isCall(e, "fmt", "Sprintf") || len(e.Args) == 0 {
+			break
+		}
+		var args []any
+		for _, arg := range e.Args {
+			v, ok := r.eval(arg, env)
+			if !ok {
+				return nil, false
+			}
+			args = append(args, v)
+		}
+		if format, isString := args[0].(string); isString {
+			return fmt.Sprintf(format, args[1:]...), true
+		}
+	case *ast.CompositeLit:
+		fields := map[string]any{}
+		for _, elt := range e.Elts {
+			kv, isField := elt.(*ast.KeyValueExpr)
+			if !isField {
+				return nil, false
+			}
+			key, isName := kv.Key.(*ast.Ident)
+			if !isName {
+				return nil, false
+			}
+			if v, ok := r.eval(kv.Value, env); ok {
+				fields[key.Name] = v
+			}
+		}
+		return fields, true
+	}
+	return nil, false
+}
+
+// isCall은 call이 x.fn(...) 꼴이고 x가 이름 name인 패키지나 변수인지 본다.
+func isCall(call *ast.CallExpr, name, fn string) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != fn {
+		return false
+	}
+	x, ok := sel.X.(*ast.Ident)
+	return ok && x.Name == name
 }
 
 // windows 문서는 Windows CI의 정상 종료 반복 목록과 알림 트리 검증 목록, 그 하위 테스트를 이름 없이 개수로도 가리킨다.
 // 이 개수를 ci.yml 단계의 -run 목록과 시나리오 소스에서 센 수와 비교한다. 목록끼리 같은지는 TestE2EDocsSubsetListsAgree가 본다.
 func TestE2EDocsCountWordsMatchLists(t *testing.T) {
-	sources := e2eScenarioSources(t)
+	scenarios := e2eScenarioSubtests(t)
 	workflow := readDoc(t, ciWorkflowFile)
 	lifecycleStep := "Repeat Windows graceful lifecycle without test cache"
 	notificationStep := "Verify Windows error notification process trees"
@@ -425,11 +618,13 @@ func TestE2EDocsCountWordsMatchLists(t *testing.T) {
 	subtests := func(names []string) int {
 		total := 0
 		for _, name := range names {
-			source, found := sources[name]
+			subtests, found := scenarios[name]
 			if !found {
 				t.Errorf("%s: %s is not a scenario in %s", ciWorkflowFile, name, e2eScenariosDir)
+			} else if subtests.err != nil {
+				t.Errorf("%s: %v", name, subtests.err)
 			}
-			total += subtestCount(t, name, source)
+			total += len(subtests.names)
 		}
 		return total
 	}
@@ -442,6 +637,80 @@ func TestE2EDocsCountWordsMatchLists(t *testing.T) {
 		checkCountWord(t, windows, doc, lang.ciResultLifecycleTests, len(lifecycle), fmt.Sprintf("scenarios %q of the %s step", lifecycle, lifecycleStep))
 		checkCountWord(t, windows, doc, lang.ciResultLifecycleSubtests, lifecycleSubtests, fmt.Sprintf("subtests of %q", lifecycle))
 		checkCountWord(t, windows, doc, lang.ciResultNotificationSubtests, notificationSubtests, fmt.Sprintf("subtests of %q", notification))
+	}
+}
+
+// unreadableSubtests는 하위 테스트 이름을 소스에서 읽을 수 없어 문서와 비교하지 않는 시나리오와 그 까닭이다.
+var unreadableSubtests = map[string]string{
+	"TestCanceledPowershellHookStops": "t.Run runs in a for loop over time.Duration, and the scenario documents give the name pattern after=<time> instead of each name",
+}
+
+var subtestBullet = regexp.MustCompile("^- `([^`]+)`")
+
+// docSubtestLists는 시나리오 문서 doc에서 하위 테스트 이름을 적은 목록을 모두 모은다.
+// 첫 칸 머리말이 lang.subtestColumns 가운데 하나인 표가 한 목록이고, 그 표의 첫 칸에는 백틱으로 감싼 이름 하나만 둔다.
+// 하위 테스트 절에 그런 표가 없으면, 그 절에서 백틱으로 감싼 이름으로 시작하는 bullet이 한 목록이다.
+func docSubtestLists(t *testing.T, file, doc string, lang e2eDocLanguage) []scenarioList {
+	t.Helper()
+	isSubtestTable := func(table markdownTable) bool { return slices.Contains(lang.subtestColumns, table.header[0]) }
+	var lists []scenarioList
+	for _, table := range markdownTables(doc) {
+		if !isSubtestTable(table) {
+			continue
+		}
+		list := scenarioList{location: fmt.Sprintf("%s %q table", file, table.header[0])}
+		for _, cells := range table.rows {
+			name, found := strings.CutPrefix(cells[0], "`")
+			name, quoted := strings.CutSuffix(name, "`")
+			if !found || !quoted || strings.Contains(name, "`") {
+				t.Errorf("%s: cannot read a subtest name from the first cell %q", list.location, cells[0])
+				continue
+			}
+			list.names = append(list.names, name)
+		}
+		lists = append(lists, list)
+	}
+	if !strings.Contains(doc, "\n"+lang.subtestsSection+"\n") {
+		return lists
+	}
+	section := markdownSection(t, file, doc, lang.subtestsSection)
+	if slices.ContainsFunc(markdownTables(section), isSubtestTable) {
+		return lists
+	}
+	bullets := scenarioList{location: file + " " + lang.subtestsSection + " bullets"}
+	for _, line := range strings.Split(section, "\n") {
+		if m := subtestBullet.FindStringSubmatch(line); m != nil {
+			bullets.names = append(bullets.names, m[1])
+		}
+	}
+	return append(lists, bullets)
+}
+
+// 시나리오 문서 두 판의 하위 테스트 목록마다, 적힌 이름이 시나리오 소스의 t.Run 이름과 같은지 확인한다.
+func TestE2EDocsSubtestListsMatchCode(t *testing.T) {
+	for name, subtests := range e2eScenarioSubtests(t) {
+		if reason, excluded := unreadableSubtests[name]; excluded {
+			if subtests.err == nil {
+				t.Errorf("%s: subtest names are now readable, so remove it from unreadableSubtests (%s)", name, reason)
+			}
+			continue
+		}
+		if subtests.err != nil {
+			t.Errorf("%s: %v; make the names readable or add it to unreadableSubtests with the reason", name, subtests.err)
+			continue
+		}
+		for _, lang := range e2eDocLanguages {
+			file := e2eDocsDir + "scenarios/" + scenarioDocName(name) + lang.ext
+			lists := docSubtestLists(t, file, readDoc(t, file), lang)
+			if len(lists) == 0 && len(subtests.names) > 0 {
+				t.Errorf("%s: no subtest list for the subtests %q of %s", file, subtests.names, name)
+			}
+			for _, list := range lists {
+				if missing, extra := setDifference(list.names, subtests.names); len(missing) > 0 || len(extra) > 0 {
+					t.Errorf("%s: missing subtests %q, names not in the t.Run calls of %s %q", list.location, missing, name, extra)
+				}
+			}
+		}
 	}
 }
 

@@ -48,7 +48,7 @@ The `actions` subtest runs these actions in order:
 
 ## Subtests
 
-- The only subtest is `actions`, which runs the actions in the table under [What it checks and success criteria](#what-it-checks-and-success-criteria) in order with one watcher.
+- `actions` is the only subtest and runs the actions in the table under [What it checks and success criteria](#what-it-checks-and-success-criteria) in order with one watcher.
 
 ## Sequence
 
