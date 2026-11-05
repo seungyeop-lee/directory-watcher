@@ -35,6 +35,10 @@ const maxFirstBreakDelay = time.Second
 // 테스트만 바꾼다.
 var breakGrace = shutdownGrace
 
+// beforeBreakCheck는 테스트만 정한다. breakableAt이 프로세스의 생성 시각을 읽기 직전에 불러, stopJob이 job을 읽은 뒤
+// 신호를 보내기 전에 프로세스가 만들어진 경우를 테스트가 만들게 한다.
+var beforeBreakCheck func(job windows.Handle)
+
 // jobKillWait는 job의 프로세스를 강제로 끝낸 뒤 모두 사라지기를 기다리는 최대 시간이다.
 const jobKillWait = 5 * time.Second
 
@@ -181,7 +185,8 @@ func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(tree processTree)) {
 // maxFirstBreakDelay보다 늦추지는 않는다(waitBeforeFirstBreak). CTRL+BREAK는 보낸 순간 프로세스 그룹에 있던 프로세스에만
 // 가므로, cmd.exe가 명령 목록의 다음 프로그램을 시작하는 것처럼 첫 신호 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다.
 // 들어온 프로세스가 minRunBeforeBreak만큼 실행된 뒤에 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상
-// 종료하는 프로그램에는 두 번째 신호가 가지 않는다.
+// 종료하는 프로그램에는 두 번째 신호가 가지 않는다. 다시 보내는 신호도 job에 만들어진 지 minRunBeforeBreak가 지나지 않은
+// 프로세스가 있으면 미룬다(hasYoungProcess).
 // 신호를 보낸 순간 콘솔에 아직 연결되지 않았던 프로세스도 그 신호를 받지 못한다. 만들어진 뒤 초기화가 늦어진 프로세스는
 // job에 이미 들어 있어 프로세스 수가 늘지 않으므로, 그런 프로세스가 콘솔에 연결된 지 minRunBeforeBreak가 지나면 다시 보낸다
 // (breakReach).
@@ -189,11 +194,11 @@ func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(tree processTree)) {
 // 신호로 끝나지 않는 프로세스가 여기서 끝난다. Windows PowerShell은 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지
 // 않고 디버거로 들어가며, 표준 입력이 콘솔이면 거기서 입력을 기다린다.
 func stopJob(job windows.Handle, send func() error) error {
-	signaled, err := waitBeforeFirstBreak(job)
+	signaled, attached, err := waitBeforeFirstBreak(job)
 	if err != nil {
 		return errors.Join(send(), err)
 	}
-	reach := newBreakReach(attachedJobProcesses(job))
+	reach := newBreakReach(attached)
 	sendErr := send()
 	deadline := time.Now().Add(breakGrace)
 	joined, lastJoin := signaled, time.Time{}
@@ -214,7 +219,7 @@ func stopJob(job windows.Handle, send func() error) error {
 		}
 		attached := attachedJobProcesses(job)
 		attachedLate := reach.observe(attached, now)
-		if (joined != signaled && now.Sub(lastJoin) >= minRunBeforeBreak) || attachedLate {
+		if ((joined != signaled && now.Sub(lastJoin) >= minRunBeforeBreak) || attachedLate) && !hasYoungProcess(job) {
 			signaled = joined
 			reach = newBreakReach(attached)
 			_ = send()
@@ -266,29 +271,49 @@ func (r breakReach) observe(attached map[uint32]bool, now time.Time) bool {
 	return late
 }
 
-// waitBeforeFirstBreak은 job에서 가장 늦게 만들어진 프로세스가 minRunBeforeBreak만큼 실행될 때까지 기다리고, 기다림을
-// 마칠 때까지 job에 들어온 프로세스 수를 돌려준다. 만들어진 지 minRunBeforeBreak가 지나지 않은 프로세스는 CTRL+BREAK를
+// waitBeforeFirstBreak은 job의 프로세스가 모두 minRunBeforeBreak만큼 실행될 때까지 기다리고, 기다림을 마칠 때 job에 들어온
+// 프로세스 수와 콘솔에 연결된 job의 프로세스를 돌려준다. 만들어진 지 minRunBeforeBreak가 지나지 않은 프로세스는 CTRL+BREAK를
 // 받지 못하거나 0xC0000005로 끝나기도 한다. 기다리는 동안 들어온 프로세스가 있으면 그 프로세스를 기준으로 다시 기다리되,
 // 처음부터 maxFirstBreakDelay가 지나면 더 기다리지 않는다.
-func waitBeforeFirstBreak(job windows.Handle) (uint32, error) {
+func waitBeforeFirstBreak(job windows.Handle) (uint32, map[uint32]bool, error) {
 	limit := time.Now().Add(maxFirstBreakDelay)
-	accounting, err := queryJob(job)
-	for err == nil {
-		joined := accounting.totalProcesses
-		var lastCreated time.Time
-		if lastCreated, err = lastProcessCreation(job); err != nil {
-			break
+	for {
+		accounting, err := queryJob(job)
+		if err != nil {
+			return 0, nil, err
 		}
-		wake := lastCreated.Add(minRunBeforeBreak)
+		attached := attachedJobProcesses(job)
+		wake, err := breakableAt(job)
+		if err != nil {
+			return 0, nil, err
+		}
+		if now := time.Now(); !now.Before(wake) || !now.Before(limit) {
+			return accounting.totalProcesses, attached, nil
+		}
 		if wake.After(limit) {
 			wake = limit
 		}
 		time.Sleep(time.Until(wake))
-		if accounting, err = queryJob(job); err == nil && (accounting.totalProcesses == joined || !time.Now().Before(limit)) {
-			return accounting.totalProcesses, nil
-		}
 	}
-	return 0, err
+}
+
+// breakableAt은 job에서 실행 중인 프로세스가 모두 minRunBeforeBreak만큼 실행되는 시각을 돌려준다. stopJob은 신호를 보낼지
+// 정할 job의 정보를 모두 읽은 뒤 신호를 보내기 직전에 이 시각을 확인해, 그 사이에 만들어진 프로세스에 신호를 보내지 않는다.
+// signal.Notify를 마치기 전에 CTRL+BREAK를 맞은 Go 프로그램은 그 뒤에 다시 보낸 신호도 받지 못하기도 한다. 이 확인과 신호
+// 사이에 만들어진 프로세스는 여전히 이른 신호를 맞을 수 있다.
+func breakableAt(job windows.Handle) (time.Time, error) {
+	if beforeBreakCheck != nil {
+		beforeBreakCheck(job)
+	}
+	last, err := lastProcessCreation(job)
+	return last.Add(minRunBeforeBreak), err
+}
+
+// hasYoungProcess는 job에 만들어진 지 minRunBeforeBreak가 지나지 않은 프로세스가 있는지 돌려준다(breakableAt). job을 읽지
+// 못하면 신호를 미루지 않도록 false를 돌려준다.
+func hasYoungProcess(job windows.Handle) bool {
+	wake, err := breakableAt(job)
+	return err == nil && time.Now().Before(wake)
 }
 
 // jobProcessIDList는 JOBOBJECT_BASIC_PROCESS_ID_LIST다. 목록 크기는 hook 하나가 동시에 실행하는 프로세스 수보다

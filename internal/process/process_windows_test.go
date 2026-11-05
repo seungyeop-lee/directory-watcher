@@ -405,6 +405,82 @@ func TestRunCommandDelaysBreakForDescendantStartedWhileWaiting(t *testing.T) {
 	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
 }
 
+// stopJob이 job을 읽고 나서 첫 CTRL+BREAK를 보내기 전에 hook이 자손을 시작해도, 그 자손은 시작 후 minRunBeforeBreak가 지난
+// 뒤에 CTRL+BREAK를 받고 끝나야 한다. signal.Notify를 마치기 전에 CTRL+BREAK를 맞은 Go 프로그램은 그 뒤에 다시 보낸 신호도
+// 받지 못하기도 한다.
+func TestRunCommandDelaysBreakForDescendantStartedJustBeforeBreak(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "record")
+	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
+	t.Setenv("DW_BREAK_SIGNAL_LATE_CHILD", "1")
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
+	cmd, sentAt := breakSignalHook(t, ctx)
+	stdin, startChild, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	defer startChild.Close()
+	cmd.Stdin = stdin
+	var childCreated time.Time
+	var hookErr error
+	t.Cleanup(func() { beforeBreakCheck = nil })
+	beforeBreakCheck = func(job windows.Handle) {
+		if !childCreated.IsZero() || hookErr != nil {
+			return
+		}
+		childCreated, hookErr = startJobDescendant(job, startChild)
+	}
+	done := runUntilReady(t, ctx, cmd)
+	canceled := time.Now()
+	ctx.Cancel()
+	ended := true
+	select {
+	case <-done:
+	case <-time.After(breakGrace / 2):
+		ended = false
+	}
+
+	if hookErr != nil {
+		t.Fatalf("start a descendant before CTRL+BREAK: %v", hookErr)
+	}
+	for _, sent := range sentAt() {
+		if sent.Sub(childCreated) < minRunBeforeBreak {
+			t.Fatalf("CTRL+BREAK sent %s after the descendant started, want at least %s", sent.Sub(childCreated), minRunBeforeBreak)
+		}
+	}
+	if !ended {
+		t.Fatal("canceled hook and the descendant it started just before CTRL+BREAK did not end on CTRL+BREAK")
+	}
+	events := recordedEvents(t, record)
+	slices.Sort(events)
+	if !slices.Equal(events, []string{"signal", "signal", "start", "start"}) {
+		t.Fatalf("recorded %v, want both programs to start and get CTRL+BREAK", events)
+	}
+	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
+}
+
+// startJobDescendant는 DW_BREAK_SIGNAL_LATE_CHILD=1인 hook에 startChild로 1바이트를 보내 자식을 시작하게 하고, 그 자식이
+// job에 들어오면 job에서 가장 늦게 만들어진 프로세스의 생성 시각을 돌려준다.
+func startJobDescendant(job windows.Handle, startChild *os.File) (time.Time, error) {
+	before, err := queryJob(job)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if _, err := startChild.Write([]byte{0}); err != nil {
+		return time.Time{}, err
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(jobPollInterval) {
+		accounting, err := queryJob(job)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if accounting.totalProcesses > before.totalProcesses {
+			return lastProcessCreation(job)
+		}
+	}
+	return time.Time{}, fmt.Errorf("descendant did not join the job")
+}
+
 // 첫 CTRL+BREAK를 보낼 때 이미 job에 있었지만 아직 콘솔에 연결되지 않아 신호를 받지 못한 자손도, 나중에 콘솔에 연결되면
 // CTRL+BREAK를 받고 끝나야 한다. job의 프로세스 수는 첫 신호 뒤에 늘지 않는다.
 func TestRunCommandSendsBreakAgainToProcessAttachedToConsoleAfterBreak(t *testing.T) {
