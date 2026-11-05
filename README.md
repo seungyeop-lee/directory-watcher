@@ -81,13 +81,7 @@ global:
 
 ### Install one executable anywhere
 
-- Directory Watcher is a single executable that you can install with Homebrew, Scoop, or `go install`, or run from the published Docker image. See [Installation](#installation).
-
-To add it to an image you build, copy it from the published image:
-
-```dockerfile
-COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
-```
+- Directory Watcher is a single executable that you can install with Homebrew, Scoop, or `go install`, run from the published Docker image, or copy into an image you build. See [Installation](#installation).
 
 ### Also in Directory Watcher
 
@@ -171,8 +165,8 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 
 ## Requirements
 
-- macOS or Linux. The watcher has been verified to work correctly on these systems.
-- Windows, with a limit on how quickly some hooks stop. See [Running on Windows](docs/guide/installation.md#running-on-windows).
+- Directory Watcher runs on macOS and Linux.
+- It also runs on Windows, where a hook that does not exit on CTRL+BREAK takes up to 20 seconds to stop. See [Running on Windows](docs/guide/installation.md#running-on-windows).
 
 ## Development checks
 

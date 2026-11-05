@@ -87,6 +87,7 @@ watchTargets:
 - `<대상>`은 감시 대상 `path`의 마지막 경로 요소입니다.
 - `<명령>`의 형태는 [hook 명령을 실행하는 셸](#hook-명령을-실행하는-셸)에 있습니다.
 - 새 실행이 취소했거나(`run.interrupt`) 감시가 종료되어 멈춘 명령은 실패가 아니므로 로그에 남지 않습니다.
+- 대상 `onStartWatch`나 `onFinishWatch`의 명령이 실패해도 그 hook의 나머지 명령을 건너뛰고, 같은 형태의 로그를 남깁니다.
 
 - 전역 `onStartWatch`나 전역 `onFinishWatch`의 명령이 실패하면 그 hook의 나머지 명령을 건너뜁니다.
 

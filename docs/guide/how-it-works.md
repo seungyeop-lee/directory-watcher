@@ -86,4 +86,4 @@ flowchart TD
 ```
 
 - Target finish commands may run while `onError` is still running. Global `onFinishWatch` waits for both.
-- Finish commands have no time limit of their own.
+- The rules for running finish commands are in [Overload and shutdown](running.md#overload-and-shutdown).

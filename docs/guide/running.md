@@ -81,6 +81,9 @@ For example, if one wait collects the creation of `a.txt`, an update of `a.txt`,
 - `watch.fileEvent` and `watch.dirEvent` choose among the final changes, or among the events with `each`.
 - A path can change again after the watcher checks the disk and before the hook runs. That change follows as a new event, so the hook has to read the actual file when it runs.
 - `lastPerPath` runs paths in the order they last changed. Use `each` when the order between files matters.
+- `each` passes every received event in the order it happened, even when events pile up; it never keeps only the latest one.
+- Files can be reported in a different order from the one in which they were created, so do not assume that the last file created is the path that `last` runs.
+- Events of excluded paths make no runs and do not extend a wait.
 
 ## Queue size and warnings
 
@@ -124,7 +127,7 @@ The warning is passed as environment variables:
 
 - `DW_QUEUE_TOP_PATHS` helps find a hook whose own output keeps running it again, as described in [Stopping a hook from rerunning itself](events.md#stopping-a-hook-from-rerunning-itself).
 - Read the variables with the shell's syntax, as for `onError`. File-event template variables are not available for this hook.
-- A structured `dir` selects its working directory; without it, the command uses the program execution directory.
+- The directory a command runs in when it has no `dir` is in [Command execution location](configuration.md#command-execution-location).
 
 ## Running hooks with run
 
@@ -171,12 +174,12 @@ Error context is passed as environment variables, never interpolated into comman
 - The notification command also runs in the configured shell, so read the environment variables with that shell's syntax: for example `printf '%s\n' "$DW_ERROR_MESSAGE"` in `sh`, `echo !DW_ERROR_MESSAGE!` in `cmd`, and `Write-Output $env:DW_ERROR_MESSAGE` in `powershell`.
   - In `cmd`, use `!DW_ERROR_MESSAGE!` rather than `%DW_ERROR_MESSAGE%`, which lets a `&` in the value split the command.
 - File-event template variables are not available for this hook.
-- A structured `dir` selects its working directory; without it, the command uses the program execution directory.
+- The directory a command runs in when it has no `dir` is in [Command execution location](configuration.md#command-execution-location).
 
 - After the first fatal error, no new run of normal hooks starts on any target.
-- The notification has an independent, fixed 5-second execution timeout, followed by up to 20 seconds of cancellation cleanup (at most 25 seconds total), regardless of normal-hook cancellation.
-- A notification failure or timeout is logged and never replaces the original fatal error; the CLI still exits nonzero for that original error.
-- Normal finish hooks still run after cancellation, with their existing behavior.
+- The notification runs for at most 5 seconds, whatever happens to the normal hooks, followed by up to 20 seconds to clean up the command and the processes it started (at most 25 seconds total).
+- A notification failure or timeout is logged, but the watcher still prints the original fatal error and exits with code 1.
+- Finish hooks still run after a fatal error, as described in [Overload and shutdown](#overload-and-shutdown).
 
 - After each notification command completes, fails, or times out, the processes it started that are still running are ended within the same cleanup limit.
   - On Windows, if the watcher cannot prepare a notification command so that these processes can be ended, that command does not run and the failure is logged.
@@ -184,16 +187,30 @@ Error context is passed as environment variables, never interpolated into comman
 
 ## Overload and shutdown
 
-- Each target keeps at most `queue.size` pending runs, as described in [Queue size and warnings](#queue-size-and-warnings), and runs at most `run.concurrency` runs of its hooks at a time. `hookBatch.deliver: each` preserves received-event order; it does not become latest-only under load. Excluded paths neither make runs nor extend a wait. Creation-call order across files does not guarantee notification receipt order, so the last file created is not necessarily the path that `deliver: last` runs.
-- A full dispatch queue or a watcher error stops processing. The default log includes the watched target and original cause; the CLI cleans up all targets and exits nonzero. Queue saturation is reported as `dispatch queue full`, distinct from an OS-reported overflow. No automatic restart or persistent queue is provided.
-- A target that fails to start watching is also a fatal error: its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list. Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either. The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the CLI exits with code 1.
-- A shutdown signal cancels every running start and change run, discards pending changes, waits for event handling and every canceled run to stop, then runs finish hooks. Finish hooks keep their existing command behavior and have no additional timeout. Targets run independently.
-- On Windows, a canceled hook gets CTRL+BREAK, and so do the programs it starts after the cancel, such as the next program of `a & b` in `cmd`, once 500 ms have passed since each of them started. Processes of the hook that are still running 20 seconds after the first CTRL+BREAK are ended together, including processes that ignore the signal or use their own console or process group. Replacement and shutdown wait until every process of the hook has ended, so a hook that does not exit on CTRL+BREAK, including some `powershell` hooks, delays them by up to 20 seconds.
+- A full dispatch queue or a watcher error stops processing.
+  - The default log shows the watched target and the cause, and the watcher cleans up every target and exits with code 1.
+  - A full queue is reported with a cause that starts with `dispatch queue full`, so you can tell it from an overflow that the OS reported.
+  - The watcher does not restart on its own, and the runs that were waiting are discarded, not saved.
+- Filesystem actions do not map one-to-one to notifications.
+  - Linux and Windows report an OS event overflow, which stops processing like a full dispatch queue. macOS does not report one.
+  - The queue limit does not detect every loss that happens in the OS.
+  - The E2E does not cause a real OS overflow. How its loss notification scenarios create their errors and how OS overflow is judged are in [E2E scenarios and limits](../../e2e/docs/reliability.md#kinds-of-loss-verification).
+- A target that fails to start watching is also a fatal error.
+  - This happens when its `path` does not exist, its folder link cannot be resolved, or a folder cannot be added to the watch list.
+  - Because that target never ran `onStartWatch`, its `onFinishWatch` does not run either.
+  - The `onFinishWatch` of the other targets that started watching and global `onFinishWatch` still run, and the watcher exits with code 1.
+- A shutdown signal cancels every running target `onStartWatch` and change run and discards pending changes.
+  - The finish hooks run once event handling and every canceled run have stopped.
+  - Targets stop independently, without waiting for each other.
+  - Finish hooks run their commands by the same rules as other hooks and have no time limit of their own.
+- On Windows, a canceled hook gets CTRL+BREAK.
+  - The programs the hook starts after the cancel, such as the next program of `a & b` in `cmd`, also get CTRL+BREAK once 500 ms have passed since each of them started.
   - A process of the hook that has been created but has not yet attached to the console when CTRL+BREAK is sent, for example because it starts slowly under load, does not get that CTRL+BREAK. It gets CTRL+BREAK again once 500 ms have passed since it attached to the console, and the other processes of the hook get this CTRL+BREAK as well.
+- On Windows, processes of the hook that are still running 20 seconds after the first CTRL+BREAK are ended together, including processes that ignore the signal or use their own console or process group.
+  - Replacement and shutdown wait until every process of the hook has ended, so a hook that does not exit on CTRL+BREAK, including some `powershell` hooks, delays them by up to 20 seconds.
 - On Windows, a hook canceled less than 500 ms after it starts gets CTRL+BREAK only when 500 ms have passed since its start, so replacement and shutdown right after a hook starts take up to 500 ms longer.
   - If the hook is canceled less than 500 ms after it starts a program, the hook and that program also get CTRL+BREAK only when 500 ms have passed since the program started.
-- On Windows, processes started by a hook that finishes without being canceled keep running.
+  - When the hook keeps starting programs, the watcher delays the first CTRL+BREAK by at most 1 second from the cancel or from 500 ms after the hook started, whichever is later. That CTRL+BREAK also goes to programs that started less than 500 ms before.
 - What the Windows E2E checks about stopping canceled hooks is listed in [Windows E2E](../../e2e/docs/windows.md#hook-cancellation-checks).
-- Filesystem actions do not map one-to-one to notifications. Linux and Windows report an OS event overflow, which stops processing like a full dispatch queue; macOS does not report one. Application bounds do not guarantee detection of every OS-level loss. The E2E does not cause a real OS overflow; how its loss notification scenarios create their errors and how OS overflow is judged are in [E2E scenarios and limits](../../e2e/docs/reliability.md#kinds-of-loss-verification).
 
 - The order of these steps is drawn in [How it works](how-it-works.md).

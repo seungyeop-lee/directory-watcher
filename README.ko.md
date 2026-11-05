@@ -81,13 +81,7 @@ global:
 
 ### 실행 파일 하나로 어디서나 설치하기
 
-- Directory Watcher는 실행 파일 하나로 되어 있어서 Homebrew, Scoop, `go install`로 설치하거나 게시된 Docker 이미지로 실행할 수 있습니다. 자세한 내용은 [설치](#설치)를 확인하세요.
-
-직접 만드는 이미지에 넣으려면 게시된 이미지에서 실행 파일을 복사합니다.
-
-```dockerfile
-COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /usr/local/bin/
-```
+- Directory Watcher는 실행 파일 하나로 되어 있어서 Homebrew, Scoop, `go install`로 설치하거나, 게시된 Docker 이미지로 실행하거나, 직접 만드는 이미지에 복사해 넣을 수 있습니다. 자세한 내용은 [설치](#설치)를 확인하세요.
 
 ### 그 밖의 기능
 
@@ -171,8 +165,8 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 
 ## 요구 사항
 
-- macOS 또는 Linux. 이 두 환경에서 정상 작동하는 것을 확인했습니다.
-- Windows. 일부 hook을 멈추는 속도에 제약이 있습니다. 자세한 내용은 [Windows에서 실행하기](docs/guide/installation.ko.md#windows에서-실행하기)를 확인하세요.
+- Directory Watcher는 macOS와 Linux에서 실행됩니다.
+- Windows에서도 실행되지만, CTRL+BREAK로 끝나지 않는 hook은 멈추는 데 최대 20초가 걸립니다. 자세한 내용은 [Windows에서 실행하기](docs/guide/installation.ko.md#windows에서-실행하기)를 확인하세요.
 
 ## 개발 검증
 

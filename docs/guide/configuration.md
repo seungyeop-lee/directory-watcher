@@ -87,6 +87,7 @@ The failure is logged as an `[ERROR]` line, which the default log level shows:
 - `<target>` is the last element of the target's `path`.
 - The form of `<command>` is in [Shell that runs hook commands](#shell-that-runs-hook-commands).
 - A command stopped because a new run cancelled its run (`run.interrupt`) or because watching stopped is not a failure and is not logged.
+- When a command of target `onStartWatch` or `onFinishWatch` fails, the remaining commands of that hook are skipped and the same line is logged.
 
 - If a command of global `onStartWatch` or global `onFinishWatch` fails, the remaining commands of that hook are skipped.
 
