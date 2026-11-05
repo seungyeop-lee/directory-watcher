@@ -12,6 +12,8 @@
 - 기록이 빠지거나, 더 있거나, 순서가 다르면 실패합니다.
 - "이어서"로 시작하는 행은 바로 윗행의 기록을 hook이 받은 뒤에 파일을 만듭니다.
 
+`actions` 하위 테스트는 아래 동작을 차례로 실행합니다.
+
 | 동작 | 기대 기록 |
 |---|---|
 | `src/pkg` 만들기 | `C,true,src/pkg` |
@@ -21,8 +23,6 @@
 | 파일 3개가 든 `x`를 감시 폴더 밖에서 `src/x`로 옮겨 오기 | `C,true,src/x` |
 | 이어서 빈 파일 `src/x/after-move-in.txt` 만들기 | `C,false,src/x/after-move-in.txt` |
 | `src/n`을 만들고 곧바로 `src/n/a.txt` 쓰기 | `C,true,src/n` |
-| 파일 300개가 든 `big`을 밖에서 `src/big`으로 옮겨 오기 | `C,true,src/big` |
-| `src/big`을 안의 내용과 함께 지우기 | `D,true,src/big` |
 | `src/x`를 감시 폴더 밖으로 옮기기 | `D,true,src/x` |
 | 이어서 밖으로 옮긴 폴더 `outside/x`에 빈 파일 `after-move-out.txt` 만들기 | 없음 |
 | `src/n`의 이름을 `src/m`으로 바꾸기 | `D,true,src/n`, `C,true,src/m` |
@@ -33,6 +33,13 @@
 | `src/f.txt`의 이름을 `src/g.txt`로 바꾸기 | `D,false,src/f.txt`, `C,false,src/g.txt` |
 | `src/g.txt` 지우기 | `D,false,src/g.txt` |
 
+`folderWith300Files` 하위 테스트는 아래 동작을 차례로 실행합니다.
+
+| 동작 | 기대 기록 |
+|---|---|
+| 파일 300개가 든 `big`을 밖에서 `src/big`으로 옮겨 오기 | `C,true,src/big` |
+| `src/big`을 안의 내용과 함께 지우기 | `D,true,src/big` |
+
 - Windows는 감시 중인 하위 폴더가 있는 폴더의 이름 바꾸기와 옮기기를 거부하므로, 옮기거나 이름을 바꾸는 폴더에는 파일만 둡니다.
 - 사용 안내는 Windows에서 감시 대상 밖으로 폴더를 옮기고 약 100ms 뒤 감시를 다시 만드는 순간에 대상 안에서 생긴 변경의 중복 전달만 허용합니다.
 - 테스트는 `src/x`를 밖으로 옮긴 뒤, 그 행의 표지를 만들거나 다음 동작을 실행하기 전에 재생성 DEBUG 로그를 기다립니다.
@@ -42,10 +49,15 @@
 ## 설정
 
 - 대상 `onChange` hook은 `hookrec`으로 `CHANGE:{{.Event}},{{.IsDir}},{{.Path}}`를 기록합니다.
-- 대상 옵션은 `dirBatch.waitMillisecond: 1000`, `dirBatch.maxWaitMillisecond: 10000`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.exclude: ['*.probe']`입니다. `watch.fileEvent`와 `watch.dirEvent`는 기본값 `CUD`와 `CD`를 씁니다.
-  - 부하가 큰 Windows CI에서는 파일 300개가 든 폴더를 지우는 동안 이벤트 사이가 `dirBatch` 기본 대기 100ms를 넘어, 파일 삭제가 폴더의 `D`에 흡수되지 않은 적이 있습니다. 그래서 `dirBatch` 대기와 상한을 기본값보다 길게 둡니다.
-  - 표지 기록은 `dirBatch.maxWaitMillisecond`보다 긴 20초까지 기다립니다.
-- 테스트는 감시를 시작하기 전에 감시 폴더에 `src`와 `dst`를, 실행 폴더에 파일 3개가 든 `outside/x`와 파일 300개가 든 `outside/big`을 만듭니다.
+- 대상 옵션은 `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.exclude: ['*.probe']`입니다. `watch.fileEvent`와 `watch.dirEvent`는 기본값 `CUD`와 `CD`를 씁니다.
+- `folderWith300Files`는 `dirBatch.waitMillisecond: 1000`과 `dirBatch.maxWaitMillisecond: 10000`을 더 쓰고, 표지 기록을 이 상한보다 긴 20초까지 기다립니다.
+  - 부하가 큰 Windows CI에서는 파일 300개가 든 폴더를 지우는 동안 이벤트 사이가 `dirBatch` 기본 대기 100ms를 넘어, 파일 삭제가 폴더의 `D`에 흡수되지 않은 적이 있습니다.
+- 테스트는 감시를 시작하기 전에 감시 폴더에 `src`와 `dst`를 만듭니다. 실행 폴더에는 `actions`가 파일 3개가 든 `outside/x`를, `folderWith300Files`가 파일 300개가 든 `outside/big`을 만듭니다.
+
+## 하위 테스트
+
+- 두 하위 테스트는 watcher를 따로 띄우고, 각자 [확인 내용과 성공 조건](#확인-내용과-성공-조건)의 자기 표에 있는 동작을 실행합니다.
+- `folderWith300Files`는 늘린 `dirBatch` 대기 때문에 동작마다 약 1초씩 더 걸립니다. 이 동작을 따로 두어 `actions`는 기본 대기로 실행합니다.
 
 ## 진행 순서
 
@@ -70,7 +82,7 @@ sequenceDiagram
         watchDir-->>watcherProc: 표지 이벤트
         watcherProc->>hookRec: 폴더 이벤트와 다른 이벤트의 onChange를 순서대로 실행
         hookRec->>recordFile: 이벤트마다 한 줄
-        testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (최대 20초)
+        testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (최대 10초, folderWith300Files는 20초)
         testCode->>testCode: 표지 앞의 기록을 기대 기록과 비교
     end
     testCode->>watcherProc: 종료 신호
@@ -101,11 +113,13 @@ go run ./e2e/linux -- -run '^TestFolderEvents$'
 make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestFolderEvents$'"
 ```
 
+- 하위 테스트 하나만 실행하려면 `-run '^TestFolderEvents$/^actions$'`처럼 하위 테스트 이름을 덧붙입니다.
+
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 - Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 
 ## 관련 코드
 
-- `e2e/scenarios/folder_events_test.go`: `TestFolderEvents`와 폴더 이벤트를 받은 폴더 안에 파일을 만드는 행을 만드는 `createLater`입니다.
+- `e2e/scenarios/folder_events_test.go`: `TestFolderEvents`, 하위 테스트마다 watcher를 띄우는 `startFolderEvents`, 동작을 차례로 실행하고 기록을 비교하는 `folderEvents.run`, 폴더 이벤트를 받은 폴더 안에 파일을 만드는 행을 만드는 `createLater`입니다.
 - `e2e/scenarios/helpers_test.go`: `changeSteps`는 동작마다 표지까지 기록을 읽고, `relativeChange`는 기록을 감시 폴더 기준 경로로 바꿉니다. `mkdirAll`과 `createEmpty`는 폴더와 빈 파일을 만듭니다.
 - `e2e/harness`: `Start`, `Hook`, `Await`, `Lines`, `Stop`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
