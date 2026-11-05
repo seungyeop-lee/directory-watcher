@@ -196,20 +196,22 @@ func TestTemplateValueEndingInBackslashIsOneArgument(t *testing.T) {
 }
 
 // 확장자가 없는 파일의 {{.ExtName}}처럼 빈 값도 빈 인자 하나로 넘어가야 한다. Windows PowerShell 5.1은
-// 빈 문자열 인자를 프로그램에 넘기지 않으므로 powershell은 확인하지 않는다(docs/guide/configuration.md에 적은 제약).
+// 빈 문자열 인자를 프로그램에 넘기지 않으므로, powershell에서는 빈 인자가 빠지는 지금 동작을 확인한다
+// (docs/guide/configuration.md에 적은 제약).
 func TestEmptyTemplateValueIsOneEmptyArgument(t *testing.T) {
 	event := &domain.Event{Path: domain.Path(filepath.Join("dir", "noext")), Operation: domain.Operation(fsnotify.Create)}
 	for _, shell := range testedShells(t) {
-		if shell.String() == "powershell" {
-			continue
-		}
 		t.Run(shell.String(), func(t *testing.T) {
 			ctx, output := capturedContext(t)
 			cmd := command.NewManager(argsCommand(t, shell, `{{.ExtName}} end`))
 			if err := cmd.Run(ctx, domain.Path(t.TempDir()), event); err != nil {
 				t.Fatal(err)
 			}
-			if got, want := receivedArgs(t, output()), []string{"", "end"}; !equalLines(got, want) {
+			want := []string{"", "end"}
+			if shell.String() == "powershell" {
+				want = []string{"end"}
+			}
+			if got := receivedArgs(t, output()); !equalLines(got, want) {
 				t.Fatalf("program received %q, want %q", got, want)
 			}
 		})
