@@ -42,7 +42,9 @@
 ## Configuration
 
 - The target `onChange` hook records `CHANGE:{{.Event}},{{.IsDir}},{{.Path}}` with `hookrec`.
-- The target options are `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, and `watch.exclude: ['*.probe']`. `watch.fileEvent` and `watch.dirEvent` keep their defaults, `CUD` and `CD`.
+- The target options are `dirBatch.waitMillisecond: 1000`, `dirBatch.maxWaitMillisecond: 10000`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, and `watch.exclude: ['*.probe']`. `watch.fileEvent` and `watch.dirEvent` keep their defaults, `CUD` and `CD`.
+  - On a busy Windows CI runner, the gap between events while deleting a folder with 300 files once exceeded the `dirBatch` default wait of 100 ms, and file deletions were not absorbed into the folder's `D`. So the `dirBatch` wait and limit are longer than the defaults.
+  - The test waits up to 20 seconds for the sentinel records, longer than `dirBatch.maxWaitMillisecond`.
 - Before watching starts, the test creates `src` and `dst` in the watch folder, and `outside/x` with 3 files and `outside/big` with 300 files in the run folder.
 
 ## Sequence
@@ -68,7 +70,7 @@ sequenceDiagram
         watchDir-->>watcherProc: sentinel events
         watcherProc->>hookRec: onChange for the folder event and the other events in order
         hookRec->>recordFile: one line per event
-        testCode->>recordFile: wait for all sentinel records (up to 10s)
+        testCode->>recordFile: wait for all sentinel records (up to 20s)
         testCode->>testCode: compare the records before the sentinels with the expected records
     end
     testCode->>watcherProc: shutdown signal

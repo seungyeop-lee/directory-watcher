@@ -26,6 +26,9 @@ func TestFolderEvents(t *testing.T) {
 	// Windows는 감시 중인 하위 폴더가 있는 폴더의 이름을 바꾸거나 옮기지 못하므로, 옮기는 폴더에는 파일만 둔다.
 	fill(t, filepath.Join(outside, "x"), 3)
 	fill(t, filepath.Join(outside, "big"), 300)
+	// 부하가 큰 Windows CI에서는 파일 300개가 든 폴더를 지우는 동안 이벤트 사이가 dirBatch 기본 대기 100ms를 넘어,
+	// 먼저 받은 파일 삭제가 폴더 D에 흡수되지 않고 hook에 간 적이 있다. 그래서 대기를 1초, 상한을 10초로 늘리고,
+	// 표지 대기는 이 상한보다 길게 둔다.
 	s.Start(fmt.Sprintf(`watchTargets:
   - path: '%s'
     lifeCycle:
@@ -34,6 +37,9 @@ func TestFolderEvents(t *testing.T) {
     option:
       watch:
         exclude: ['*.probe']
+      dirBatch:
+        waitMillisecond: 1000
+        maxWaitMillisecond: 10000
       hookBatch:
         waitMillisecond: 0
         deliver: each
@@ -98,7 +104,7 @@ func TestFolderEvents(t *testing.T) {
 			}
 		}, []string{"D,false,src/g.txt"}, ""},
 	}
-	changes := &changeSteps{t: t, s: s, root: s.Watch}
+	changes := &changeSteps{t: t, s: s, root: s.Watch, timeout: 20 * time.Second}
 	for _, step := range steps {
 		step.act()
 		// Windows는 폴더마다 이벤트를 따로 받으므로, 이벤트가 생기는 폴더마다 표지 파일을 만들어 모두 기다린다.

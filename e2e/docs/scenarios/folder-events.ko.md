@@ -42,7 +42,9 @@
 ## 설정
 
 - 대상 `onChange` hook은 `hookrec`으로 `CHANGE:{{.Event}},{{.IsDir}},{{.Path}}`를 기록합니다.
-- 대상 옵션은 `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.exclude: ['*.probe']`입니다. `watch.fileEvent`와 `watch.dirEvent`는 기본값 `CUD`와 `CD`를 씁니다.
+- 대상 옵션은 `dirBatch.waitMillisecond: 1000`, `dirBatch.maxWaitMillisecond: 10000`, `hookBatch.waitMillisecond: 0`, `hookBatch.deliver: each`, `watch.exclude: ['*.probe']`입니다. `watch.fileEvent`와 `watch.dirEvent`는 기본값 `CUD`와 `CD`를 씁니다.
+  - 부하가 큰 Windows CI에서는 파일 300개가 든 폴더를 지우는 동안 이벤트 사이가 `dirBatch` 기본 대기 100ms를 넘어, 파일 삭제가 폴더의 `D`에 흡수되지 않은 적이 있습니다. 그래서 `dirBatch` 대기와 상한을 기본값보다 길게 둡니다.
+  - 표지 기록은 `dirBatch.maxWaitMillisecond`보다 긴 20초까지 기다립니다.
 - 테스트는 감시를 시작하기 전에 감시 폴더에 `src`와 `dst`를, 실행 폴더에 파일 3개가 든 `outside/x`와 파일 300개가 든 `outside/big`을 만듭니다.
 
 ## 진행 순서
@@ -68,7 +70,7 @@ sequenceDiagram
         watchDir-->>watcherProc: 표지 이벤트
         watcherProc->>hookRec: 폴더 이벤트와 다른 이벤트의 onChange를 순서대로 실행
         hookRec->>recordFile: 이벤트마다 한 줄
-        testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (최대 10초)
+        testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (최대 20초)
         testCode->>testCode: 표지 앞의 기록을 기대 기록과 비교
     end
     testCode->>watcherProc: 종료 신호
