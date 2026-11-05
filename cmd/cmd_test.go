@@ -236,7 +236,9 @@ func TestInstallationGuideShowsHelpOutput(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(data), "```shell\n"+help+"```\n") {
+		// Windows의 git은 문서의 줄 끝을 CRLF로 바꿔 받을 수 있으므로, LF로 바꾼 뒤 여러 줄을 비교한다.
+		doc := strings.ReplaceAll(string(data), "\r\n", "\n")
+		if !strings.Contains(doc, "```shell\n"+help+"```\n") {
 			t.Errorf("%s has no shell block equal to the --help output:\n%s", file, help)
 		}
 	}
