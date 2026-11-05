@@ -190,22 +190,42 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 - `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다.
 - 두 경고 모두 마지막 줄에는 디렉터리를 지우는 명령만 있습니다.
 - `utmctl exec`는 게스트 명령이 끝나기를 기다리지 않고, 돌려주는 출력과 종료 코드가 앞서 실행한 다른 게스트 명령의 것일 수 있습니다.
+- 같은 VM을 다른 실행이나 다른 정리 작업이 함께 쓰는 동안에는 `utmctl file pull`도 다른 요청이 연 파일의 내용을 오류 없이 돌려줄 수 있습니다.
 - 아래 명령의 `C:\dw-e2e`는 기본 `-guest-dir`입니다.
 
-그래서 아래 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽습니다.
+그래서 아래 1·2·4단계의 명령은 결과를 게스트의 파일에 쓰고 `utmctl file pull`로 읽으며, 다음 규칙으로 자기 결과만 읽습니다.
+
+- 명령은 Mac의 셸 하나(zsh나 bash)에서 차례로 실행합니다.
+- 각 단계의 첫 줄은 실행할 때마다 새 이름을 셸 변수 `id`에, 결과 파일 경로 `C:\dw-e2e\<id>.txt`를 `out`에 담고, 그 단계의 나머지 명령과 결과 파일을 지우는 명령이 이 변수를 씁니다.
+  - 게스트 명령은 결과 파일의 첫 줄에 `id`를, 마지막 줄에 `end <id>`를 적습니다.
+  - 한 단계를 다시 실행할 때도 첫 줄부터 실행해 새 이름을 씁니다.
+- pull한 내용의 첫 줄이 `id`이고 마지막 줄이 `end <id>`일 때만 그 단계의 결과로 읽습니다.
+  - pull이 `failed to open file`을 출력하거나 두 줄 가운데 하나라도 다르면, 게스트 명령이 아직 끝나지 않았거나 다른 요청의 내용을 받은 것이므로 몇 초 뒤에 pull만 다시 실행합니다.
+  - `utmctl file pull`은 파일을 열지 못해도 종료 코드 0으로 끝나므로, 종료 코드로는 판단하지 않습니다.
+
+각 단계에서 결과를 확인한 뒤에는 다음 명령으로 결과 파일을 지웁니다.
+
+```sh
+/Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "del $out"
+```
+
+- 지운 뒤 pull을 다시 실행해 `failed to open file`이 나오면 결과 파일이 지워진 것입니다.
+- pull이 내용을 다시 돌려주면 지우는 명령부터 다시 실행합니다.
 
 1. 게스트의 프로세스 목록을 확인합니다. E2E가 빌드해 실행하는 `directory-watcher.exe`와 `hookrec.exe`, 그리고 `go.exe`와 `*.test.exe`가 남아 있는지 봅니다. 출력은 게스트의 코드 페이지로 인코딩됩니다.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'tasklist > C:\dw-e2e\tasks.txt'
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\tasks.txt'
+   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& tasklist & echo end $id) > $out"
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
    ```
 
-2. 남은 프로세스를 끝내고, `taskkill`이 PID마다 적은 결과를 읽어 확인합니다.
+2. 남은 프로세스를 끝내고, `taskkill`이 PID마다 적은 결과를 읽어 확인합니다. PID가 여러 개면 `/pid <PID>`를 이어 적습니다.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'taskkill /f /pid <PID> > C:\dw-e2e\taskkill.txt 2>&1'
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\taskkill.txt'
+   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& taskkill /f /pid <PID> & echo end $id) > $out 2>&1"
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
    ```
 
 - 같은 VM에서 동시에 실행 중인 다른 테스트의 디렉터리도 `C:\dw-e2e` 아래에 있습니다.
@@ -215,8 +235,9 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 4. `C:\dw-e2e`의 목록에 경고의 실행 ID가 없으면 지워진 것입니다.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'dir /b C:\dw-e2e > C:\dw-e2e\list.txt'
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\list.txt'
+   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& dir /b C:\dw-e2e & echo end $id) > $out"
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
    ```
 
 ### VM 창이 화면에 뜨거나 부팅음이 남

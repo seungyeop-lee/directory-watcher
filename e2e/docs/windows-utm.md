@@ -190,22 +190,42 @@ The following files are left in this directory as UTF-8 text.
 - `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below.
 - The last line of either warning holds only the command that removes the directory.
 - `utmctl exec` does not wait for the guest command to finish, and the output and exit code it returns may belong to another guest command run earlier.
+- While other runs or other cleanups use the same VM, `utmctl file pull` may also return, without an error, the contents of a file that another request opened.
 - `C:\dw-e2e` in the commands below is the default `-guest-dir`.
 
-The commands below therefore write their results to a file in the guest and read it with `utmctl file pull`.
+The commands in steps 1, 2, and 4 below therefore write their results to a file in the guest, read it with `utmctl file pull`, and follow these rules to read only their own results.
+
+- Run the commands one after another in a single Mac shell (zsh or bash).
+- The first line of each step puts a new name in the shell variable `id` and the result file path `C:\dw-e2e\<id>.txt` in `out` every time it runs, and the rest of the step and the command that deletes the result file use these variables.
+  - The guest command writes `id` on the first line of the result file and `end <id>` on the last line.
+  - When you run a step again, start from its first line so that it uses a new name.
+- Read the pulled contents as the step's result only when the first line is `id` and the last line is `end <id>`.
+  - If the pull prints `failed to open file` or either line differs, the guest command has not finished yet or the pull returned the contents of another request, so run only the pull again after a few seconds.
+  - `utmctl file pull` exits with code 0 even when it cannot open the file, so do not judge by the exit code.
+
+After checking the result of each step, delete the result file with this command:
+
+```sh
+/Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "del $out"
+```
+
+- If running the pull again after the deletion prints `failed to open file`, the result file has been deleted.
+- If the pull returns the contents again, run the delete command again.
 
 1. Check the guest's process list. Look for the `directory-watcher.exe` and `hookrec.exe` that the E2E builds and runs, and for `go.exe` and `*.test.exe`. The output is encoded in the guest's code page.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'tasklist > C:\dw-e2e\tasks.txt'
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\tasks.txt'
+   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& tasklist & echo end $id) > $out"
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
    ```
 
-2. End the remaining processes, then read the result that `taskkill` wrote for each PID.
+2. End the remaining processes, then read the result that `taskkill` wrote for each PID. For several PIDs, repeat `/pid <PID>`.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'taskkill /f /pid <PID> > C:\dw-e2e\taskkill.txt 2>&1'
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\taskkill.txt'
+   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& taskkill /f /pid <PID> & echo end $id) > $out 2>&1"
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
    ```
 
 - The directories of other tests running on the same VM at the same time are also under `C:\dw-e2e`.
@@ -215,8 +235,9 @@ The commands below therefore write their results to a file in the guest and read
 4. If the run ID from the warning is not in the listing of `C:\dw-e2e`, the directory has been removed.
 
    ```sh
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c 'dir /b C:\dw-e2e > C:\dw-e2e\list.txt'
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> 'C:\dw-e2e\list.txt'
+   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& dir /b C:\dw-e2e & echo end $id) > $out"
+   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
    ```
 
 ### The VM window appears or the boot sound plays
