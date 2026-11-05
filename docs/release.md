@@ -5,7 +5,6 @@
 - `v<major>` 브랜치에 push하면 `.github/workflows/ci.yml`이 3-OS 테스트를 실행하고, 모두 성공하면 같은 실행의 `release` job이 `.github/workflows/goreleaser.yml`을 불러 그 커밋을 배포합니다.
   - 배포는 그 커밋의 `CHANGELOG.md` 맨 위 version으로 annotated tag `v<X.Y.Z>`를 만들고 GitHub Release를 만듭니다. 릴리스 절차에서는 tag를 만들거나 push하지 않습니다.
   - 그 version의 GitHub Release가 이미 있으면 아무것도 만들거나 게시하지 않습니다.
-- `ci`는 `master` push와 tag push에서는 실행하지 않습니다.
 
 ## 브랜치
 
@@ -28,9 +27,8 @@
    - `git fetch --tags origin` 뒤에 로컬 `master`가 `origin/master`와 같습니다.
    - 마지막 릴리스 tag의 GitHub Release가 있습니다. 없으면 지난 배포가 끝나지 않은 것이므로 [배포 흐름](#배포-흐름)의 복구 절차를 먼저 따릅니다.
    - `master`, 그리고 있다면 `v<major>`와 `origin/v<major>`가 모두 `feature/working`의 조상입니다.
-   - [CONTRIBUTING.md의 Verification](../CONTRIBUTING.md#verification) 절이 릴리스하기 전에 실행하라고 정한 검사가 모두 통과합니다.
+   - [CONTRIBUTING.md의 Verification](../CONTRIBUTING.md#verification) 절이 커밋하기 전과 릴리스하기 전에 실행하라고 정한 검사가 모두 통과합니다.
      - `go build ./...`, `go vet ./...`, `go test -count=1 -race ./...`가 통과합니다.
-       - E2E는 watcher를 별도의 `go build`로 빌드해서 Go 테스트 캐시가 watcher 소스의 변경을 알지 못하므로, `-count=1`을 빼지 않습니다.
      - `make e2e-linux`와 `make e2e-windows-all`이 통과합니다.
        - `make e2e-windows-all`은 `DW_E2E_UTM_VM` 환경 변수에 지정한 UTM Windows VM에서 실행합니다. VM을 준비하고 지정하는 방법은 [UTM Windows VM에서 E2E 실행](../e2e/docs/windows-utm.ko.md#vm-선택)에 있습니다.
 2. `v<major>`를 `feature/working`으로 옮깁니다. 이 명령은 `v<major>`가 없으면 새로 만들고, 있으면 fast-forward만 합니다.
@@ -40,7 +38,7 @@
    git switch v<major>
    ```
 
-3. 저장소 루트 `CHANGELOG.md`에 `## [<version>] - <YYYY-MM-DD>` 절을 쓰고, 바뀐 내용을 영어로 적습니다. `## [Unreleased]` 절이 있으면 그 절을 새 version 절로 바꿉니다. 새 절의 본문(다음 `## ` 제목 앞까지)이 GitHub Release의 노트가 됩니다. `go run ./scripts/releasenotes <version>`이 성공하고 그 본문을 출력하면 배포도 같은 노트를 뽑습니다.
+3. 저장소 루트 `CHANGELOG.md`에 `## [<version>] - <YYYY-MM-DD>` 절을 쓰고, 바뀐 내용을 영어로 적습니다. `## [Unreleased]` 절이 있으면 그 절을 새 version 절로 바꾸고, 없으면 가장 최근 version 절 위에 새 절을 둡니다. 새 절의 본문(다음 `## ` 제목 앞까지)이 GitHub Release의 노트가 됩니다. `go run ./scripts/releasenotes <version>`이 성공하고 그 본문을 출력하면 배포도 같은 노트를 뽑습니다.
 4. 이 변경을 `v<major>`에 커밋합니다. tag는 달지 않습니다.
 5. `v<major>`를 push합니다. `ci`의 테스트가 모두 성공하면 배포가 시작됩니다.
 
@@ -71,7 +69,6 @@
 - Go는 major 2 이상인 version의 모듈을 `/v<major>` 접미사가 붙은 경로로 찾습니다.
 - major를 올리기 전에 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령, 설정 예시 첫 줄의 스키마 URL(`yaml-language-server: $schema=`)에 든 `v<major>` 브랜치를 새 major로 바꿔 먼저 커밋합니다.
 - versionup skill은 모듈 경로가 새 version의 major와 맞지 않으면 아무것도 바꾸지 않고 멈춥니다.
-- 새 major의 첫 릴리스에서는 2단계가 `v<major>` 브랜치를 새로 만듭니다.
 
 ## 배포 흐름
 
@@ -83,7 +80,8 @@
 
 1. `CHANGELOG.md`에서 맨 위 `## [X.Y.Z]` 절의 version을 읽습니다. 그 major가 push한 브랜치의 major와 다르면 실패합니다. GitHub Release `v<version>`이 이미 있으면 여기서 끝냅니다.
 2. `go run ./scripts/releasenotes <version>`으로 그 version 절의 본문을 뽑습니다. 본문이 비었거나 제목이 날짜로 끝나지 않으면 여기서 실패합니다.
-3. push한 커밋에 annotated tag `v<version>`을 달아 push합니다.
+3. push한 커밋에 annotated tag `v<version>`을 달아 push합니다. 이 tag push에서는 `ci`가 실행되지 않습니다.
+   - 원격에 브랜치 `v<version>`이나 tag `v<major>`가 있으면 tag를 만들지 않고 실패합니다.
    - 이전 실행이 게시하기 전에 실패해 tag가 다른 커밋에 남아 있으면, tag를 이 커밋으로 옮깁니다.
 4. goreleaser가 뽑은 본문을 노트로 GitHub Release를 만들고, `.goreleaser.yaml` 설정대로 배포물을 게시합니다.
 
@@ -96,7 +94,7 @@
    git merge --ff-only v<major>
    ```
 
-2. `v<major>`를 고친 커밋으로 fast-forward해 push합니다. 테스트가 성공하면 배포가 다시 시작하고, 고치기 전 커밋에 남은 tag를 고친 커밋으로 옮깁니다.
+2. `v<major>`를 고친 커밋으로 fast-forward해 push합니다. 테스트가 성공하면 배포가 다시 시작합니다.
 
    ```sh
    git fetch . refs/heads/feature/working:refs/heads/v<major>
@@ -106,4 +104,4 @@
 3. 릴리스 절차 6단계와 7단계를 실행합니다.
 
 - 커밋을 고치지 않아도 되는 실패(네트워크 오류 등)는 GitHub Actions에서 실패한 `ci` 실행의 실패한 job을 다시 실행합니다.
-- 4단계에서 GitHub Release가 만들어진 뒤 실패하면, 다시 실행해도 1단계에서 끝납니다. 이때는 `gh release delete v<version>`으로 Release를 지운 뒤 실패한 job을 다시 실행합니다.
+- 4단계에서 GitHub Release가 만들어진 뒤 실패하면, `gh release delete v<version>`으로 Release를 지운 뒤 실패한 job을 다시 실행합니다.

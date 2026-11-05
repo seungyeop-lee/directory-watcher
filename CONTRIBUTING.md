@@ -22,7 +22,7 @@ You need:
 
 - Go, at or above the version in the `go` line of `go.mod`.
 - `make` and `sh`, to run the `make` targets below.
-- The Docker CLI and a running Linux Docker engine, only to run the E2E scenarios in a Linux container with `make e2e-linux`.
+- Only to run the E2E scenarios in a Linux container or on Windows, the Docker CLI with a running Linux Docker engine for `make e2e-linux`, and a UTM Windows VM on a Mac for `make e2e-windows-all`. See [Setup and run](e2e/README.md#setup-and-run) in the E2E guide.
 
 To run the watcher from source with [`config.example.yml`](config.example.yml), run this at the repository root:
 
@@ -54,10 +54,10 @@ Run these at the repository root:
   - `e2e/harness/signal_*.go`: how the E2E harness stops the watcher and observes processes.
   - Any other code that branches on `runtime.GOOS` or has an OS-specific file name suffix or build constraint.
 
-CI runs `go build ./...`, `go vet ./...`, and `go test -count=1 -race ./...` on Linux, Windows, and macOS, and `make smoke-example` on Linux.
+CI runs `go build ./...`, `go vet ./...`, and `go test -count=1 -race ./...` on Linux, Windows, and macOS, and `make smoke-example` on Linux. On Windows it also runs the extra E2E checks listed in [CI steps](e2e/docs/windows.md#ci-steps).
 
-To run the E2E scenarios in a Linux container or on a Windows VM, or to add a scenario, see the [E2E guide](e2e/README.md).
+To run only some E2E scenarios, or to add a scenario, see the [E2E guide](e2e/README.md).
 
 ## Commit messages
 
-Follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject`, for example `chore(ci): master, v<major> 브랜치와 tag push에서는 ci를 실행하지 않음`. Write the subject in Korean. The scope names the affected area, such as `e2e`, `ci`, or `windows`. Omit the scope for changes that are not tied to one area.
+Follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject`, for example `fix(e2e): Windows 실행기가 게스트 파일을 모두 실행 ID나 SHA-256으로 확인함`. Write the subject in Korean. The scope names the affected area, such as `e2e`, `ci`, or `windows`. Omit the scope for changes that are not tied to one area.
