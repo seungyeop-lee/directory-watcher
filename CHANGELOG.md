@@ -4,6 +4,19 @@ All notable changes to directory-watcher are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-11-05
+
+### Fixed
+
+- A shutdown signal now cancels a running global `onStartWatch` instead of waiting for it to finish on its own.
+  - If shutdown interrupts global startup, no target starts watching or runs its startup or finish hooks. Global `onFinishWatch` still runs after the canceled startup has stopped.
+- On macOS and Linux, replacing or stopping a hook now waits for the processes in its process group to stop, even if the hook's `sh` exits first.
+  - Processes still in the group 20 seconds after SIGTERM are ended with SIGKILL, so descendants that ignore SIGTERM no longer remain after replacement or shutdown.
+  - Processes that leave the group, for example with `setsid`, remain outside this cleanup.
+- On Windows, canceled hooks are less likely to miss CTRL+BREAK while their programs are still starting.
+  - The startup grace period before CTRL+BREAK is now 500 ms instead of 100 ms, and the watcher checks for newly started programs immediately before sending the signal.
+  - A program that attaches to the console after the first CTRL+BREAK receives another CTRL+BREAK once 500 ms have passed since it attached, instead of waiting for forced termination after 20 seconds.
+
 ## [3.2.0] - 2026-11-05
 
 ### Added
