@@ -67,5 +67,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 ## Running on Windows
 
-- Output may not display correctly in PowerShell or Command Prompt. Run the watcher in Git Bash instead.
+- While the watcher runs, it sets the console's output code page to UTF-8 (65001). Non-ASCII text, such as Korean, that `cmd` and `powershell` hooks print therefore appears in the watcher's output as it does when you run the hook directly.
+  - Until the watcher exits, other programs that share its console, including your shell, also use the UTF-8 output code page.
+  - The watcher restores the original output code page when you stop it with CTRL+C or when it exits with an error.
 - When the watcher stops a hook, it ends the hook's processes that do not exit on CTRL+BREAK only 20 seconds later, so replacing or stopping such a hook, including some `powershell` hooks, can take up to 20 seconds. See [Overload and shutdown](running.md#overload-and-shutdown).

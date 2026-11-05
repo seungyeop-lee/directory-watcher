@@ -67,5 +67,7 @@ COPY --from=ghcr.io/seungyeop-lee/directory-watcher:latest /directory-watcher /u
 
 ## Windows에서 실행하기
 
-- PowerShell이나 명령 프롬프트에서는 출력이 제대로 보이지 않을 수 있습니다. 이때는 Git Bash에서 실행하세요.
+- watcher는 실행되는 동안 콘솔의 출력 code page를 UTF-8(65001)로 바꿉니다. 그래서 `cmd`와 `powershell` hook이 출력한 한글 같은 비ASCII 글자가 hook을 직접 실행했을 때와 같은 글자로 watcher 출력에 나타납니다.
+  - watcher가 끝날 때까지는 사용자의 셸을 포함해 같은 콘솔을 쓰는 다른 프로그램도 UTF-8 출력 code page를 씁니다.
+  - watcher는 CTRL+C로 멈추거나 오류로 끝날 때 출력 code page를 원래 값으로 되돌립니다.
 - watcher가 hook을 멈출 때, CTRL+BREAK로 끝나지 않는 hook 프로세스는 20초가 지나서야 강제로 끝냅니다. 이런 hook은 일부 `powershell` hook을 포함해 교체와 종료가 최대 20초 늦어질 수 있습니다. 자세한 내용은 [과부하와 종료](running.ko.md#과부하와-종료)에 있습니다.

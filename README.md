@@ -172,7 +172,7 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 ## Requirements
 
 - macOS or Linux. The watcher has been verified to work correctly on these systems.
-- Windows, with limits on console output and on how quickly some hooks stop. See [Running on Windows](docs/guide/installation.md#running-on-windows).
+- Windows, with a limit on how quickly some hooks stop. See [Running on Windows](docs/guide/installation.md#running-on-windows).
 
 ## Development checks
 

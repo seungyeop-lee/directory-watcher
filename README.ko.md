@@ -172,7 +172,7 @@ go install github.com/seungyeop-lee/directory-watcher/v3@latest
 ## 요구 사항
 
 - macOS 또는 Linux. 이 두 환경에서 정상 작동하는 것을 확인했습니다.
-- Windows. 콘솔 출력과 일부 hook을 멈추는 속도에 제약이 있습니다. 자세한 내용은 [Windows에서 실행하기](docs/guide/installation.ko.md#windows에서-실행하기)를 확인하세요.
+- Windows. 일부 hook을 멈추는 속도에 제약이 있습니다. 자세한 내용은 [Windows에서 실행하기](docs/guide/installation.ko.md#windows에서-실행하기)를 확인하세요.
 
 ## 개발 검증
 
