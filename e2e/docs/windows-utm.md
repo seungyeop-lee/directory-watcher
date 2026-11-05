@@ -107,6 +107,12 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 
 - `up` and `down` do not accept go test arguments after `--`.
 
+### Concurrent runs
+
+- Tests against the same VM from the same Mac can run at the same time, and each uses a different run directory.
+- While a test is running, both a VM start by `up` and `down` are refused with `another Windows E2E run on this Mac is using the VM`.
+- Runs from other user accounts or other Macs are not coordinated.
+
 ## Checking results
 
 - `Windows diagnostics: <Mac path>` is printed at the start and end of the command.
@@ -118,32 +124,23 @@ The following files are left in this directory as UTF-8 text.
 |---|---|
 | `runner.log` | Runner progress log |
 | `source.txt` | Commit, size and SHA-256 of the source tar that was sent, go test arguments, list of uncommitted changes |
-| `request.json`, `result.json` | Request sent to the guest and the guest's result. The request contains the run ID, go test arguments, and the SHA-256 of `source.tar` and `guest.exe` that were sent with it, and the guest program checks the request and both files against it before `go test` and fails if they differ. The result contains the run ID, go exit code, whether it timed out, leftover processes, Windows and Go versions, the run directory and its drive type, and the SHA-256 of `stdout.log`, `stderr.log`, and `diagnostics.tar` in the guest. |
+| `request.json`, `result.json` | Request sent to the guest and the guest's result. The request contains the run ID and the go test arguments, and the result contains guest-side errors, the go exit code, whether it timed out, leftover processes, Windows and Go versions, and the run directory and its drive type. |
 | `stdout.log`, `stderr.log` | Output of the guest go test |
 | `diagnostics/` | Guest E2E diagnostics files. Analyze `cleanup.log` and `records.log.processes` as in [Windows failure analysis](windows.md#failure-analysis), and `dll-init-failed.log` as in [A hook exits with 0xc0000142](#a-hook-exits-with-0xc0000142). |
 
-- The runner judges a run successful only when the result's run ID matches this run, there are no errors, timeouts, or leftover processes, the go exit code is 0, and the run directory is on an internal disk (`fixed`).
-- While other runs use the same VM, `utmctl file pull` can return the contents of a file that another run opened, and `utmctl file push` can write to a file that another run opened, both without an error.
-  - When a `request.json`, start marker file, `result.json`, or `rmdir` removal result read from the guest does not carry this run's run ID or cannot be read, the runner ignores it, writes `ignored <guest path> read from the guest` and the reason to `runner.log`, and checks again.
-  - After the result arrives, the runner reads those of `stdout.log`, `stderr.log`, and `diagnostics.tar` that have a SHA-256 in the result up to three times each until their SHA-256 matches the result, and collection fails if one still differs.
-  - When no result arrives, the runner copies these files once without checking them, so they may belong to another run.
+- The runner judges a run successful only when the result has no guest-side error, timeout, or leftover process, the go exit code is 0, and the run directory is on an internal disk (`fixed`).
+- When a run failed without a guest result, its `stdout.log`, `stderr.log`, and `diagnostics/` may hold the contents of another run on the same VM.
 - Uncommitted modifications, additions, and deletions in the working tree are sent as they are, and files excluded by `.gitignore` and symbolic links such as `.agents/skills` are not sent.
-- The guest's per-run directory `<guest-dir>\<run ID>` is deleted once collection finishes.
-- As soon as it starts, the guest program writes its run ID to the start marker file `<guest-dir>\<run ID>.started` next to the run directory. The runner deletes this file in the step that removes the run directory, and does not warn if it cannot delete it.
-- If collection fails, it is left in place and the error message shows its path.
-- If the directory cannot be removed after collection, the test result and the exit code stay as they are, and a warning starting with `Windows E2E cleanup:` shows the remaining path and the command that removes that directory.
-- Tests against the same VM from the same Mac can run at the same time, and each uses a different run directory.
-- While a test is running, both a VM start by `up` and `down` are refused with `another Windows E2E run on this Mac is using the VM`.
-- Runs from other user accounts or other Macs are not coordinated.
+- The guest's run directory `<guest-dir>\<run ID>` and the marker files `<guest-dir>\<run ID>.*` next to it are deleted once collection finishes.
+- If collection fails, the run directory is left in place and the error message shows its path.
 
 ## Shutdown behavior
 
 - `down` and `all` request a graceful shutdown from Windows with `utmctl stop --request`, and repeat the request every 30 seconds if the VM does not shut down.
+  - Windows sometimes ignores the first request and shuts down on a repeated one; the cause has not been determined.
 - They never force the VM's power off; if the VM does not shut down within `-stop-timeout`, they fail and leave the VM running.
-- Every request checked on 2026-11-03 was a real shutdown.
-- The guest logged a power-off by winlogon (event 1074, reason 0x500ff) and a clean stop of the event log (6006), and the next boot was a cold boot (Kernel-Boot 27, boot type 0x0).
+- Every guest shut down by a request logged a clean shutdown, and the next boot was a cold boot.
 - Hibernation is off in this guest, so Fast Startup cannot be used.
-- In some cases the first request was ignored and the VM shut down on the second request; the cause was not determined.
 
 ## Differences between Windows ARM64 and x64
 
@@ -163,13 +160,12 @@ The following files are left in this directory as UTF-8 text.
 
 ### UTM crashes
 
-- In one case, clicking the UTM window during a run made UTM exit with SIGSEGV, and the pending request ended with `OSStatus error -609`.
-- Do not open or click the UTM window during a run.
+- If a pending request ended with `OSStatus error -609` and UTM exited, clicking the UTM window during the run may have made UTM exit with SIGSEGV.
 - Crash reports are in `~/Library/Logs/DiagnosticReports/UTM-*.ips`.
 
 ### AppleScript fails with -600 while UTM is running
 
-- While any `utmctl` process is running, an AppleScript `tell application "UTM"` sends its events to that `utmctl` process instead of UTM and fails at once with `Application isn't running. (-600)` (macOS 27.2, UTM 5.0.8, 2026-11-05).
+- While any `utmctl` process is running, an AppleScript `tell application "UTM"` sends its events to that `utmctl` process instead of UTM and fails at once with `Application isn't running. (-600)` (checked on macOS 27.2 and UTM 5.0.8).
   - Pointing to UTM by bundle ID or app path gives the same result.
   - `utmctl` requests from other runs on the same VM, such as `file push`, last for seconds, so concurrent runs hit this often.
 - The runner and the command in step 2 of [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm) send their events to UTM with JXA (`osascript -l JavaScript`), whose events reach UTM even while `utmctl` is running.
@@ -179,83 +175,49 @@ The following files are left in this directory as UTF-8 text.
 ### QEMU aborts during shutdown
 
 - If a new `~/Library/Logs/DiagnosticReports/QEMULauncher-*.ips` appears after the shutdown request, `down` and `all` fail with `QEMU aborted while the VM was stopping` even if the VM shut down.
-- On the original VM with a display, 7 of 11 shutdowns ended this way, and on the dedicated VM 0 of 18 did (2026-11-03).
-- The cause is on UTM's QEMU side and has not been determined.
+- These aborts happen often on a VM with a display and have not been seen on the dedicated E2E VM; the cause is on UTM's QEMU side and has not been determined.
 - The report does not identify the VM, so a QEMU abort of another VM at the same time is also judged a failure.
 
 ### Guest run directory is left behind
 
-- `Windows E2E cleanup: guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute.
+- When the runner cannot remove the guest run directory after collection, it prints a warning starting with `Windows E2E cleanup:`.
+  - The last line of the warning holds only the command that removes that directory.
+  - `guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute.
+  - `could not confirm that guest run directory <path> was removed` means the runner could not read a removal result within 1 minute; check whether the directory actually remains with step 4 below.
+- The directory remains for one of three causes, and the warning alone does not tell which one, so check them in turn with the procedure below.
+- **The directories of other tests running on the same VM at the same time are also under `C:\dw-e2e`, so remove only the path shown in the warning.**
 
-The directory remains for one of the following three causes, and the warning alone does not tell which one.
+Run each guest command in the procedure below with the following three lines in a single Mac shell (zsh or bash), putting the command of the step in `<guest command>`. `C:\dw-e2e` is the default `-guest-dir`.
 
-- A guest process is left that keeps a file in the directory open or uses a directory inside it as its current directory.
-  - On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`.
-  - End that process with steps 1 and 2 below.
-- Windows cannot delete `guest.exe` for several minutes after the guest program ended.
-  - On 2026-11-05, when three runners ran at the same time on the same VM, 2 of 9 runs were left this way, and the directories could be removed after about 4 minutes.
-  - `rmdir` then printed `guest.exe - Access is denied.` (`액세스가 거부되었습니다.` on a Korean guest), but Restart Manager found no process that had the file open. The XtaCache service, which stores translations of x64 programs on an ARM64 guest, is presumed to hold the file, but this was not confirmed.
-  - Wait a few minutes, then continue from step 3 below.
-- The QEMU Guest Agent left a file in the directory open.
-  - `utmctl file pull` and `file push` send the Guest Agent separate requests to open, read or write, and close the file. If `utmctl` ends between the open and the close, or another request receives the open answer, the file stays open.
-  - On 2026-11-05, a `started.txt` left open this way kept a run directory in place, and Restart Manager reported `QEMU Guest Agent` as the process that had the file open. The runner keeps the start marker file next to the run directory and does not stop a `file pull` before 2 minutes pass. The runner cannot prevent another request from receiving the open answer.
-  - A file the Guest Agent opened is closed only when the Guest Agent process ends, so `taskkill` in steps 1 and 2 does not make it removable. If steps 1 and 2 found no leftover process and the directory is still there in step 4 a few minutes later, treat it as this case.
-  - After the other runs on the same VM end, restart the VM with `make e2e-windows-down` and `make e2e-windows-up`, then continue from step 3.
+```sh
+id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
+/Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& <guest command> & echo end $id) > $out 2>&1"
+/Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
+```
 
-Check the following before running the procedure below.
-
-- `could not confirm that guest run directory <path> was removed` means the runner could not read a removal result of this run within 1 minute; check whether the directory remains with step 4 below.
-- The last line of either warning holds only the command that removes the directory.
-- `utmctl exec` does not wait for the guest command to finish, and the output and exit code it returns may belong to another guest command run earlier.
-- While other runs or other cleanups use the same VM, `utmctl file pull` may also return, without an error, the contents of a file that another request opened.
-- `C:\dw-e2e` in the commands below is the default `-guest-dir`.
-
-The commands in steps 1, 2, and 4 below therefore write their results to a file in the guest, read it with `utmctl file pull`, and follow these rules to read only their own results.
-
-- Run the commands one after another in a single Mac shell (zsh or bash).
-- The first line of each step puts a new name in the shell variable `id` and the result file path `C:\dw-e2e\<id>.txt` in `out` every time it runs, and the rest of the step and the command that deletes the result file use these variables.
-  - The guest command writes `id` on the first line of the result file and `end <id>` on the last line.
-  - When you run a step again, start from its first line so that it uses a new name.
-- Read the pulled contents as the step's result only when the first line is `id` and the last line is `end <id>`.
-  - If the pull prints `failed to open file` or either line differs, the guest command has not finished yet or the pull returned the contents of another request, so run only the pull again after a few seconds.
+- The guest command writes its result to a guest file, and the first and last lines show whether the result is its own.
+  - `utmctl exec` does not wait for the guest command to finish, and may return the output of another guest command.
+  - `utmctl file pull` may also return, without an error, the contents of a file that another request opened.
+- Read the pulled contents as the command's result only when the first line is `$id` and the last line is `end $id`.
+  - If the pull prints `failed to open file` or either line differs, run only the pull again after a few seconds.
   - `utmctl file pull` exits with code 0 even when it cannot open the file, so do not judge by the exit code.
+- The output is encoded in the guest's code page.
+- To run another guest command, start again from the first line so that it uses a new `id`.
 
-After checking the result of each step, delete the result file with this command:
+After checking the result, delete the result file with the following command, and repeat the delete command and the pull until the pull prints `failed to open file`.
 
 ```sh
 /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "del $out"
 ```
 
-- If running the pull again after the deletion prints `failed to open file`, the result file has been deleted.
-- If the pull returns the contents again, run the delete command again.
-
-1. Check the guest's process list. Look for the `directory-watcher.exe` and `hookrec.exe` that the E2E builds and runs, and for `go.exe` and `*.test.exe`. The output is encoded in the guest's code page.
-
-   ```sh
-   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& tasklist & echo end $id) > $out"
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
-   ```
-
-2. End the remaining processes, then read the result that `taskkill` wrote for each PID. For several PIDs, repeat `/pid <PID>`.
-
-   ```sh
-   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& taskkill /f /pid <PID> & echo end $id) > $out 2>&1"
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
-   ```
-
-- The directories of other tests running on the same VM at the same time are also under `C:\dw-e2e`.
-- Remove only the path shown in the warning.
-
-3. Copy the last line of the warning as it is and run it in the Mac shell to remove the directory.
-4. If the run ID from the warning is not in the listing of `C:\dw-e2e`, the directory has been removed.
-
-   ```sh
-   id=cleanup-$(openssl rand -hex 8); out='C:\dw-e2e\'$id.txt
-   /Applications/UTM.app/Contents/MacOS/utmctl exec <VM> --cmd cmd.exe /d /c "(echo $id& dir /b C:\dw-e2e & echo end $id) > $out"
-   /Applications/UTM.app/Contents/MacOS/utmctl file pull <VM> "$out"
-   ```
+1. Look at the guest's process list with `tasklist`, and check whether the `directory-watcher.exe` and `hookrec.exe` that the E2E builds and runs, or `go.exe` and `*.test.exe`, remain. When such a process keeps a file in the directory open or uses a directory inside it as its current directory, the directory cannot be removed.
+2. If processes remain, end them with `taskkill /f /pid <PID>` and check the result that `taskkill` wrote for each PID. For several PIDs, repeat `/pid <PID>`.
+3. Copy the last line of the warning as it is and run it in the Mac shell.
+4. If the run ID from the warning is not in the listing of `dir /b /ad C:\dw-e2e`, the directory has been removed.
+5. If the directory remains although no process remains, Windows cannot delete `guest.exe` for several minutes after the guest program ended. Wait a few minutes, then continue again from step 3.
+   - Running `rmdir /s /q <path>` in the way above prints `guest.exe - Access is denied.` (`액세스가 거부되었습니다.` on a Korean guest), but Restart Manager found no process that had the file open.
+   - The XtaCache service, which stores translations of x64 programs on an ARM64 guest, is presumed to hold the file, but this has not been confirmed.
+6. If the directory still remains a few minutes later, the QEMU Guest Agent did not close a file in the directory that it opened for `utmctl file pull` or `file push`. Such a file is closed only when the Guest Agent process ends, so after the other runs on the same VM end, restart the VM with `make e2e-windows-down` and `make e2e-windows-up`, then continue again from step 3.
 
 ### The VM window appears or the boot sound plays
 
@@ -270,6 +232,7 @@ After checking the result of each step, delete the result file with this command
 - The watcher runs hooks with `cmd.exe`, so the hook PID and times in the report belong to `cmd.exe`.
   - `cmd.exe` returns the exit code of `hookrec.exe` unchanged, and `hookrec.exe` belongs to the process group of `cmd.exe`.
 - When `./e2e/harness` runs as well, `TestDLLInitFailureReportFromWatcher` makes a report with a hook that exits with 0xc0000142 on purpose. The report of that test is not a real failure.
+- On this VM, processes that exited with 0xc0000142 leave nothing in the Windows event log, so the event log cannot find this failure.
 
 The lines after the first line of the report are written in UTC time order, and each has one of the following two forms.
 
@@ -295,4 +258,3 @@ The following signals and exits are not in the report.
 - CTRL+BREAK sent by the test binaries of other packages added after `--` is not included. Whether those binaries use the same console has not been checked.
 - CTRL+BREAK sent by the watchers of other scenarios running in parallel is not included. Those signals are in the `watcher.log` of that scenario's run directory.
 - CTRL+BREAK sent before the scenario started or after the scenario was cleaned up is not included.
-- On this VM, checked on 2026-11-05, processes that exited with 0xc0000142 left nothing in the Windows event log, so the event log cannot find this failure.

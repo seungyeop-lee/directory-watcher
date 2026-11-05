@@ -29,10 +29,9 @@ const (
 )
 
 // StartedSuffix를 실행 디렉터리 경로 뒤에 붙인 경로가 시작 표시 파일이다. 게스트
-// 프로그램은 시작하자마자 이 파일에 실행 ID를 쓴다. 시작 표시 파일은 실행 디렉터리
-// 밖에 둔다. 2026-11-05에 실행기 세 개가 같은 VM을 함께 쓸 때, Guest Agent가 실행
-// 디렉터리 안에 있던 시작 표시 파일을 연 채로 남겨서 그 실행 디렉터리를 지우지
-// 못했다(e2e/windows의 pullLimit 참고).
+// 프로그램은 시작하자마자 이 파일에 실행 ID를 쓴다. 실행기가 이 파일을 읽는 동안 Guest
+// Agent가 파일을 연 채로 남길 수 있으므로(e2e/windows의 guestTest.pull 참고), 실행
+// 디렉터리를 지울 수 있게 이 파일은 실행 디렉터리 밖에 둔다.
 const StartedSuffix = ".started"
 
 // CollectedFiles는 실행기가 결과를 받은 뒤 Mac으로 가져가는 파일이다.

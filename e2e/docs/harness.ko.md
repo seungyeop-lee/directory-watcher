@@ -28,11 +28,11 @@
 | `worktree/worktree_test.go` | `Archive`가 수정한 파일과 추적하지 않는 파일의 작업 트리 내용을 담고, 목록에 있지만 작업 트리에서 사라진 파일은 건너뛰는지 검증 |
 | `windows/` | Mac에서 UTM Windows VM으로 같은 Go E2E를 실행하는 진입점(`up`, `test`, `down`, `all`). UTM과 VM 제어(`utm.go`), 같은 Mac의 다른 실행과 VM을 나눠 쓰는 잠금(`lock.go`), 소스와 게스트 프로그램을 게스트로 보내고 결과를 수집하는 일(`test.go`)을 맡음. 패키지와 테스트는 macOS에서만 빌드됨 |
 | `windows/utm_test.go` | 대체 스크립트로 `utmctl`·JXA 응답 해석을 검증. UUID나 전체 이름으로 VM 찾기, stopped가 아닌 VM 세기, 종료 코드가 아닌 stderr로 성공 판정, 한도를 넘긴 요청을 끝내고 runner.log에 남기기, VM이 stopped로 남은 `start`의 실패, Guest Agent 준비에 필요한 IPv4 주소, 디스플레이 수 읽기 |
-| `windows/main_test.go` | `up`이 디스플레이가 있는 VM을 시작 요청 전에 거부하는지 검증 |
+| `windows/main_test.go` | `up`이 디스플레이가 있는 VM을 시작 요청 전에 거부하는지, `teardown`이 `up`이 연 UTM만 종료하는지 검증 |
 | `windows/lock_test.go` | VM 잠금을 테스트 실행끼리는 함께 잡고 시작·종료는 혼자 잡는지, 잠금이 VM마다 따로인지 검증 |
-| `windows/test_test.go` | 게스트 실행 디렉터리 생성과 게스트 프로그램 시작을 `exec` 응답이 아닌 게스트에서 다시 읽은 파일로 판정하는지, 게스트 실행 디렉터리 삭제를 재시도하고 남은 디렉터리를 삭제 명령과 함께 알리는지, 이 정리 실패를 테스트 결과에 넣지 않는지, 다시 읽은 요청, 시작 표시 파일, 결과, `rmdir`의 결과가 다른 실행의 것이면 받아들이지 않는지, 회수한 파일을 결과에 적힌 SHA-256과 같아질 때까지 다시 가져오는지, 결과에 SHA-256이 없는 파일을 가져오지 않는지, 요청에 함께 보낸 파일의 SHA-256을 모두 적는지, 소스 아카이브에서 심볼릭 링크를 빼는지 검증 |
-| `windows/guest/` | Windows 게스트 안에서 E2E 실행 한 번을 수행하는 프로그램. 요청이 이번 실행의 것인지와 함께 보낸 파일이 요청에 적힌 SHA-256과 같은지 확인하고 `go test`를 실행하며, 실행 디렉터리에서 시작되어 남은 프로세스를 종료하고, 진단 자료를 아카이브로 묶은 뒤 실행기가 가져갈 파일의 SHA-256과 함께 결과를 씀. Windows에서만 빌드됨 |
-| `windows/guestrun/` | Mac 실행기와 게스트 프로그램이 게스트 실행 디렉터리에서 주고받는 파일(`Request`, `Result`), 게스트 프로그램이 요청과 함께 보낸 파일을 확인하는 방법(`Verify`), 실행기가 이번 실행의 결과를 받아들이는 방법(`Decode`)과 결과 판정(`Check`), 두 기기 사이에서 디렉터리를 옮기는 tar 형식(`ArchiveDir`, `Extract`) |
+| `windows/test_test.go` | 대체 `utmctl`로 게스트 실행 디렉터리 생성, 게스트 프로그램 시작, 결과 대기, 파일 회수, 실행 디렉터리 삭제를 검증. 각 단계가 다른 실행의 내용을 받아들이지 않는지, 남은 실행 디렉터리를 테스트 결과에 넣지 않고 삭제 명령과 함께 알리는지, 소스 아카이브에서 심볼릭 링크를 빼는지 포함 |
+| `windows/guest/` | Windows 게스트 안에서 E2E 실행 한 번을 수행하는 프로그램. 받은 요청과 파일을 확인하고 `go test`를 실행한 뒤, 실행 디렉터리에서 시작되어 남은 프로세스를 종료하고 진단 자료와 결과를 씀. Windows에서만 빌드됨 |
+| `windows/guestrun/` | Mac 실행기와 게스트 프로그램이 게스트 실행 디렉터리에서 주고받는 파일(`Request`, `Result`)과 그 확인(`Verify`, `Decode`), 결과 판정(`Check`), 두 기기 사이에서 디렉터리를 옮기는 tar 형식(`ArchiveDir`, `Extract`) |
 | `windows/guestrun/guestrun_test.go` | `Verify`가 같은 실행의 요청이면서 파일이 같은 경우만, `Decode`가 같은 실행의 결과만, `Check`가 통과한 결과만 받아들이는지, `ArchiveDir`와 `Extract`를 거쳐 파일이 그대로 돌아오는지, `Extract`가 대상 밖으로 나가는 경로와 심볼릭 링크를 거부하는지 검증 |
 
 - 바이너리 빌드와 콘솔 준비는 테스트 실행 전체가 한 번 수행합니다.

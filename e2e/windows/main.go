@@ -222,15 +222,11 @@ func (r runner) down() error {
 // stopVM은 게스트 OS에 종료를 요청하고 stopped가 될 때까지 기다린다. --request
 // 없이 utmctl stop을 실행하면 VM의 전원을 끄므로, 그렇게는 호출하지 않는다.
 //
-// VM이 멈출 때까지 shutdownRetry마다 요청을 되풀이한다. 2026-11-03에 원래 VM은
-// 요청을 두 번 무시했고, 그때마다 종료 이벤트를 기록하지 않았다: 한 번은 Windows
-// Update가 업데이트를 설치하는 동안이었고, 다른 한 번은 Windows Update가 시작한
-// 재시작이 끝나고 20초 뒤였다. 두 번째 요청을 보내자 각각 60초와 7초 만에 멈췄다.
-// headless 복제본은 18번 종료하는 동안 첫 요청을 한 번 무시했는데, 테스트 실행이
-// 끝나고 약 1분 뒤였으며 두 번째 요청으로 8초 만에 멈췄다. 그 밖의 종료에는 4초에서
-// 24초가 걸렸다. 요청이 무시되는 원인은 알려지지 않았다. 두 VM 모두 완료된 요청은
-// 매번 완전한 종료였다: 게스트는 winlogon.exe가 전원을 끈 기록(event 1074, reason
-// 0x500ff)과 이벤트 로그의 정상 중지(6006)를 남겼고, 다음 부팅은 콜드 부팅
+// Windows는 종료 요청을 종료 이벤트도 남기지 않고 무시할 때가 있고(Windows Update
+// 중이나 테스트 직후에 보았다), 다시 보낸 요청으로는 몇 초에서 1분 안에 멈췄다. 원인은
+// 알려지지 않았으므로 VM이 멈출 때까지 shutdownRetry마다 요청을 되풀이한다. 완료된
+// 요청은 매번 완전한 종료였다: 게스트는 winlogon.exe가 전원을 끈 기록(event 1074,
+// reason 0x500ff)과 이벤트 로그의 정상 중지(6006)를 남겼고, 다음 부팅은 콜드 부팅
 // (Kernel-Boot event 27, boot type 0x0)이었으며, 그 게스트는 최대 절전 모드가 꺼져
 // 있어 빠른 시작을 쓸 수 없었다.
 func (r runner) stopVM(vm vmEntry) error {
@@ -270,16 +266,11 @@ var errQEMUAborted = errors.New("QEMU aborted while the VM was stopping")
 
 // qemuCrash는 종료를 요청한 뒤에 기록된 QEMU 충돌 보고서를 알려 준다. QEMU
 // 프로세스가 중단된 VM은 정상 종료가 확인되지 않은 채 stopped가 되기 때문이다.
-// 2026-11-03에는 디스플레이가 있던 원래 VM의 QEMULauncher가 11번 종료하는 동안
-// 7번 중단되었고(hvf_vcpu_exec의 assertion에서 SIGABRT), macOS는 QEMULauncher가
-// 예기치 않게 종료되었다는 대화 상자를 띄웠다. 중단은 모두 종료가 끝날 무렵에
-// 일어났고, 시작이나 파일 전송, 테스트 중에는 일어나지 않았다. 게스트에서 확인한 세
-// 번의 중단에서는 게스트가 2초에서 6초 전에 이미 종료를 기록했고(events 1074와
-// 6006), 다음 부팅에는 예기치 않은 종료 기록(events 41과 6008)이 없었다. headless
-// 복제본은 그날 18번 종료하는 동안 한 번도 중단되지 않았다. 이 결과는 디스플레이와
-// 관련이 있음을 시사하지만 증명하지는 않는다. 원인은 UTM의 QEMU에 있으며 구체적으로
-// 알려지지 않았다. 보고서에는 VM이 적히지 않으므로, 같은 구간에 다른 VM의 QEMU가 쓴
-// 보고서도 검사를 실패시킨다.
+// 중단은 종료가 끝날 무렵 hvf_vcpu_exec의 assertion에서 SIGABRT로 일어났고, 디스플레이가
+// 있던 VM은 종료 11번 중 7번 중단되었지만 headless 복제본은 18번 중 한 번도 중단되지
+// 않았다. 디스플레이와 관련이 있어 보이지만 원인은 UTM의 QEMU 쪽에 있고 알려지지
+// 않았다. 보고서에는 VM이 적히지 않으므로, 같은 구간에 다른 VM의 QEMU가 쓴 보고서도
+// 검사를 실패시킨다.
 func qemuCrash(since time.Time) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -327,10 +318,11 @@ func (r runner) all() error {
 }
 
 func (r runner) teardown(state upState) error {
+	var err error
 	if state.startedVM {
-		vm, err := r.findVM()
-		if err != nil {
-			return err
+		vm, findErr := r.findVM()
+		if findErr != nil {
+			return findErr
 		}
 		err = r.stopVM(vm)
 		if errors.Is(err, errVMBusy) {
@@ -340,15 +332,11 @@ func (r runner) teardown(state upState) error {
 		if err != nil && !errors.Is(err, errQEMUAborted) {
 			return err
 		}
-		if state.openedUTM {
-			return errors.Join(err, r.quitUTMIfIdle())
-		}
-		return err
 	}
 	if state.openedUTM {
-		return r.quitUTMIfIdle()
+		return errors.Join(err, r.quitUTMIfIdle())
 	}
-	return nil
+	return err
 }
 
 func (r runner) findVM() (vmEntry, error) {

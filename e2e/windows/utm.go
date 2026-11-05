@@ -21,12 +21,9 @@ import (
 // (https://github.com/utmapp/UTM/issues/8006)도 같은 멈춤을 보고한다. 원인은
 // 알려지지 않았다.
 //
-// file pull에는 크기가 작은 파일에도 긴 한도인 pullLimit을 준다. utmctl file pull은
-// Guest Agent에 파일 열기, 읽기, 닫기를 따로 요청하므로(UTM utmctl/UTMCtl.swift의
-// FilePull), 열기와 닫기 사이에 utmctl을 죽이면 Guest Agent는 그 파일을 연 채로 둔다.
-// 게스트는 열린 파일을 지우지 못하므로, 그 파일이 든 실행 디렉터리도 지울 수 없다.
-// Guest Agent 요청 하나는 응답이 없어도 UTM이 10초 뒤에 실패로 끝낸다(QEMUKit
-// QEMUManager.m의 qmp_rpc_call).
+// file pull에는 크기가 작은 파일에도 긴 한도인 pullLimit을 준다. 열기와 닫기 사이에
+// utmctl을 죽이면 Guest Agent가 그 파일을 연 채로 두어, 그 파일이 든 실행 디렉터리를
+// 지울 수 없다(guestTest.pull 참고).
 const (
 	requestLimit = 15 * time.Second
 	startLimit   = 30 * time.Second
@@ -233,34 +230,28 @@ func (u utm) runJXA(script string, args ...string) ([]byte, error) {
 
 // await는 utmctl status가 want를 보고할 때까지 상태를 반복해서 확인한다.
 func (u utm) await(vm, want string, limit time.Duration) error {
-	deadline := time.Now().Add(limit)
-	for {
+	err := retryUntil(time.Now().Add(limit), retryInterval, func() error {
 		status, err := u.status(vm)
 		if err == nil && status == want {
 			return nil
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("VM is not %s after %s (status %q, %v)", want, limit, status, err)
-		}
-		time.Sleep(retryInterval)
+		return fmt.Errorf("status %q, %v", status, err)
+	})
+	if err != nil {
+		return fmt.Errorf("VM is not %s after %s (%v)", want, limit, err)
 	}
+	return nil
 }
 
 // awaitGuestAgent는 Guest Agent가 IPv4 주소를 보고할 때까지 기다린다. VM이
 // started라고 해서 게스트가 부팅을 마친 것은 아니다: 실험에서 agent는 started 뒤
 // 7초에서 10초가 지나서야 응답했다.
 func (u utm) awaitGuestAgent(vm string, limit time.Duration) error {
-	deadline := time.Now().Add(limit)
-	for {
-		err := u.guestAgentReady(vm)
-		if err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("Guest Agent did not answer within %s: %v", limit, err)
-		}
-		time.Sleep(2 * time.Second)
+	err := retryUntil(time.Now().Add(limit), 2*time.Second, func() error { return u.guestAgentReady(vm) })
+	if err != nil {
+		return fmt.Errorf("Guest Agent did not answer within %s: %v", limit, err)
 	}
+	return nil
 }
 
 func (u utm) guestAgentReady(vm string) error {
@@ -284,14 +275,12 @@ var utmRunning = func() bool { return exec.Command("pgrep", "-x", "UTM").Run() =
 // open은 utmctl이나 JXA 스크립트가 UTM을 띄우게 두지 않고, open -g로 UTM을
 // 백그라운드에서 띄운다. UTM #8006은 macOS 27의 UTM 5.0.8을 utmctl이 띄우면 UTM이
 // 충돌하고 start가 멈춘다고 보고하고, irgo-windows-vm PR #13은 UTM을 띄우고 0.3초
-// 안에 요청을 보내면 start가 응답하지 않는다고 측정했다. 2026-11-03 실험에서는 첫
-// 요청 전에 2초를 기다리자 start가 동작했지만, 원인은 알려지지 않았다.
+// 안에 요청을 보내면 start가 응답하지 않는다고 측정했다. 첫 요청 전에 2초를 기다리면
+// start가 동작했지만, 원인은 알려지지 않았다.
 //
 // -g는 UTM을 맨 앞 앱 뒤에 둘 뿐이어서, UTM은 -g를 붙여도 실행 후 0.5초 안에 메인
-// 창을 띄운다. 그래서 창은 대기가 끝난 뒤가 아니라 곧바로 닫는다. 2026-11-03에 8번
-// 실행하는 동안 이 이벤트를 일찍 보내도 start가 응답하지 않는 일은 없었다. open
-// -j는 UTM을 숨긴 채 띄우지만, 그날 두 번 중 한 번은 start가 VM을 stopped로
-// 남겼다.
+// 창을 띄운다. 그래서 창은 2초 대기 전에 곧바로 닫으며, 이 이벤트를 일찍 보내도 start는
+// 멈추지 않았다. open -j는 UTM을 숨긴 채 띄우지만 start가 VM을 stopped로 남기기도 했다.
 func (u utm) open() error {
 	ctx, cancel := context.WithTimeout(context.Background(), appLimit)
 	defer cancel()
@@ -321,12 +310,22 @@ func (u utm) quit() error {
 }
 
 func awaitApp(running bool) error {
-	deadline := time.Now().Add(appLimit)
-	for utmRunning() != running {
-		if time.Now().After(deadline) {
+	return retryUntil(time.Now().Add(appLimit), 200*time.Millisecond, func() error {
+		if utmRunning() != running {
 			return fmt.Errorf("UTM running=%v not reached within %s", running, appLimit)
 		}
-		time.Sleep(200 * time.Millisecond)
+		return nil
+	})
+}
+
+// retryUntil은 try가 성공하거나 deadline이 지날 때까지 interval마다 try를 다시 부르고,
+// deadline이 지나면 try의 마지막 오류를 돌려준다.
+func retryUntil(deadline time.Time, interval time.Duration, try func() error) error {
+	for {
+		err := try()
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(interval)
 	}
-	return nil
 }

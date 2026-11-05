@@ -117,12 +117,23 @@ func report(warn io.Writer, testErr, collectErr, cleanupErr error) error {
 
 func (g guestTest) file(name string) string { return g.dir + `\` + name }
 
+// execAnswerNote는 exec의 오류를 알릴 때 덧붙인다(utm.exec 참고).
+const execAnswerNote = "utmctl exec may answer with the result of another guest command"
+
 // withExecAnswer는 게스트의 파일로 확인한 실패에 그 명령을 보낸 exec의 오류를 덧붙인다.
 func withExecAnswer(err, answer error) error {
 	if err == nil || answer == nil {
 		return err
 	}
-	return fmt.Errorf("%w (%v; utmctl exec may answer with the result of another guest command)", err, answer)
+	return fmt.Errorf("%w (%v; %s)", err, answer, execAnswerNote)
+}
+
+// execLogged는 결과를 파일로 확인하는 게스트 명령을 exec로 보내고, exec의 오류는
+// runner.log에만 남긴다.
+func (g guestTest) execLogged(what string, command ...string) {
+	if err := g.utm.exec(g.vm, command...); err != nil {
+		fmt.Fprintf(g.log, "%s request (%s): %v\n", what, execAnswerNote, err)
+	}
 }
 
 // send는 게스트 프로그램을 빌드하고 작업 트리를 아카이브로 묶은 뒤, 둘을 요청과 함께
@@ -244,38 +255,32 @@ var (
 )
 
 // createGuestDir는 exec로 mkdir를 실행해 실행 디렉터리를 만들고, 요청을 보낸 뒤 다시
-// 읽어 만들어졌는지 확인한다. exec의 응답으로는 mkdir의 결과를 알 수 없고(utm.exec
-// 참고) push와 pull은 실패해도 0으로 끝나므로, 디렉터리가 있는지와 파일 전송이
-// 동작하는지는 다시 읽어 보는 방법으로만 확인할 수 있다. 요청에는 실행 ID가 들어 있어서,
-// 다른 실행의 요청을 읽으면 보낸 요청과 다르다.
+// 읽어 만들어졌는지 확인한다. 요청에는 실행 ID가 들어 있어서, 다른 실행의 요청을 읽으면
+// 보낸 요청과 다르다.
 func (g guestTest) createGuestDir(request []byte) error {
 	answer := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "mkdir", g.dir)
-	deadline := time.Now().Add(guestDirLimit)
 	sameRequest := func(back []byte) error {
 		if !bytes.Equal(back, request) {
 			return errors.New("request read back from the guest differs from the one sent")
 		}
 		return nil
 	}
-	for {
-		err := g.push(guestrun.RequestFile, request)
-		if err == nil {
-			_, err = g.pull(g.file(guestrun.RequestFile), sameRequest)
+	err := retryUntil(time.Now().Add(guestDirLimit), retryInterval, func() error {
+		if err := g.push(guestrun.RequestFile, request); err != nil {
+			return err
 		}
-		if err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return withExecAnswer(fmt.Errorf("create guest run directory %s: %w", g.dir, err), answer)
-		}
-		time.Sleep(retryInterval)
+		_, err := g.pull(g.file(guestrun.RequestFile), sameRequest)
+		return err
+	})
+	if err != nil {
+		return withExecAnswer(fmt.Errorf("create guest run directory %s: %w", g.dir, err), answer)
 	}
+	return nil
 }
 
-// push는 게스트 실행 디렉터리에 파일을 쓴다. utmctl file push는 file open의 응답으로 받은
-// handle에 쓰므로, 그 응답이 다른 요청의 것이면(pull 참고) 다른 파일에 쓴다. 그래서
-// 보낸 파일은 모두 게스트에서 확인한다: request.json은 createGuestDir가 다시 읽어 보고,
-// 나머지는 게스트 프로그램이 요청에 적힌 SHA-256과 대조한다(guestrun.Request.Verify).
+// push는 게스트 실행 디렉터리에 파일을 쓴다. 다른 파일에 쓸 수 있으므로(pull 참고) 보낸
+// 파일은 모두 게스트에서 확인한다: request.json은 createGuestDir가 다시 읽어 보고, 나머지는
+// 게스트 프로그램이 요청에 적힌 SHA-256과 대조한다(guestrun.Request.Verify).
 //
 // push는 30초에 128 KiB마다 1초를 더한 시간을 허용한다. 실험에서 push는 초당 약
 // 570 KB로 전송되었다.
@@ -290,14 +295,15 @@ func (g guestTest) push(name string, data []byte) error {
 // 읽는 파일은 모두 이 함수로 읽는다. 없는 파일을 읽은 오류는 결과를 기다리는 동안 늘
 // 나오므로 남기지 않고, 그 밖의 오류는 runner.log에 남긴다.
 //
-// UTM이 Guest Agent와 통신하는 QEMUKit(QEMUManager.m의 qmp_rpc_call)은 요청에 ID를
-// 붙이지 않고, 도착한 응답을 그때 기다리는 요청에 넘긴다. 10초 안에 응답이 오지 않은
-// 요청은 시간 초과로 끝나고, 늦게 온 그 응답은 다음 요청이 받는다. 2026-11-05에 같은
-// VM으로 동시에 돈 두 실행 가운데 하나가 아직 없는 자기 result.json을 읽었는데, file
-// pull은 오류 없이 다른 실행의 result.json을 출력했다. 다른 실행의 file open이 시간
-// 초과로 끝난 직후에 보낸 file open이 그 실행이 연 파일의 handle을 받은 것으로 본다.
-// 같은 날 시간 초과가 없을 때는, 없는 파일을 읽는 file pull 140번을 다른 file pull
-// 480번과 동시에 보내도 내용이 섞이지 않았다.
+// utmctl file pull과 push는 Guest Agent에 파일 열기, 읽기나 쓰기, 닫기를 따로 요청한다
+// (UTM utmctl/UTMCtl.swift). UTM이 Guest Agent와 통신하는 QEMUKit(QEMUManager.m의
+// qmp_rpc_call)은 요청에 ID를 붙이지 않고 도착한 응답을 그때 기다리는 요청에 넘기며,
+// 10초 안에 응답이 오지 않은 요청을 시간 초과로 끝낸다. 늦게 온 그 응답은 다음 요청이
+// 받으므로, 같은 VM을 다른 실행이 함께 쓰면 pull은 오류 없이 다른 실행이 연 파일의
+// 내용을 돌려주고 push는 다른 실행이 연 파일에 쓸 수 있다. 시간 초과가 없을 때는 없는
+// 파일을 읽는 pull 140번을 다른 pull 480번과 동시에 보내도 내용이 섞이지 않았다. 열기와
+// 닫기 사이에 utmctl이 끝나거나 다른 요청이 열기 응답을 받으면, 그 파일은 Guest Agent
+// 프로세스가 끝날 때까지 열린 채 남아 지울 수 없다.
 func (g guestTest) pull(path string, check func([]byte) error) ([]byte, error) {
 	data, err := g.utm.call(pullLimit, nil, "file", "pull", g.vm, path)
 	if err != nil {
@@ -313,33 +319,24 @@ func (g guestTest) pull(path string, check func([]byte) error) ([]byte, error) {
 	return data, nil
 }
 
-// startGuestProgram은 exec로 게스트 프로그램을 시작하고, 프로그램이 쓰는 시작 표시
-// 파일로 시작했는지 확인한다. exec의 응답으로는 시작 여부를 알 수 없다(utm.exec 참고).
+// startGuestProgram은 exec로 게스트 프로그램을 시작하고, 프로그램이 시작 표시 파일에
+// 이번 실행의 ID를 썼는지로 시작했는지 확인한다.
 func (g guestTest) startGuestProgram() error {
 	answer := g.utm.exec(g.vm, g.file(guestrun.ProgramFile), g.dir)
-	return withExecAnswer(g.awaitStarted(), answer)
-}
-
-func (g guestTest) awaitStarted() error {
-	deadline := time.Now().Add(programStartLimit)
-	for {
-		_, err := g.pull(g.dir+guestrun.StartedSuffix, g.startedByThisRun)
-		if err == nil {
-			return nil
+	startedByThisRun := func(data []byte) error {
+		if string(data) != g.id {
+			return fmt.Errorf("started file names run %q, not %q", data, g.id)
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("guest program did not start within %s (%v); check that the Guest Agent can run %s", programStartLimit, err, g.file(guestrun.ProgramFile))
-		}
-		time.Sleep(retryInterval)
+		return nil
 	}
-}
-
-// startedByThisRun은 게스트 프로그램이 시작 표시 파일에 적는 실행 ID를 확인한다.
-func (g guestTest) startedByThisRun(data []byte) error {
-	if string(data) != g.id {
-		return fmt.Errorf("started file names run %q, not %q", data, g.id)
+	err := retryUntil(time.Now().Add(programStartLimit), retryInterval, func() error {
+		_, err := g.pull(g.dir+guestrun.StartedSuffix, startedByThisRun)
+		return err
+	})
+	if err != nil {
+		err = fmt.Errorf("guest program did not start within %s (%v); check that the Guest Agent can run %s", programStartLimit, err, g.file(guestrun.ProgramFile))
 	}
-	return nil
+	return withExecAnswer(err, answer)
 }
 
 // resultInterval은 결과를 다시 확인하기 전에 기다리는 시간이고, resultGrace는 실행의
@@ -352,31 +349,29 @@ var (
 // awaitResult는 게스트 프로그램이 마지막에 쓰는 이번 실행의 결과가 나올 때까지 반복해서
 // 확인한다. 실행의 deadline이 go test를 멈추므로, 결과는 deadline 직후에 나와야 한다.
 // exec는 게스트 프로그램이 끝나기를 기다리지 않으므로(utm.exec 참고), 결과 파일은 실행
-// 결과를 알 수 있는 유일한 근거다. 읽은 내용이 이번 실행의 결과가 아니면(pull 참고)
-// 버리고 계속 기다린다.
+// 결과를 알 수 있는 유일한 근거다.
 func (g guestTest) awaitResult() (guestrun.Result, []byte, error) {
 	limit := g.cfg.deadline + resultGrace
 	fmt.Fprintf(g.log, "waiting up to %s for the guest result\n", limit)
 	start := time.Now()
 	lastReport := start
-	for {
-		var result guestrun.Result
-		data, err := g.pull(g.file(guestrun.ResultFile), func(data []byte) (err error) {
-			result, err = guestrun.Decode(data, g.id)
-			return err
-		})
-		if err == nil {
-			return result, data, nil
-		}
-		if time.Since(start) > limit {
-			return guestrun.Result{}, nil, fmt.Errorf("no guest result within %s (%v)", limit, err)
-		}
+	var result guestrun.Result
+	var data []byte
+	err := retryUntil(start.Add(limit), resultInterval, func() (err error) {
 		if time.Since(lastReport) >= time.Minute {
 			fmt.Fprintf(g.log, "guest run in progress (%s)\n", time.Since(start).Round(time.Second))
 			lastReport = time.Now()
 		}
-		time.Sleep(resultInterval)
+		data, err = g.pull(g.file(guestrun.ResultFile), func(data []byte) (err error) {
+			result, err = guestrun.Decode(data, g.id)
+			return err
+		})
+		return err
+	})
+	if err != nil {
+		return guestrun.Result{}, nil, fmt.Errorf("no guest result within %s (%v)", limit, err)
 	}
+	return result, data, nil
 }
 
 // collect는 결과가 있으면 결과와 함께 로그와 진단 자료를 Mac으로 복사하고, go test
@@ -448,21 +443,15 @@ var removeLimit = time.Minute
 
 // removeGuestDir는 파일이 Mac에 도착한 뒤 게스트 실행 디렉터리를 지운다. rmdir를 실행한
 // cmd.exe가 디렉터리가 남았는지를 실행 ID와 함께 실행 디렉터리 옆의 표시 파일에 적고,
-// 실행기는 그 파일을 읽어 삭제를 확인한다. exec의 응답은 근거로 쓰지 않는다(utm.exec 참고).
-//
-// 삭제를 확인하려고 실행 디렉터리 안의 파일을 읽으면 안 된다. Guest Agent가 file
-// pull로 열어 둔 파일은 rmdir가 지우지 못해서, 그날 rmdir가 지우는 동안 request.json을
-// 읽자 디렉터리에 request.json만 남았다. 디렉터리를 현재 디렉터리로 쓰는 프로세스가
-// 남아 있어도 rmdir는 디렉터리를 지우지 못한다.
+// 실행기는 그 파일을 읽어 삭제를 확인한다. 실행 디렉터리 안의 파일을 읽어 확인하면, pull이
+// 연 그 파일 때문에 rmdir가 디렉터리를 지우지 못한다(pull 참고).
 func (g guestTest) removeGuestDir() error {
 	defer g.deleteMarkers()
 	deadline := time.Now().Add(removeLimit)
 	for attempt := 1; ; attempt++ {
 		marker := g.dir + ".rmdir-" + strconv.Itoa(attempt)
-		if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c",
-			"rmdir", "/s", "/q", g.dir, "&", "(if", "exist", g.dir, "(echo", g.id, "kept)", "else", "(echo", g.id, "removed))>", marker); err != nil {
-			fmt.Fprintln(g.log, "rmdir request (utmctl exec may answer with the result of another guest command):", err)
-		}
+		g.execLogged("rmdir", "cmd.exe", "/d", "/c",
+			"rmdir", "/s", "/q", g.dir, "&", "(if", "exist", g.dir, "(echo", g.id, "kept)", "else", "(echo", g.id, "removed))>", marker)
 		switch g.awaitRemoval(marker, deadline) {
 		case "removed":
 			return nil
@@ -484,36 +473,30 @@ func (g guestTest) removeGuestDir() error {
 	}
 }
 
-// awaitRemoval은 rmdir 한 번이 표시 파일에 적은 결과를 deadline까지 기다려 "removed"나
-// "kept"를 돌려준다. 이번 실행의 결과를 읽지 못하면 빈 문자열을 돌려준다.
+// awaitRemoval은 rmdir 한 번이 표시 파일에 이번 실행의 ID와 함께 적은 결과를 deadline까지
+// 기다려 "removed"나 "kept"를 돌려준다. 이번 실행의 결과를 읽지 못하면 빈 문자열을 돌려준다.
 func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
-	for {
-		data, err := g.pull(marker, g.removalReport)
-		if err == nil {
-			return strings.TrimPrefix(strings.TrimSpace(string(data)), g.id+" ")
+	var outcome string
+	thisRunsReport := func(data []byte) error {
+		report := strings.TrimSpace(string(data))
+		state, ok := strings.CutPrefix(report, g.id+" ")
+		if !ok || (state != "removed" && state != "kept") {
+			return fmt.Errorf("rmdir report %q is not this run's", report)
 		}
-		if time.Now().After(deadline) {
-			return ""
-		}
-		time.Sleep(retryInterval)
-	}
-}
-
-// removalReport는 표시 파일에 이번 실행의 ID와 rmdir의 결과가 적혀 있는지 확인한다.
-func (g guestTest) removalReport(data []byte) error {
-	switch strings.TrimSpace(string(data)) {
-	case g.id + " removed", g.id + " kept":
+		outcome = state
 		return nil
 	}
-	return fmt.Errorf("rmdir report %q is not this run's", strings.TrimSpace(string(data)))
+	retryUntil(deadline, retryInterval, func() error {
+		_, err := g.pull(marker, thisRunsReport)
+		return err
+	})
+	return outcome
 }
 
 // deleteMarkers는 이번 실행이 실행 디렉터리 옆에 둔 시작 표시 파일과 rmdir 표시 파일을
 // 지운다. 지우지 못한 표시 파일은 몇 바이트뿐이므로 확인하지 않는다.
 func (g guestTest) deleteMarkers() {
-	if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "del", "/q", g.dir+guestrun.StartedSuffix, g.dir+".rmdir-*"); err != nil {
-		fmt.Fprintln(g.log, "delete markers request (utmctl exec may answer with the result of another guest command):", err)
-	}
+	g.execLogged("delete markers", "cmd.exe", "/d", "/c", "del", "/q", g.dir+guestrun.StartedSuffix, g.dir+".rmdir-*")
 }
 
 // removeCommand는 남은 실행 디렉터리를 Mac의 셸에서 지우는 명령이다. 사용자가 경고의
