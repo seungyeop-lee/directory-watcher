@@ -251,7 +251,7 @@ func (g guestTest) createGuestDir(request []byte) error {
 		if time.Now().After(deadline) {
 			return withExecAnswer(fmt.Errorf("create guest run directory %s: %w", g.dir, err), answer)
 		}
-		time.Sleep(time.Second)
+		time.Sleep(retryInterval)
 	}
 }
 
@@ -284,7 +284,7 @@ func (g guestTest) awaitStarted() error {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("guest program did not start within %s (%v); check that the Guest Agent can run %s", programStartLimit, err, g.file("guest.exe"))
 		}
-		time.Sleep(time.Second)
+		time.Sleep(retryInterval)
 	}
 }
 
@@ -377,7 +377,7 @@ func (g guestTest) removeGuestDir() error {
 			if attempt == 1 {
 				fmt.Fprintf(g.log, "guest run directory is still there after rmdir; retrying for up to %s\n", removeLimit)
 			}
-			time.Sleep(time.Second)
+			time.Sleep(retryInterval)
 		default:
 			return fmt.Errorf("could not confirm that guest run directory %s was removed: rmdir attempt %d reported nothing within %s; "+
 				"if it is still there (see e2e/docs/windows-utm.md), remove it with this command:\n    %s",
@@ -397,7 +397,7 @@ func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
 		if time.Now().After(deadline) {
 			return ""
 		}
-		time.Sleep(time.Second)
+		time.Sleep(retryInterval)
 	}
 }
 

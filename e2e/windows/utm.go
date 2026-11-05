@@ -31,6 +31,9 @@ const (
 // 실험에서는 2초에서 3초가 걸렸다.
 var startedLimit = time.Minute
 
+// retryInterval은 VM 상태나 게스트 파일을 다시 확인하기 전에 기다리는 시간이다.
+var retryInterval = time.Second
+
 // utm은 UTM.app 안에 있는 utmctl로 UTM을 제어한다. Homebrew 심볼릭 링크
 // /opt/homebrew/bin/utmctl로 호출하면 2026-11-03 실험에서 start가 응답하지 않았고,
 // irgo-windows-vm PR #13(https://github.com/joeblew999/irgo-windows-vm/pull/13)도
@@ -226,7 +229,7 @@ func (u utm) await(vm, want string, limit time.Duration) error {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("VM is not %s after %s (status %q, %v)", want, limit, status, err)
 		}
-		time.Sleep(time.Second)
+		time.Sleep(retryInterval)
 	}
 }
 

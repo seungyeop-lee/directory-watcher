@@ -71,8 +71,7 @@ exit 0`)
 }
 
 func TestStartFailsWhenTheVMStaysStoppedAfterAnExitCodeOfZero(t *testing.T) {
-	defer func(limit time.Duration) { startedLimit = limit }(startedLimit)
-	startedLimit = 2 * time.Second
+	shortWaits(t)
 	u := fakeUTMCtl(t, `case "$1" in
 status) echo stopped ;;
 esac

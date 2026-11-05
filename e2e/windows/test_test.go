@@ -57,15 +57,8 @@ func requests(t *testing.T, state string) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-func shortRemoveLimit(t *testing.T) {
-	t.Helper()
-	limit := removeLimit
-	t.Cleanup(func() { removeLimit = limit })
-	removeLimit = 4 * time.Second
-}
-
 func TestRemoveGuestDirRetriesWithoutReadingInsideTheRunDirectory(t *testing.T) {
-	shortRemoveLimit(t)
+	shortRetryInterval(t)
 	g, state := fakeGuest(t, 1, true)
 	if err := g.removeGuestDir(); err != nil {
 		t.Fatalf("removeGuestDir = %v; want the second rmdir to remove the directory", err)
@@ -88,7 +81,7 @@ func TestRemoveGuestDirRetriesWithoutReadingInsideTheRunDirectory(t *testing.T) 
 }
 
 func TestRemoveGuestDirReportsADirectoryThatStays(t *testing.T) {
-	shortRemoveLimit(t)
+	shortWaits(t)
 	g, state := fakeGuest(t, 1000, true)
 	err := g.removeGuestDir()
 	if err == nil || !strings.Contains(err.Error(), fakeRunDir+" is still there") {
@@ -113,7 +106,7 @@ func runRemoveCommand(t *testing.T, g guestTest, err error, state string) {
 }
 
 func TestRemoveGuestDirReportsAnUnansweredRemoval(t *testing.T) {
-	shortRemoveLimit(t)
+	shortWaits(t)
 	g, state := fakeGuest(t, 0, false)
 	began := time.Now()
 	err := g.removeGuestDir()
@@ -175,20 +168,13 @@ file)
 	esac ;;
 esac
 exit 0`
-	shortPrepareLimits(t)
+	shortWaits(t)
 	return guestTest{
 		runner: runner{utm: fakeUTMCtl(t, script), log: io.Discard},
 		vm:     "95B99283-8256-4360-AA1D-0563FCD5CE09",
 		id:     filepath.Base(strings.ReplaceAll(fakeRunDir, `\`, "/")),
 		dir:    fakeRunDir,
 	}
-}
-
-func shortPrepareLimits(t *testing.T) {
-	t.Helper()
-	dir, start := guestDirLimit, programStartLimit
-	t.Cleanup(func() { guestDirLimit, programStartLimit = dir, start })
-	guestDirLimit, programStartLimit = 2*time.Second, 2*time.Second
 }
 
 func TestCreateGuestDirTrustsTheReadBackOverTheExecAnswer(t *testing.T) {
