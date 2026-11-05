@@ -5,6 +5,7 @@
 - While a change hook that takes 80ms is running, file changes pour in at 10ms intervals.
 - Checks, in the four `hookBatch.deliver`·`run.interrupt` combinations, that processing reaches the last valid change received.
 - It also checks that excluded files do not run the hook, and that after shutdown no new hook runs and the hook processes are gone.
+- With `global.lifeCycle.onError` set, it also checks that the burst of normal changes and the events merged by `deliver: last` do not run the loss notification.
 
 ## What it checks and success criteria
 
@@ -12,10 +13,12 @@
 - **Sequential processing without interruption**: With `deliver=each/interrupt=none`, the number of `DONE:` records must equal the number of valid events received, and each of `00.txt`–`23.txt` must have at least one `DONE:` record. The baseline is the observed number of receipts, not the number of file operations.
 - **Isolated change**: The `DONE:` record for `last.txt`, written after the batch settles, must appear. This wait and the batch completion wait share one 30-second limit.
 - **Excluded files**: Records up to shutdown must contain no line with `excluded.swp` or `readiness.probe`.
-- **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be no `BEGIN|` record after the last `FINISH` record. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be exactly one `FINISH` record and no `BEGIN|` record after it. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
+- **No notification**: After the watcher exits, there must be no `ERROR|` notification record. If there is any, the test prints the records and fails.
 
 ## Configuration
 
+- The global `onError` is `hookrec --error-context --line=NOTIFY`. When it runs, it records `ERROR|<JSON>`.
 - The target `onChange` is `hookrec --delay=80ms --line=DONE:{{.Path}}`. It records `BEGIN|PID|DONE:<path>` when it starts, `DONE:<path>` after 80ms, and `CANCEL|PID|DONE:<path>` if it is cancelled before that.
 - The target `onFinishWatch` records `FINISH`.
 - The target options are the per-subtest `hookBatch.deliver` and `run.interrupt`, plus `hookBatch.waitMillisecond`, which is 30 with `deliver: last` and 0 with `deliver: each`, `watch.fileEvent: CU`, and `watch.exclude: ['*.probe', '*.swp']`.
@@ -60,7 +63,7 @@ sequenceDiagram
     testCode->>watcherProc: shutdown signal after shutdown.txt is received in the log (up to 5s)
     watcherProc->>recordFile: record FINISH
     watcherProc-->>testCode: exit code 0 (wait up to 10s)
-    testCode->>recordFile: check no BEGIN after FINISH
+    testCode->>recordFile: check no ERROR record, one FINISH, and no BEGIN after it
     testCode->>slowHook: wait for absence of all hook processes (up to 5s)
 ```
 
@@ -87,4 +90,5 @@ make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ## Related code
 
 - `e2e/scenarios/reliability_test.go`: `TestFastInflowSlowHook`
+- `e2e/scenarios/error_notification_test.go`: `errorContexts`, which reads the notification records
 - `e2e/harness`: `Start`, `Hook`, `Await`, `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `CountRecord`, `Stop`, `AwaitDelayedHooksGone`. Where each function lives and what it does is in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

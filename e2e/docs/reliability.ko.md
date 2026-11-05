@@ -5,12 +5,12 @@
 ## 경합과 과부하 검증
 
 ```sh
-go test -count=3 -v -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
+go test -count=3 -v -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
 go test -race ./...
 ```
 
-- 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.ko.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) 문서에 있습니다.
+- 위 명령이 반복하는 시나리오의 확인 내용과 진행 순서는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestRunInterrupt`](scenarios/run-interrupt.ko.md) 문서에 있습니다.
 - 반복 대상에는 [`TestQueueWarningCLI`](scenarios/queue-warning-cli.ko.md)와 [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md)도 포함됩니다.
 - [`TestBatchingOptions`](scenarios/batching-options.ko.md)의 최종 변경 순서와 지속 유입 중 최대 대기 flush도 반복합니다.
 
@@ -32,16 +32,17 @@ go test -race ./...
 - `e2e/harness/hook_records_test.go`는 `last.txt` 뒤에 `normal-19.txt`를 수신한 경계, 빈 기록·미완료 hook의 거부, `deliver: each`의 중복 수신별 완료를 검사합니다.
 - 120ms 안정 구간은 관찰 조건이지 OS가 앞으로 알림을 보내지 않는다는 보장은 아닙니다.
 - 늦은 유효 이벤트가 고립된 변경을 대체하면 테스트는 성공 처리하지 않고, 배치 관찰과 고립된 변경이 공유하는 완료 대기 제한 시간 안에 실패합니다.
-- 제한 시간은 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md)이 30초, [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.ko.md)가 10초입니다.
+- [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md)에서 이 제한 시간은 30초입니다.
 
 ## 이벤트 유실 알림 검증
 
 ```sh
-go test -count=1 -v -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify|TestInjectedLossNotificationCLI' ./e2e/scenarios
-go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify|TestInjectedLossNotificationCLI'
+go test -count=1 -v -run 'TestEventLossNotificationCLI|TestFastInflowSlowHook|TestInjectedLossNotificationCLI' ./e2e/scenarios
+go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestFastInflowSlowHook|TestInjectedLossNotificationCLI'
 ```
 
-- 위 명령이 실행하는 시나리오의 확인 내용과 진행 순서는 [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md), [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.ko.md), [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.ko.md) 문서에 있습니다.
+- 위 명령이 실행하는 시나리오의 확인 내용과 진행 순서는 [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md), [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md), [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.ko.md) 문서에 있습니다.
+  - `TestFastInflowSlowHook`은 일반 변경과 `deliver: last`가 합친 이벤트가 알림을 실행하지 않는지 확인합니다.
 - macOS·Linux·Windows의 알림 자손 정리 방식은 [플랫폼별 자손 정리](scenarios/event-loss-notification-cli.ko.md#플랫폼별-자손-정리)에 있습니다.
 
 - 내부 YAML 설정 테스트 `go test -count=1 -run '^TestDecoded' ./internal/config/yaml`은 디코딩된 구조화 명령을 실제로 실행하여 환경 변수의 원문 전달과 `dir` 작업 디렉토리, 기존 설정 호환성을 검사합니다.

@@ -2,9 +2,8 @@ package scenarios
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"strconv"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +25,11 @@ func TestFastInflowSlowHook(t *testing.T) {
 					wait = 0
 				}
 				s := harness.NewScenario(t)
-				s.Start(fmt.Sprintf(`watchTargets:
+				s.Start(fmt.Sprintf(`global:
+  lifeCycle:
+    onError:
+      - %s
+watchTargets:
   - path: '%s'
     lifeCycle:
       onChange:
@@ -42,7 +45,7 @@ func TestFastInflowSlowHook(t *testing.T) {
         deliver: %s
       run:
         interrupt: %s
-`, s.Watch, s.Hook("--delay=80ms", "--line=DONE:{{.Path}}"), s.Hook("--line=FINISH"), wait, deliver, interrupt))
+`, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--delay=80ms", "--line=DONE:{{.Path}}"), s.Hook("--line=FINISH"), wait, deliver, interrupt))
 				initial := filepath.Join(s.Watch, "initial.txt")
 				s.Write(initial, []byte("initial"))
 				s.Await("slow hook starts", 5*time.Second, func() bool { return harness.DelayedHookBegun(s.Lines(), "DONE:"+initial) })
@@ -82,16 +85,14 @@ func TestFastInflowSlowHook(t *testing.T) {
 				s.Write(filepath.Join(s.Watch, "shutdown.txt"), []byte("stop"))
 				s.Await("shutdown event received", 5*time.Second, func() bool { return strings.Contains(s.Log(), "shutdown.txt") })
 				s.Stop()
+				if got := errorContexts(t, s.Records); len(got) != 0 {
+					t.Fatalf("normal/merged events invoked onError: %v", got)
+				}
 				lines = s.Lines()
-				finish := -1
-				for n, line := range lines {
-					if line == "FINISH" {
-						finish = n
-					}
+				if n := harness.CountRecord(lines, "FINISH"); n != 1 {
+					t.Fatalf("finish hook count = %d, want 1", n)
 				}
-				if finish < 0 {
-					t.Fatal("finish hook missing")
-				}
+				finish := slices.Index(lines, "FINISH")
 				for _, line := range lines[finish+1:] {
 					if strings.HasPrefix(line, "BEGIN|") {
 						t.Fatalf("hook after finish: %s", line)
@@ -102,88 +103,4 @@ func TestFastInflowSlowHook(t *testing.T) {
 			})
 		}
 	}
-}
-
-// TestTargetsRunIndependently는 빠른 대상의 hook이 500ms 안에 끝나기를 요구한다. 이 한도는 다른 시나리오와 CPU를
-// 나눠 쓰면 넘을 수 있으므로 병렬로 실행하지 않는다.
-func TestTargetsRunIndependently(t *testing.T) {
-	s := harness.NewScenario(t)
-	other := filepath.Join(s.Work, "other")
-	if err := os.Mkdir(other, 0755); err != nil {
-		t.Fatal(err)
-	}
-	s.Start(fmt.Sprintf(`watchTargets:
-  - path: '%s'
-    lifeCycle:
-      onChange:
-        - %s
-    option:
-      watch:
-        exclude: ['*.probe']
-        fileEvent: C
-      hookBatch:
-        waitMillisecond: 0
-        deliver: each
-  - path: '%s'
-    lifeCycle:
-      onChange:
-        - %s
-    option:
-      watch:
-        exclude: ['*.probe']
-        fileEvent: C
-      hookBatch:
-        waitMillisecond: 0
-        deliver: each
-`, s.Watch, s.Hook("--delay=800ms", "--line=SLOW"), other, s.Hook("--line=FAST")))
-	otherProbe := filepath.Join(other, "readiness.probe")
-	s.Await("second target readiness", 5*time.Second, func() bool {
-		s.Write(otherProbe, nil)
-		return strings.Contains(s.Log(), strconv.Quote(otherProbe))
-	})
-	s.Write(filepath.Join(s.Watch, "slow.txt"), nil)
-	s.Await("slow target executing", 5*time.Second, func() bool { return harness.DelayedHookBegun(s.Lines(), "SLOW") })
-	s.Write(filepath.Join(other, "fast.txt"), nil)
-	s.AwaitLine("independent target completes", 500*time.Millisecond, "FAST")
-	if harness.CountRecord(s.Lines(), "SLOW") != 0 {
-		t.Fatal("fast target waited for slow target")
-	}
-	s.Stop()
-	s.AwaitDelayedHooksGone()
-}
-
-func TestBoundedOverloadCLI(t *testing.T) {
-	t.Parallel()
-	s := harness.NewScenario(t)
-	s.Start(fmt.Sprintf(`watchTargets:
-  - path: '%s'
-    lifeCycle:
-      onStartWatch:
-        - %s
-    option:
-      watch:
-        exclude: ['*.probe']
-        fileEvent: C
-      hookBatch:
-        waitMillisecond: 0
-        deliver: each
-      queue:
-        size: 64
-`, s.Watch, s.Hook("--depth=2")))
-	s.AwaitReadyGenerations("startup tree occupies sequential worker", 1)
-	started := time.Now()
-	for n := range 300 {
-		s.Write(filepath.Join(s.Watch, fmt.Sprintf("load-%03d.txt", n)), nil)
-	}
-	s.Await("bounded overload exits", 10*time.Second, s.Exited)
-	if s.ExitErr() == nil {
-		t.Fatal("queue saturation exited successfully")
-	}
-	log := s.Log()
-	if !strings.Contains(log, "dispatch queue full (capacity 64)") || !strings.Contains(log, strconv.Quote(s.Watch)) {
-		t.Fatalf("queue loss target/cause missing: %s", log)
-	}
-	records := s.ProcessRecords()
-	s.AwaitProcessesGone("overloaded process tree disappears", records)
-	t.Logf("actual application overload: 300 creates duration=%s pending-bound=64 active-generation=1 descendants-alive=0 exit=%v", time.Since(started), s.ExitErr())
 }

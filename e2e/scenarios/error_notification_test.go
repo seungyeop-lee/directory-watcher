@@ -270,58 +270,6 @@ func assertLossExit(t *testing.T, s *harness.Scenario, cause string) {
 	}
 }
 
-func TestNormalChangesDoNotNotify(t *testing.T) {
-	t.Parallel()
-	for _, deliver := range []string{"last", "each"} {
-		t.Run(fmt.Sprintf("deliver=%s", deliver), func(t *testing.T) {
-			t.Parallel()
-			// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
-			each, wait := deliver == "each", 50
-			if each {
-				wait = 0
-			}
-			s := harness.NewScenario(t)
-			s.Start(fmt.Sprintf(`global:
-  lifeCycle:
-    onError:
-      - %s
-watchTargets:
-  - path: '%s'
-    lifeCycle:
-      onChange:
-        - %s
-      onFinishWatch:
-        - %s
-    option:
-      watch:
-        exclude: ['*.probe']
-        fileEvent: C
-      hookBatch:
-        waitMillisecond: %d
-        deliver: %s
-`, s.Hook("--error-context", "--line=NOTIFY"), s.Watch, s.Hook("--line=CHANGE:{{.Path}}"), s.Hook("--line=FINISH"), wait, deliver))
-			var paths []string
-			for n := range 20 {
-				path := filepath.Join(s.Watch, fmt.Sprintf("normal-%02d.txt", n))
-				paths = append(paths, path)
-				s.Write(path, nil)
-			}
-			deadline := time.Now().Add(10 * time.Second)
-			s.AwaitChangesComplete("CHANGE:", paths, fsnotify.Create, each, time.Until(deadline))
-			last := filepath.Join(s.Watch, "last.txt")
-			s.Write(last, nil)
-			s.AwaitLine("isolated normal/merged event completes", time.Until(deadline), "CHANGE:"+last)
-			s.Stop()
-			if got := errorContexts(t, s.Records); len(got) != 0 {
-				t.Fatalf("normal/merged events invoked onError: %v", got)
-			}
-			if harness.CountRecord(s.Lines(), "FINISH") != 1 {
-				t.Fatal("normal finish hook missing")
-			}
-		})
-	}
-}
-
 // injectMarker는 주입 tag watcher가 감시 대상 폴더에서 읽는 표지 파일이다. 이름과 내용("loss", "nonloss")은
 // internal/app/service/runner_watch_target_tree_inject.go와 같아야 한다.
 const injectMarker = "dw-e2e-error.inject"

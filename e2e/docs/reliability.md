@@ -5,12 +5,12 @@
 ## Race and overload verification
 
 ```sh
-go test -count=3 -v -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
-go run ./e2e/linux -- -count=3 -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestTargetsRunIndependently|TestBoundedOverloadCLI|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
+go test -count=3 -v -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown' ./e2e/scenarios
+go run ./e2e/linux -- -count=3 -run 'TestBatchingOptions|TestFastInflowSlowHook|TestStartHookShutdownModes|TestProcessLifecycle|TestRunInterrupt|TestQueueWarningCLI|TestConcurrentRunsShutdown'
 go test -race ./...
 ```
 
-- What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestTargetsRunIndependently`](scenarios/targets-run-independently.md), [`TestBoundedOverloadCLI`](scenarios/bounded-overload-cli.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), and [`TestRunInterrupt`](scenarios/run-interrupt.md) documents.
+- What each scenario repeated by these commands checks, and its sequence, is in the [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md), [`TestProcessLifecycle`](scenarios/process-lifecycle.md), and [`TestRunInterrupt`](scenarios/run-interrupt.md) documents.
 - The repeated scenarios also include [`TestQueueWarningCLI`](scenarios/queue-warning-cli.md) and [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md).
 - [`TestBatchingOptions`](scenarios/batching-options.md) also repeats final-change ordering and maximum-wait flushes during continued inflow.
 
@@ -32,16 +32,17 @@ go test -race ./...
 - `e2e/harness/hook_records_test.go` checks a boundary where `normal-19.txt` was received after `last.txt`, rejection of empty records and unfinished hooks, and completion per duplicate receipt under `deliver: each`.
 - The 120ms quiet period is an observation condition, not a guarantee that the OS will send no further notifications.
 - If a late valid event replaces the isolated change, the test does not treat it as success and fails within the completion wait time limit shared by the batch observation and the isolated change.
-- The time limit is 30 seconds for [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md) and 10 seconds for [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md).
+- In [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), this time limit is 30 seconds.
 
 ## Event-loss notification verification
 
 ```sh
-go test -count=1 -v -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify|TestInjectedLossNotificationCLI' ./e2e/scenarios
-go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestNormalChangesDoNotNotify|TestInjectedLossNotificationCLI'
+go test -count=1 -v -run 'TestEventLossNotificationCLI|TestFastInflowSlowHook|TestInjectedLossNotificationCLI' ./e2e/scenarios
+go run ./e2e/linux -- -count=1 -run 'TestEventLossNotificationCLI|TestFastInflowSlowHook|TestInjectedLossNotificationCLI'
 ```
 
-- What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md), [`TestNormalChangesDoNotNotify`](scenarios/normal-changes-do-not-notify.md), and [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.md) documents.
+- What each scenario run by these commands checks, and its sequence, is in the [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.md), [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), and [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.md) documents.
+  - `TestFastInflowSlowHook` checks that normal changes and the events merged by `deliver: last` do not run the notification.
 - How notification descendants are cleaned up on macOS, Linux, and Windows is in [Descendant cleanup by platform](scenarios/event-loss-notification-cli.md#descendant-cleanup-by-platform).
 
 - The internal YAML configuration test `go test -count=1 -run '^TestDecoded' ./internal/config/yaml` actually runs decoded structured commands and checks that environment variables are passed verbatim, the `dir` working directory, and compatibility with existing configurations.

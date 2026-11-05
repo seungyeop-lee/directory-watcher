@@ -5,6 +5,7 @@
 - 80ms 걸리는 변경 hook이 실행되는 동안 파일 변경이 10ms 간격으로 몰려 들어옵니다.
 - 이때 `hookBatch.deliver`·`run.interrupt` 네 조합에서 마지막으로 수신한 유효 변경까지 처리되는지 확인합니다.
 - 제외 파일이 hook을 실행하지 않는지, 종료 뒤에 hook이 새로 실행되지 않고 hook 프로세스가 사라지는지도 확인합니다.
+- `global.lifeCycle.onError`를 설정해, 몰려 든 일반 변경과 `deliver: last`가 합친 이벤트가 유실 알림을 실행하지 않는지도 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -12,10 +13,12 @@
 - **비중단 순차 처리**: `deliver=each/interrupt=none`에서는 `DONE:` 기록 수가 수신된 유효 이벤트 수와 같아야 하고, `00.txt`~`23.txt` 각각에 `DONE:` 기록이 하나 이상 있어야 합니다. 기준은 파일을 조작한 횟수가 아니라 관찰된 수신 횟수입니다.
 - **고립된 변경**: 배치가 안정된 뒤 쓴 `last.txt`의 `DONE:` 기록이 나타나야 합니다. 이 대기와 배치 완료 대기는 하나의 30초 제한을 공유합니다.
 - **제외 파일**: 종료 전까지의 기록에 `excluded.swp`나 `readiness.probe`가 들어 있는 줄이 없어야 합니다.
-- **종료**: watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝나며, 마지막 `FINISH` 기록 뒤에 `BEGIN|` 기록이 없어야 합니다. 즉 종료 시 대기 중인 변경은 실행되지 않습니다. `BEGIN`을 기록한 모든 hook 프로세스는 5초 안에 사라져야 합니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- **종료**: watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝나며, `FINISH` 기록이 정확히 한 번 있고 그 뒤에 `BEGIN|` 기록이 없어야 합니다. 즉 종료 시 대기 중인 변경은 실행되지 않습니다. `BEGIN`을 기록한 모든 hook 프로세스는 5초 안에 사라져야 합니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
+- **알림 미실행**: watcher가 종료된 뒤 `ERROR|` 알림 기록이 하나도 없어야 합니다. 하나라도 있으면 그 기록을 출력하고 실패합니다.
 
 ## 설정
 
+- 전역 `onError`는 `hookrec --error-context --line=NOTIFY`입니다. 실행되면 `ERROR|<JSON>`을 기록합니다.
 - 대상 `onChange`는 `hookrec --delay=80ms --line=DONE:{{.Path}}`입니다. 시작할 때 `BEGIN|PID|DONE:<경로>`를, 80ms 뒤 `DONE:<경로>`를, 그 전에 취소되면 `CANCEL|PID|DONE:<경로>`를 기록합니다.
 - 대상 `onFinishWatch`는 `FINISH`를 기록합니다.
 - 대상 옵션은 하위 테스트별 `hookBatch.deliver`·`run.interrupt`, `deliver: last`에서 30이고 `deliver: each`에서 0인 `hookBatch.waitMillisecond`, `watch.fileEvent: CU`, `watch.exclude: ['*.probe', '*.swp']`입니다.
@@ -60,7 +63,7 @@ sequenceDiagram
     testCode->>watcherProc: 로그의 shutdown.txt 수신 대기 (최대 5초) 뒤 종료 신호
     watcherProc->>recordFile: FINISH 기록
     watcherProc-->>testCode: 종료 코드 0 (최대 10초 대기)
-    testCode->>recordFile: FINISH 뒤 BEGIN 없음 확인
+    testCode->>recordFile: ERROR 기록 없음, FINISH 1회와 그 뒤 BEGIN 없음 확인
     testCode->>slowHook: 모든 hook 프로세스 부재 대기 (최대 5초)
 ```
 
@@ -87,4 +90,5 @@ make e2e-windows ARGS="-- -run '^TestFastInflowSlowHook$'"
 ## 관련 코드
 
 - `e2e/scenarios/reliability_test.go`: `TestFastInflowSlowHook`
+- `e2e/scenarios/error_notification_test.go`: 알림 기록을 읽는 `errorContexts`
 - `e2e/harness`: `Start`, `Hook`, `Await`, `DelayedHookBegun`, `AwaitChangesComplete`, `AwaitLine`, `CountRecord`, `Stop`, `AwaitDelayedHooksGone`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

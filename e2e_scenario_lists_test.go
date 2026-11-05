@@ -110,7 +110,7 @@ func e2eScenarioNames(t *testing.T) []string {
 }
 
 // scenarioDocName은 harness.md 5단계의 규칙대로 시나리오 이름에서 Test를 떼고 kebab-case로 바꾼 문서 이름이다.
-// 대문자가 이어지는 약어는 한 단어로 본다(TestBoundedOverloadCLI → bounded-overload-cli).
+// 대문자가 이어지는 약어는 한 단어로 본다(TestQueueWarningCLI → queue-warning-cli).
 func scenarioDocName(name string) string {
 	word := []rune(strings.TrimPrefix(name, "Test"))
 	var b strings.Builder
