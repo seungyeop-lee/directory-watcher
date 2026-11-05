@@ -149,7 +149,9 @@ func TestCreateAnotherFile(t *testing.T) {
 - `--release-file=<경로>`를 더하면 부모는 `ready` 뒤에 그 파일이 생기는 대로 `parent-exit`를 기록하고 끝나며, 자손은 계속 실행됩니다.
   - 파일이 생기기 전에 종료 신호를 받으면 부모는 평소처럼 종료하고 `complete`를 남깁니다.
   - `--depth=0`이면 부모만 실행되므로, 테스트가 파일을 만들 때까지 hook이 계속 실행됩니다. `TestQueueWarningCLI`는 `s.Hook("--depth=0", "--release-file="+release)`를 `onStartWatch`로 써서, 그동안 대상의 변경 hook이 실행되지 못하고 대기열에 남게 합니다.
-- 프로세스 트리 시나리오의 정상 종료 확인은 SIGTERM 또는 Windows CTRL+BREAK를 처리하고 자손을 기다리는 `hookrec`을 대상으로 합니다. 신호를 무시하거나 자손을 기다리지 않는 프로그램에는 같은 결과를 보장하지 않습니다.
+- 프로세스 트리 시나리오의 정상 종료 확인은 SIGTERM 또는 Windows CTRL+BREAK를 처리하고 자손을 기다리는 `hookrec`을 대상으로 하며, 신호를 무시하거나 자손을 기다리지 않는 프로그램의 정상 종료를 증명하지는 않습니다.
+  - macOS와 Linux에서는 취소 시 hook의 프로세스 그룹을 기다리고 SIGTERM부터 20초 뒤에도 남은 프로세스에 SIGKILL을 보내며, 셸이 먼저 끝나도 같습니다. `internal/process`의 Unix 회귀 테스트는 신호를 무시하는 자손의 정리와 정상 종료한 hook의 백그라운드 자손 보존을 확인합니다.
+  - hook의 프로세스 그룹(Unix) 또는 Job Object(Windows)를 벗어난 프로세스는 정리 대상이 아닙니다. 강제 종료는 정상 종료가 아닙니다([과부하와 종료](../../docs/guide/running.ko.md#과부하와-종료)).
 - `--label=<텍스트>`를 더하면 부모가 `start` 기록 앞에 `LABEL|<세대>|<텍스트>`를 기록하고, `GenerationsLabeled`는 그 레이블의 세대를 시작한 순서대로 돌려줍니다.
   - `TestRunInterrupt`는 `s.Hook("--depth=2", "--label={{.Name}}")`를 `onChange`로 써서 각 세대가 어느 경로의 실행인지 구분합니다.
 

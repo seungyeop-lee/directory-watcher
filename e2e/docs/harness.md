@@ -149,7 +149,9 @@ After writing the test, create the scenario documents and update the scenario li
 - With `--release-file=<path>`, the parent exits after `ready` once that file appears, recording `parent-exit` and leaving its descendants running.
   - If a shutdown signal arrives before the file appears, the parent shuts down the usual way and writes `complete`.
   - With `--depth=0`, only the parent runs, so the hook keeps running until the test creates the file. `TestQueueWarningCLI` uses `s.Hook("--depth=0", "--release-file="+release)` as `onStartWatch` so that the target's change hooks cannot run and stay in the queue.
-- The graceful shutdown checks of the process tree scenarios target `hookrec`, which handles SIGTERM or Windows CTRL+BREAK and waits for its descendants. The same result is not guaranteed for programs that ignore the signal or do not wait for their descendants.
+- The graceful shutdown checks of the process tree scenarios target `hookrec`, which handles SIGTERM or Windows CTRL+BREAK and waits for its descendants; they do not prove graceful shutdown for programs that ignore the signal or do not wait for their descendants.
+  - On macOS and Linux, cancellation waits for the hook's process group and sends SIGKILL to remaining members 20 seconds after SIGTERM, even if the shell has already exited. `internal/process` Unix regression tests check signal-ignoring descendants and preserve background descendants of normally completed hooks.
+  - Processes outside the hook's process group (Unix) or Job Object (Windows) are outside this cleanup. Forced termination is not graceful shutdown ([Overload and shutdown](../../docs/guide/running.md#overload-and-shutdown)).
 - With `--label=<text>`, the parent writes `LABEL|<generation>|<text>` before its `start` record, and `GenerationsLabeled` returns the generations with that label in the order they started.
   - `TestRunInterrupt` uses `s.Hook("--depth=2", "--label={{.Name}}")` as `onChange` to tell which path each generation runs for.
 

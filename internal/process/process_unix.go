@@ -24,9 +24,17 @@ func signalGroup(pgid int, sig syscall.Signal) error {
 
 type processTree struct{}
 
-// startProcessTree는 Unix에서 cmd를 그대로 시작한다. 취소된 명령에는 시작 직후에도 SIGTERM을 바로 보내고,
-// 자손은 SetupForOs가 만든 프로세스 그룹으로 함께 신호를 받는다.
+// startProcessTree는 취소 신호부터 shutdownGrace 안에 그룹을 정리한다.
+// cmd.Wait는 cmd.Cancel이 돌아올 때까지 기다리므로, 리더가 먼저 끝나도 자손 정리가 끝나기 전에는 다음 명령으로 넘어가지 않는다.
 func startProcessTree(cmd *exec.Cmd, _ bool) (processTree, error) {
+	if send := cmd.Cancel; send != nil {
+		cmd.Cancel = func() error {
+			deadline := time.Now().Add(shutdownGrace)
+			err := send()
+			waitProcessGroup(cmd.Process.Pid, deadline)
+			return err
+		}
+	}
 	return processTree{}, cmd.Start()
 }
 
@@ -41,13 +49,18 @@ func cleanupProcessTree(cmd *exec.Cmd, _ processTree, deadline time.Time) error 
 	if err := signalGroup(pgid, syscall.SIGTERM); err != nil {
 		return nil
 	}
+	waitProcessGroup(pgid, deadline)
+	return nil
+}
+
+func waitProcessGroup(pgid int, deadline time.Time) {
 	for {
 		if errors.Is(signalGroup(pgid, 0), syscall.ESRCH) {
-			return nil
+			return
 		}
 		if !time.Now().Before(deadline) {
 			_ = signalGroup(pgid, syscall.SIGKILL)
-			return nil
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

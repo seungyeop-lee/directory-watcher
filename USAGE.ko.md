@@ -23,7 +23,8 @@ watchTargets:
 ```
 
 - 감시를 시작할 때 서버가 시작됩니다.
-- `interrupt: oldest`이면 저장할 때마다 실행 중인 서버와 서버가 시작한 프로세스를 멈추고, 그 프로세스가 끝나기를 기다린 뒤 서버를 다시 시작합니다. 자세한 내용은 [run으로 hook 실행하기](docs/guide/running.ko.md#run으로-hook-실행하기)를 확인하세요.
+- `interrupt: oldest`이면 저장할 때마다 실행 중인 서버와 서버가 시작한 hook의 프로세스 그룹(Unix) 또는 Job Object(Windows) 안의 프로세스를 멈추고, 그 프로세스가 멈추기를 기다린 뒤 서버를 다시 시작합니다. 자세한 내용은 [run으로 hook 실행하기](docs/guide/running.ko.md#run으로-hook-실행하기)를 확인하세요.
+  - 종료 신호를 무시하는 프로세스는 약 20초 뒤 강제로 끝내며, 그룹이나 job을 벗어난 프로세스는 정리 대상이 아닙니다. 자세한 내용은 [과부하와 종료](docs/guide/running.ko.md#과부하와-종료)에 있습니다.
 - `dir`이 없는 hook은 감시 대상의 `path`에서 실행되므로, `go run .`은 `server`에서 실행됩니다. 자세한 내용은 [명령 실행 위치](docs/guide/configuration.ko.md#명령-실행-위치)를 확인하세요.
 - Ctrl+C를 누르면 서버가 멈춘 뒤 watcher가 끝납니다.
 

@@ -23,7 +23,8 @@ watchTargets:
 ```
 
 - The server starts when watching starts.
-- With `interrupt: oldest`, each save stops the running server and the processes it started, waits for them to exit, and then starts the server again. See [Running hooks with run](docs/guide/running.md#running-hooks-with-run).
+- With `interrupt: oldest`, each save stops the running server and the processes it started in the hook's process group (Unix) or Job Object (Windows), waits for them to stop, and then starts the server again. See [Running hooks with run](docs/guide/running.md#running-hooks-with-run).
+  - Processes that ignore the stop signal are forcibly ended after about 20 seconds; processes that leave the group or job are outside this cleanup. See [Overload and shutdown](docs/guide/running.md#overload-and-shutdown).
 - Hooks without `dir` run in the target's `path`, so `go run .` runs in `server`. See [Command execution location](docs/guide/configuration.md#command-execution-location).
 - Ctrl+C stops the server and then the watcher.
 

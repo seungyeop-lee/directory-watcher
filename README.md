@@ -38,7 +38,8 @@ watchTargets:
 
 ### Restart your dev server safely on every save
 
-- Each save stops the running server and the processes it started, waits for the server to exit, and only then starts it again, so the old and new servers never run at the same time.
+- Each save stops the running server and the processes it started in the hook's process group (Unix) or Job Object (Windows), waits for them to stop, and only then starts it again.
+  - Processes that ignore the stop signal are forcibly ended after about 20 seconds; processes that leave the group or job are outside this cleanup. See [Overload and shutdown](docs/guide/running.md#overload-and-shutdown).
 - The 30-second example above restarts its server this way. See [Running hooks with run](docs/guide/running.md#running-hooks-with-run).
 
 ### Run once when hundreds of files change at once

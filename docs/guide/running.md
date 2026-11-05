@@ -183,7 +183,7 @@ Error context is passed as environment variables, never interpolated into comman
 
 - After each notification command completes, fails, or times out, the processes it started that are still running are ended within the same cleanup limit.
   - On Windows, if the watcher cannot prepare a notification command so that these processes can be ended, that command does not run and the failure is logged.
-- Processes started by normal hooks get a stop signal only when the hook is canceled ([Overload and shutdown](#overload-and-shutdown)).
+- Normal hooks clean up the processes they started only when canceled ([Overload and shutdown](#overload-and-shutdown)); a normally completed hook keeps intentionally backgrounded processes running.
 
 ## Overload and shutdown
 
@@ -205,12 +205,10 @@ Error context is passed as environment variables, never interpolated into comman
   - Finish hooks run their commands by the same rules as other hooks and have no time limit of their own.
 - If shutdown cancels global `onStartWatch`, no target starts watching, and no target startup or finish hook runs.
   - Global `onFinishWatch` still runs after the canceled global startup has stopped, with a context that is not canceled.
-- On macOS and Linux, a canceled hook gets SIGTERM, and so do the processes it started.
-- On macOS and Linux, if the hook's `sh` process is still running 20 seconds after SIGTERM, the watcher ends that process with SIGKILL.
-  - Replacement and shutdown wait until this process has ended, so a hook whose `sh` ignores SIGTERM, for example after `trap '' TERM`, delays them by up to 20 seconds.
-- On macOS and Linux, processes started by the hook that ignore SIGTERM are not ended when the hook is canceled.
-  - Replacement and shutdown do not wait for them, and they keep running after the next run starts and after the watcher exits.
-  - End such processes yourself, or make the programs that a hook starts exit on SIGTERM.
+- On macOS and Linux, cancellation sends SIGTERM to the hook's process group, including the processes it started that remain in that group.
+  - Replacement and shutdown wait for the group to stop, even if the hook's `sh` exits first.
+  - Processes still in the group 20 seconds after SIGTERM are ended with SIGKILL, so a process that ignores SIGTERM delays replacement and shutdown by about 20 seconds, not another 20 seconds after `sh` exits.
+  - Processes that leave the group, for example with `setsid`, are outside this cleanup; arrange for those programs to stop themselves.
 - On Windows, a canceled hook gets CTRL+BREAK.
   - The programs the hook starts after the cancel, such as the next program of `a & b` in `cmd`, also get CTRL+BREAK once 500 ms have passed since each of them started.
   - A process of the hook that has been created but has not yet attached to the console when CTRL+BREAK is sent, for example because it starts slowly under load, does not get that CTRL+BREAK. It gets CTRL+BREAK again once 500 ms have passed since it attached to the console, and the other processes of the hook get this CTRL+BREAK as well.
