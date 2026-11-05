@@ -109,7 +109,8 @@ func breakSignalShellHook(t *testing.T, ctx *WatcherContext, programs int) (*exe
 // recordBreaks는 watcher처럼 cmd에 정상 종료를 설정하고, cmd에 CTRL+BREAK를 보낸 시각들을 돌려주는 함수를 돌려준다.
 func recordBreaks(t *testing.T, ctx *WatcherContext, cmd *exec.Cmd) func() []time.Time {
 	t.Helper()
-	cmd.Env = append(os.Environ(), "DW_BREAK_SIGNAL_HELPER=1")
+	// -race로 빌드한 바이너리는 종료 코드 0으로 끝날 때 1초를 기다리므로, GORACE의 atexit_sleep_ms=0을 hook에 넘긴다.
+	cmd.Env = append(os.Environ(), "DW_BREAK_SIGNAL_HELPER=1", "GORACE="+strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
 	SetupForOs(cmd)
 	ctx.ApplyGracefulShutdown(cmd)
 	var mu sync.Mutex
