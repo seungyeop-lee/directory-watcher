@@ -38,7 +38,14 @@ disable-model-invocation: true
 5. `git merge-base --is-ancestor master HEAD`가 성공합니다. 실패하면 11단계에서 `master`를 릴리스 커밋으로 fast-forward할 수 없습니다.
 6. `git describe --tags --abbrev=0`이 출력한 마지막 릴리스 tag가 `v<X.Y.Z>` 형식이고 prerelease 부분(`-` 뒤)이 없습니다. 이 tag에서 `v`를 뺀 값이 지금 version입니다.
 7. `gh release view v<지금 version> --json tagName`이 성공합니다. `release not found`로 실패하면 지난 배포가 게시되지 않은 것이므로, `docs/release.md` "배포 흐름" 절의 복구 절차를 먼저 따르라고 안내합니다. 그 밖의 이유로 실패하면 출력을 보여 줍니다.
-8. `go vet ./...`와 `go test ./...`가 통과합니다. 1–7이 모두 맞을 때 마지막으로 실행합니다. `v<major>` push의 `ci`도 같은 검사를 하므로, 여기서 실패하면 push해도 배포되지 않습니다. 실패하면 실패한 검사와 출력을 알리고, 아직 아무것도 바꾸지 않았으므로 문제를 고쳐 커밋한 뒤 skill을 바로 다시 실행하면 된다고 안내합니다.
+8. 아래 검사가 모두 통과합니다. 1–7이 모두 맞을 때 마지막으로, 적힌 순서대로 실행하고 하나가 실패하면 나머지는 실행하지 않습니다. 이 검사는 `docs/release.md` 1단계의 사전 확인과 같습니다.
+   1. `go build ./...`
+   2. `go vet ./...`
+   3. `go test -count=1 -race ./...`. `-count=1`을 빼면 watcher를 고친 뒤에도 캐시된 E2E 결과로 통과할 수 있습니다.
+   4. `make e2e-linux`
+   5. `make e2e-windows-all`. 실행하기 전에 `DW_E2E_UTM_VM` 환경 변수가 비어 있지 않은지 확인합니다. 비어 있으면 이 검사를 실행하지 않고, `/Applications/UTM.app/Contents/MacOS/utmctl list`의 출력을 보여 주며 E2E용 VM의 이름이나 UUID를 `DW_E2E_UTM_VM`에 지정한 뒤 skill을 다시 실행하라고 안내합니다. VM을 준비하는 방법은 `e2e/docs/windows-utm.ko.md`에 있습니다.
+
+   `v<major>` push의 `ci`는 Linux, Windows, macOS에서 `go build ./...`, `go vet ./...`, `go test -count=1 -race ./...`를 실행하고, Linux에서는 `make smoke-example`을, Windows에서는 오류 알림의 프로세스 트리 검사, 캐시 없는 lifecycle 시나리오 반복, 실패와 시간 초과 진단 검사를 더 실행합니다. 1–3은 `ci`와 같은 검사이고 4–5는 `ci`의 Linux와 Windows 실행에서도 도는 E2E 시나리오이므로, 여기서 실패하면 push해도 배포되지 않습니다. 실패하면 실패한 검사와 출력을 알리고, 아직 아무것도 바꾸지 않았으므로 문제를 고쳐 커밋한 뒤 skill을 바로 다시 실행하면 된다고 안내합니다.
 
 ## 3. 올릴 단계 정하기
 

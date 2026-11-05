@@ -28,7 +28,11 @@
    - `git fetch --tags origin` 뒤에 로컬 `master`가 `origin/master`와 같습니다.
    - 마지막 릴리스 tag의 GitHub Release가 있습니다. 없으면 지난 배포가 끝나지 않은 것이므로 [배포 흐름](#배포-흐름)의 복구 절차를 먼저 따릅니다.
    - `master`, 그리고 있다면 `v<major>`와 `origin/v<major>`가 모두 `feature/working`의 조상입니다.
-   - `go vet ./...`와 `go test ./...`가 통과합니다.
+   - [CONTRIBUTING.md의 Verification](../CONTRIBUTING.md#verification) 절이 릴리스하기 전에 실행하라고 정한 검사가 모두 통과합니다.
+     - `go build ./...`, `go vet ./...`, `go test -count=1 -race ./...`가 통과합니다.
+       - E2E는 watcher를 별도의 `go build`로 빌드해서 Go 테스트 캐시가 watcher 소스의 변경을 알지 못하므로, `-count=1`을 빼지 않습니다.
+     - `make e2e-linux`와 `make e2e-windows-all`이 통과합니다.
+       - `make e2e-windows-all`은 `DW_E2E_UTM_VM` 환경 변수에 지정한 UTM Windows VM에서 실행합니다. VM을 준비하고 지정하는 방법은 [UTM Windows VM에서 E2E 실행](../e2e/docs/windows-utm.ko.md#vm-선택)에 있습니다.
 2. `v<major>`를 `feature/working`으로 옮깁니다. 이 명령은 `v<major>`가 없으면 새로 만들고, 있으면 fast-forward만 합니다.
 
    ```sh
