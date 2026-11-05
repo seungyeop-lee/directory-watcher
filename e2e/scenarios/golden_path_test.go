@@ -11,6 +11,7 @@ import (
 )
 
 func TestGoldenPath(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	s.Start(goldenConfig(s))
 	s.AwaitLine("start hooks", 10*time.Second, "TARGET:onStartWatch")

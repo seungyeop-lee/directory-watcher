@@ -17,6 +17,7 @@ const windowsBreakGrace = 20 * time.Second
 
 // 명령 목록의 첫 프로그램이 실행 중일 때 취소하면, cmd.exe가 그 뒤에 시작한 다음 프로그램도 CTRL+BREAK를 받고 끝나야 한다.
 func TestCanceledCommandListStopsNextProgram(t *testing.T) {
+	t.Parallel()
 	for _, list := range []struct {
 		separator       string
 		firstCancelExit string
@@ -26,6 +27,7 @@ func TestCanceledCommandListStopsNextProgram(t *testing.T) {
 		{"||", "1"},
 	} {
 		t.Run(fmt.Sprintf("separator=%s", list.separator), func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			first := unquotedHook(s, "--delay=30s", "--line=FIRST", "--cancel-exit-code="+list.firstCancelExit)
 			second := unquotedHook(s, "--delay=30s", "--line=SECOND")
@@ -56,8 +58,10 @@ func TestCanceledCommandListStopsNextProgram(t *testing.T) {
 // PowerShell hook을 시작 후 0–1000ms에 취소하면, PowerShell이 그때 시작 중이든 디버거에 들어가든 hook 프로그램이
 // 끝까지 실행되지 않고 watcher가 유예 시간 안에 끝나야 한다.
 func TestCanceledPowershellHookStops(t *testing.T) {
+	t.Parallel()
 	for after := time.Duration(0); after <= time.Second; after += 100 * time.Millisecond {
 		t.Run(fmt.Sprintf("after=%s", after), func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			s.Launch(harness.WatcherBin(), fmt.Sprintf(`shell: powershell
 watchTargets:

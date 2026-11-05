@@ -15,6 +15,7 @@ import (
 )
 
 func TestWindowsShellRejectedOnUnix(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	s.Launch(harness.WatcherBin(), fmt.Sprintf(`shell: cmd
 global:

@@ -14,6 +14,7 @@ import (
 )
 
 func TestProcessLifecycle(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	tree := s.Hook("--depth=2")
 	s.Start(fmt.Sprintf(`global:
@@ -77,9 +78,11 @@ watchTargets:
 }
 
 func TestStartHookShutdownModes(t *testing.T) {
+	t.Parallel()
 	for _, deliver := range []string{"last", "each"} {
 		for _, interrupt := range []string{"none", "oldest"} {
 			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
+				t.Parallel()
 				// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
 				wait := 10
 				if deliver == "each" {
@@ -136,6 +139,7 @@ func TestStartHookShutdownModes(t *testing.T) {
 // run.concurrency: 2에서 함께 도는 두 프로세스 트리 hook이 감시를 멈출 때 모두 정상 종료하고, 그 뒤에 감시 대상
 // onFinishWatch가 실행되는지 확인한다.
 func TestConcurrentRunsShutdown(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	s.Start(fmt.Sprintf(`watchTargets:
   - path: '%s'
@@ -170,7 +174,9 @@ func TestConcurrentRunsShutdown(t *testing.T) {
 // TestRunInterrupt는 run.concurrency: 2에서 새 실행이 run.interrupt에 따라 돌고 있는 실행 가운데 무엇을 취소하는지
 // 실제 프로세스 트리로 확인한다. 취소한 트리가 정상 종료한 뒤에야 새 트리가 시작해야 한다.
 func TestRunInterrupt(t *testing.T) {
+	t.Parallel()
 	t.Run("changes/interrupt=samePath", func(t *testing.T) {
+		t.Parallel()
 		s := startLabeledChangeTrees(t, "samePath")
 		a, b := filepath.Join(s.Watch, "a.txt"), filepath.Join(s.Watch, "b.txt")
 		createWithoutWrite(t, a)
@@ -204,6 +210,7 @@ func TestRunInterrupt(t *testing.T) {
 	})
 
 	t.Run("changes/interrupt=oldest", func(t *testing.T) {
+		t.Parallel()
 		s := startLabeledChangeTrees(t, "oldest")
 		a, b := filepath.Join(s.Watch, "a.txt"), filepath.Join(s.Watch, "b.txt")
 		createWithoutWrite(t, a)
@@ -231,6 +238,7 @@ func TestRunInterrupt(t *testing.T) {
 
 	for _, interrupt := range []string{"samePath", "oldest"} {
 		t.Run("onStartWatch/interrupt="+interrupt, func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			release := filepath.Join(s.Work, "release-start")
 			// fileEvent: C와 기다리지 않는 each로, 파일 하나를 만들면 그 이벤트를 받자마자 실행 하나가 생기게 한다.

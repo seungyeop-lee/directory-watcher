@@ -62,6 +62,7 @@ type watchOptionStep struct {
 // 사용 안내대로 hook을 실행하는지 확인한다. hook을 실행하지 않아야 하는 동작은, 뒤이어 만든 표지가 hook에 닿을
 // 때까지 그 동작의 기록이 없는지로 판정한다.
 func TestWatchOptions(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		exclude []string
@@ -164,6 +165,7 @@ func TestWatchOptions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			path, root := s.Watch, s.Watch
 			if tc.target != nil {
@@ -207,6 +209,7 @@ func TestWatchOptions(t *testing.T) {
 		})
 	}
 	t.Run("path is a folder link", func(t *testing.T) {
+		t.Parallel()
 		s := harness.NewScenario(t)
 		path, root := linkedTarget(t, s)
 		s.Start(fmt.Sprintf(`watchTargets:

@@ -245,5 +245,6 @@ The following signals and exits are not in the report.
   - This applies to scenarios run at the default ERROR level because `s.Launch` was given no `--log-level`.
   - In that case the report has only a `logged exit status 3221225794 without exit records` line, without times.
 - CTRL+BREAK sent by the test binaries of other packages added after `--` is not included. Whether those binaries use the same console has not been checked.
+- CTRL+BREAK sent by the watchers of other scenarios running in parallel is not included. Those signals are in the `watcher.log` of that scenario's run directory.
 - CTRL+BREAK sent before the scenario started or after the scenario was cleaned up is not included.
 - On this VM, checked on 2026-11-05, processes that exited with 0xc0000142 left nothing in the Windows event log, so the event log cannot find this failure.

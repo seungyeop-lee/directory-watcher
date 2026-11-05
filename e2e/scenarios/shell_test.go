@@ -12,8 +12,10 @@ import (
 )
 
 func TestHookWorkingDirectory(t *testing.T) {
+	t.Parallel()
 	for _, explicitDir := range []bool{false, true} {
 		t.Run(fmt.Sprintf("dir=%t", explicitDir), func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			work, err := filepath.EvalSymlinks(s.Work)
 			if err != nil {

@@ -18,6 +18,7 @@ import (
 )
 
 func TestPowershellEventVariables(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	config := "shell: powershell\n" + strings.ReplaceAll(goldenConfig(s), "- '\"", "- '& \"")
 	s.Start(config)
@@ -54,8 +55,10 @@ func TestPowershellEventVariables(t *testing.T) {
 }
 
 func TestWindowsShellEmptyArgument(t *testing.T) {
+	t.Parallel()
 	for _, shell := range []string{"cmd", "powershell"} {
 		t.Run(shell, func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			empty := s.Hook("--line", "{{.ExtName}}", "AFTER")
 			end := s.Hook("--line=END")
@@ -91,6 +94,7 @@ watchTargets:
 
 // hook 셸은 콘솔 출력 code page로 출력을 인코딩한다. 그 code page가 UTF-8이 아니어도 hook이 출력한 비ASCII 글자가
 // watcher의 출력에 UTF-8로 그대로 나오고, watcher가 끝나면 콘솔 출력 code page가 원래 값으로 돌아와야 한다.
+// 모든 watcher는 실행되는 동안 함께 쓰는 콘솔의 출력 code page를 바꾸므로, 이 테스트는 병렬로 실행하지 않는다.
 func TestWindowsShellNonASCIIOutput(t *testing.T) {
 	const text = "한글-줄 é ✓"
 	// 437에는 한글과 ✓가 없어서, hook 셸이 이 code page로 출력하면 글자가 ?로 바뀐다.

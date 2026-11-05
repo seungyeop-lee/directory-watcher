@@ -14,6 +14,7 @@ import (
 // TestQueueWarningCLI는 대기열이 queue.size의 70%와 90%에 닿고 다시 내려갈 때 onQueueWarning이 DW_QUEUE_*
 // 환경 변수로 대상, 단계, 방향, 기다리는 수, 용량, 실행이 몰린 경로를 받는지 확인한다.
 func TestQueueWarningCLI(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	release := filepath.Join(s.Work, "release-start")
 	s.Start(fmt.Sprintf(`global:

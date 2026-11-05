@@ -14,9 +14,11 @@ import (
 )
 
 func TestFastInflowSlowHook(t *testing.T) {
+	t.Parallel()
 	for _, deliver := range []string{"last", "each"} {
 		for _, interrupt := range []string{"none", "oldest"} {
 			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
+				t.Parallel()
 				// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
 				each, wait := deliver == "each", 30
 				sequential := each && interrupt == "none"
@@ -102,6 +104,8 @@ func TestFastInflowSlowHook(t *testing.T) {
 	}
 }
 
+// TestTargetsRunIndependently는 빠른 대상의 hook이 500ms 안에 끝나기를 요구한다. 이 한도는 다른 시나리오와 CPU를
+// 나눠 쓰면 넘을 수 있으므로 병렬로 실행하지 않는다.
 func TestTargetsRunIndependently(t *testing.T) {
 	s := harness.NewScenario(t)
 	other := filepath.Join(s.Work, "other")
@@ -149,6 +153,7 @@ func TestTargetsRunIndependently(t *testing.T) {
 }
 
 func TestBoundedOverloadCLI(t *testing.T) {
+	t.Parallel()
 	s := harness.NewScenario(t)
 	s.Start(fmt.Sprintf(`watchTargets:
   - path: '%s'

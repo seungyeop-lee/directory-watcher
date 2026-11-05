@@ -18,8 +18,10 @@ import (
 )
 
 func TestEventLossNotificationCLI(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"success", "absent", "missing-command", "failure", "timeout", "success-tree"} {
 		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
 			s := harness.NewScenario(t)
 			notifyDir := filepath.Join(s.Work, "notification-workdir")
 			treeMode := mode == "failure" || mode == "timeout" || mode == "success-tree"
@@ -269,8 +271,10 @@ func assertLossExit(t *testing.T, s *harness.Scenario, cause string) {
 }
 
 func TestNormalChangesDoNotNotify(t *testing.T) {
+	t.Parallel()
 	for _, deliver := range []string{"last", "each"} {
 		t.Run(fmt.Sprintf("deliver=%s", deliver), func(t *testing.T) {
+			t.Parallel()
 			// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
 			each, wait := deliver == "each", 50
 			if each {
@@ -326,14 +330,17 @@ const injectMarker = "dw-e2e-error.inject"
 // 번과 종료 코드 1로, 유실이 아닌 치명적 오류는 알림 없이 종료 코드 1로 이어지는지 확인한다. 실제 OS overflow를
 // 관찰한 증거는 아니다.
 func TestInjectedLossNotificationCLI(t *testing.T) {
+	t.Parallel()
 	for _, deliver := range []string{"last", "each"} {
 		for _, interrupt := range []string{"none", "oldest"} {
 			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
+				t.Parallel()
 				runInjectedNotification(t, deliver, interrupt, "loss")
 			})
 		}
 	}
 	t.Run("non-loss-fatal-does-not-notify", func(t *testing.T) {
+		t.Parallel()
 		runInjectedNotification(t, "each", "none", "nonloss")
 	})
 }

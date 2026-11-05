@@ -18,7 +18,9 @@ import (
 // 폴더가 안의 내용과 함께 생기거나 사라지면 맨 위 폴더의 이벤트 하나만 온다. 감시 중에 생기거나 옮겨 온 폴더
 // 안에서 나중에 만든 파일은 hook을 실행하고, 감시 대상 밖으로 옮긴 폴더 안에서 만든 파일은 실행하지 않는다.
 func TestFolderEvents(t *testing.T) {
+	t.Parallel()
 	t.Run("actions", func(t *testing.T) {
+		t.Parallel()
 		f := startFolderEvents(t, "")
 		// Windows는 감시 중인 하위 폴더가 있는 폴더의 이름을 바꾸거나 옮기지 못하므로, 옮기는 폴더에는 파일만 둔다.
 		fill(t, filepath.Join(f.outside, "x"), 3)
@@ -66,6 +68,7 @@ func TestFolderEvents(t *testing.T) {
 	// 먼저 받은 파일 삭제가 폴더 D에 흡수되지 않고 hook에 간 적이 있다. 그래서 이 하위 테스트만 대기를 1초, 상한을
 	// 10초로 늘리고, 표지는 이 상한보다 길게 기다린다. 늘린 대기는 단계마다 걸리는 시간을 늘리므로 다른 동작과 나눈다.
 	t.Run("folderWith300Files", func(t *testing.T) {
+		t.Parallel()
 		f := startFolderEvents(t, `
       dirBatch:
         waitMillisecond: 1000

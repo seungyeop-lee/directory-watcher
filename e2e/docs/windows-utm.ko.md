@@ -245,5 +245,6 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
   - `s.Launch`에 `--log-level`을 주지 않아 기본 수준인 ERROR로 실행한 시나리오가 여기에 해당합니다.
   - 이때 보고에는 시각 없이 `logged exit status 3221225794 without exit records` 줄만 남습니다.
 - `--` 뒤에 더한 다른 패키지의 테스트 바이너리가 보낸 CTRL+BREAK는 담기지 않습니다. 그 바이너리가 같은 콘솔을 쓰는지는 확인하지 않았습니다.
+- 병렬로 함께 실행 중인 다른 시나리오의 watcher가 보낸 CTRL+BREAK는 담기지 않습니다. 그 신호는 그 시나리오 실행 디렉터리의 `watcher.log`에 남습니다.
 - 시나리오를 시작하기 전과 시나리오를 정리한 뒤에 보낸 CTRL+BREAK는 담기지 않습니다.
 - 2026-11-05에 확인한 이 VM에서는 0xc0000142로 끝난 프로세스가 Windows 이벤트 로그에 남지 않았으므로, 이벤트 로그로는 이 실패를 찾을 수 없습니다.

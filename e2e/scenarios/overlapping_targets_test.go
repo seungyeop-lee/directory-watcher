@@ -126,7 +126,9 @@ func stopWithoutErrors(t *testing.T, s *harness.Scenario) {
 // TestOverlappingTargets는 감시 대상의 path가 같거나 상위·하위로 겹칠 때, 대상마다 따로 hook을 실행한다는 사용
 // 안내의 동작을 확인한다. 상위 대상은 s.Watch이고 하위 대상은 그 안의 api 폴더다.
 func TestOverlappingTargets(t *testing.T) {
+	t.Parallel()
 	t.Run("same path runs each target once", func(t *testing.T) {
+		t.Parallel()
 		s := harness.NewScenario(t)
 		startOverlapping(s, true, overlapTarget{label: "FIRST", path: s.Watch}, overlapTarget{label: "SECOND", path: s.Watch})
 		createEmpty(t, filepath.Join(s.Watch, "a.txt"))
@@ -135,6 +137,7 @@ func TestOverlappingTargets(t *testing.T) {
 		stopWithoutErrors(t, s)
 	})
 	t.Run("parent and child paths run each target once", func(t *testing.T) {
+		t.Parallel()
 		s := harness.NewScenario(t)
 		api := filepath.Join(s.Watch, "api")
 		mkdirAll(t, api)
@@ -145,6 +148,7 @@ func TestOverlappingTargets(t *testing.T) {
 		stopWithoutErrors(t, s)
 	})
 	t.Run("slow parent hook does not block child", func(t *testing.T) {
+		t.Parallel()
 		s := harness.NewScenario(t)
 		api := filepath.Join(s.Watch, "api")
 		mkdirAll(t, api)
@@ -162,6 +166,7 @@ func TestOverlappingTargets(t *testing.T) {
 		s.AwaitDelayedHooksGone()
 	})
 	t.Run("hook writing into another target runs its hooks", func(t *testing.T) {
+		t.Parallel()
 		s := harness.NewScenario(t)
 		api := filepath.Join(s.Watch, "api")
 		mkdirAll(t, api)
@@ -176,6 +181,7 @@ func TestOverlappingTargets(t *testing.T) {
 		stopWithoutErrors(t, s)
 	})
 	t.Run("parent excluding the child folder runs only the child", func(t *testing.T) {
+		t.Parallel()
 		s := harness.NewScenario(t)
 		api := filepath.Join(s.Watch, "api")
 		mkdirAll(t, api)
