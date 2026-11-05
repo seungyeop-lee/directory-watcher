@@ -31,16 +31,13 @@ Clone and change settings while both VMs are shut down.
    /Applications/UTM.app/Contents/MacOS/utmctl clone <original VM name or UUID> --name Windows-E2E
    ```
 
-2. Empty the clone's display list. Remove the Display device in the UTM settings screen, or run the following AppleScript.
+2. Empty the clone's display list. Remove the Display device in the UTM settings screen, or run the following JXA command. You can run it even while another E2E run is using `utmctl` (see [the -600 error](#applescript-fails-with--600-while-utm-is-running)).
 
    ```sh
-   osascript -e 'tell application "UTM"
-   set vm to virtual machine named "Windows-E2E"
-   set config to configuration of vm
-   set displays of config to {}
-   update configuration of vm with config
-   end tell'
+   osascript -l JavaScript -e 'Application("com.utmapp.UTM").virtualMachines.byName("Windows-E2E").updateConfiguration({with: {displays: []}})'
    ```
+
+   - Pass only the items to change in `with`. Sending back the whole configuration read with `configuration()` in JXA fails with error -1700 because the drive and network items do not keep their types.
 
 3. Remove the clone's sound device in the UTM settings screen. If you leave it, Windows plays its boot sound even when started headless. UTM scripting has no sound setting, so the runner cannot check this item; the check in step 4 below covers it instead.
 4. Start the clone with `make e2e-windows-up ARGS=-vm=Windows-E2E` and check it. If a display device remains, this command does not start the VM and fails, pointing to this procedure. Once the VM is running, the output of the following command must contain `-vga none`, and the `-device` list must contain no sound device.
@@ -170,8 +167,8 @@ The following files are left in this directory as UTF-8 text.
 - While any `utmctl` process is running, an AppleScript `tell application "UTM"` sends its events to that `utmctl` process instead of UTM and fails at once with `Application isn't running. (-600)` (macOS 27.2, UTM 5.0.8, 2026-11-05).
   - Pointing to UTM by bundle ID or app path gives the same result.
   - `utmctl` requests from other runs on the same VM, such as `file push`, last for seconds, so concurrent runs hit this often.
-- The runner sends its events to UTM with JXA (`osascript -l JavaScript`), whose events reach UTM even while `utmctl` is running.
-- The AppleScript in step 2 of [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm) can fail this way; run it again when `pgrep -x utmctl` prints nothing.
+- The runner and the command in step 2 of [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm) send their events to UTM with JXA (`osascript -l JavaScript`), whose events reach UTM even while `utmctl` is running.
+- When you send AppleScript to UTM yourself, run it when `pgrep -x utmctl` prints nothing.
 - Setting `AEDebugSends=1` before `osascript` prints the target of each event; `target='psn '[utmctl]` means the event went to `utmctl`.
 
 ### QEMU aborts during shutdown

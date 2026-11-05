@@ -31,16 +31,13 @@
    /Applications/UTM.app/Contents/MacOS/utmctl clone <원래 VM 이름 또는 UUID> --name Windows-E2E
    ```
 
-2. 복제본의 디스플레이 목록을 비웁니다. UTM 설정 화면에서 Display 장치를 제거하거나, 다음 AppleScript를 실행합니다.
+2. 복제본의 디스플레이 목록을 비웁니다. UTM 설정 화면에서 Display 장치를 제거하거나, 다음 JXA 명령을 실행합니다. 이 명령은 다른 E2E 실행이 `utmctl`을 쓰는 중에도 실행할 수 있습니다([-600 오류](#utm이-실행-중인데-applescript가--600으로-실패함) 참고).
 
    ```sh
-   osascript -e 'tell application "UTM"
-   set vm to virtual machine named "Windows-E2E"
-   set config to configuration of vm
-   set displays of config to {}
-   update configuration of vm with config
-   end tell'
+   osascript -l JavaScript -e 'Application("com.utmapp.UTM").virtualMachines.byName("Windows-E2E").updateConfiguration({with: {displays: []}})'
    ```
+
+   - 바꿀 항목만 `with`에 넘깁니다. JXA에서 `configuration()`으로 읽은 구성 전체를 돌려보내면 드라이브와 네트워크 항목의 형식이 맞지 않아 `유형을 변경할 수 없습니다. (-1700)`으로 실패합니다.
 
 3. UTM 설정 화면에서 복제본의 사운드 장치를 제거합니다. 남겨 두면 headless로 켜도 Windows 부팅음이 납니다. UTM 스크립팅에는 사운드 설정이 없어 실행기가 이 항목을 검사하지 못하므로, 아래 4단계의 확인으로 대신합니다.
 4. `make e2e-windows-up ARGS=-vm=Windows-E2E`로 켠 뒤 확인합니다. 디스플레이 장치가 남아 있으면 이 명령이 VM을 켜지 않고 이 절차를 안내하며 실패합니다. 켜졌다면 다음 명령의 출력에 `-vga none`이 있고 `-device` 목록에 사운드 장치가 없어야 합니다.
@@ -170,8 +167,8 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 - `utmctl` 프로세스가 하나라도 실행 중이면, AppleScript의 `tell application "UTM"`은 이벤트를 UTM이 아니라 그 `utmctl` 프로세스로 보내 곧바로 `응용 프로그램이 실행 중이 아닙니다. (-600)`(영어 환경에서는 `Application isn't running. (-600)`)로 실패합니다(macOS 27.2, UTM 5.0.8, 2026-11-05).
   - UTM을 bundle ID나 앱 경로로 가리켜도 결과가 같습니다.
   - 같은 VM을 쓰는 다른 실행의 `file push` 같은 `utmctl` 요청은 몇 초씩 이어지므로, 동시에 실행하면 이 실패가 자주 나타납니다.
-- 실행기는 JXA(`osascript -l JavaScript`)로 UTM에 이벤트를 보내며, JXA의 이벤트는 `utmctl`이 실행 중이어도 UTM에 도착합니다.
-- [E2E 전용 VM 만들기](#e2e-전용-vm-만들기) 2단계의 AppleScript도 이렇게 실패할 수 있으므로, `pgrep -x utmctl`이 아무것도 출력하지 않을 때 다시 실행합니다.
+- 실행기와 [E2E 전용 VM 만들기](#e2e-전용-vm-만들기) 2단계의 명령은 JXA(`osascript -l JavaScript`)로 UTM에 이벤트를 보내며, JXA의 이벤트는 `utmctl`이 실행 중이어도 UTM에 도착합니다.
+- UTM에 AppleScript를 직접 보낼 때는 `pgrep -x utmctl`이 아무것도 출력하지 않을 때 실행합니다.
 - `osascript` 앞에 `AEDebugSends=1`을 붙이면 이벤트마다 대상이 출력되며, `target='psn '[utmctl]`은 이벤트가 `utmctl`로 갔다는 뜻입니다.
 
 ### QEMU가 종료 중에 비정상 종료함

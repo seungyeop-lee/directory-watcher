@@ -26,7 +26,7 @@
 | `worktree/` | Linux·Windows 실행기에 넘기도록 현재 작업 트리를 항목이 `src/` 아래에 놓이는 tar 스트림으로 묶음(`Root`, `Files`, `Archive`). 추적 중인 파일과, 추적하지 않지만 무시되지도 않는 파일을 담으며, 커밋하지 않은 수정·추가·삭제가 반영됨 |
 | `worktree/worktree_test.go` | `Archive`가 수정한 파일과 추적하지 않는 파일의 작업 트리 내용을 담고, 목록에 있지만 작업 트리에서 사라진 파일은 건너뛰는지 검증 |
 | `windows/` | Mac에서 UTM Windows VM으로 같은 Go E2E를 실행하는 진입점(`up`, `test`, `down`, `all`). UTM과 VM 제어(`utm.go`), 같은 Mac의 다른 실행과 VM을 나눠 쓰는 잠금(`lock.go`), 소스와 게스트 프로그램을 게스트로 보내고 결과를 수집하는 일(`test.go`)을 맡음. 패키지와 테스트는 macOS에서만 빌드됨 |
-| `windows/utm_test.go` | 대체 스크립트로 `utmctl`·AppleScript 응답 해석을 검증. UUID나 전체 이름으로 VM 찾기, stopped가 아닌 VM 세기, 종료 코드가 아닌 stderr로 성공 판정, VM이 stopped로 남은 `start`의 실패, Guest Agent 준비에 필요한 IPv4 주소, 디스플레이 수 읽기 |
+| `windows/utm_test.go` | 대체 스크립트로 `utmctl`·JXA 응답 해석을 검증. UUID나 전체 이름으로 VM 찾기, stopped가 아닌 VM 세기, 종료 코드가 아닌 stderr로 성공 판정, VM이 stopped로 남은 `start`의 실패, Guest Agent 준비에 필요한 IPv4 주소, 디스플레이 수 읽기 |
 | `windows/main_test.go` | `up`이 디스플레이가 있는 VM을 시작 요청 전에 거부하는지 검증 |
 | `windows/lock_test.go` | VM 잠금을 테스트 실행끼리는 함께 잡고 시작·종료는 혼자 잡는지, 잠금이 VM마다 따로인지 검증 |
 | `windows/test_test.go` | 게스트 실행 디렉터리 생성과 게스트 프로그램 시작을 `exec` 응답이 아닌 게스트에서 다시 읽은 파일로 판정하는지, 게스트 실행 디렉터리 삭제를 재시도하고 남은 디렉터리를 삭제 명령과 함께 알리는지, 이 정리 실패를 테스트 결과에 넣지 않는지, 소스 아카이브에서 심볼릭 링크를 빼는지 검증 |
