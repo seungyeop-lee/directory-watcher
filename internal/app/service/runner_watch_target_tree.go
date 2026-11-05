@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -20,6 +21,10 @@ const (
 	// leakCheckDelay는 폴더의 감시를 풀지 못한 뒤 releaseLeakedWatches를 실행하기까지 기다리는 시간이다.
 	// 지운 폴더의 감시는 fsnotify가 스스로 풀므로, 그동안 기다려 지운 폴더 때문에 watcher를 다시 만들지 않는다.
 	leakCheckDelay = 100 * time.Millisecond
+	// staleWatchRetries는 addWatch가 bad file descriptor로 실패한 Add를 다시 하는 최대 횟수이고,
+	// staleWatchRetryDelay는 다시 하기 전에 기다리는 시간이다.
+	staleWatchRetries    = 3
+	staleWatchRetryDelay = time.Millisecond
 )
 
 // watchTree는 감시 대상의 감시 목록과 그 안 항목의 기록을 가지고, 감시를 풀지 못한 폴더가 남으면 watcher를 새로
@@ -112,7 +117,7 @@ func (t *watchTree) add() error {
 
 	if !t.subDir {
 		t.logger.Debug(fmt.Sprint("add path:", t.root))
-		if err := t.watcher.Add(t.root); err != nil {
+		if err := addWatch(t.watcher.Add, t.root); err != nil {
 			return err
 		}
 		t.markWatched(t.root)
@@ -186,7 +191,7 @@ func (t *watchTree) addDirTree(root string) error {
 		if runtime.GOOS == "windows" {
 			_ = t.watcher.Remove(p)
 		}
-		if err := t.watcher.Add(p); err != nil {
+		if err := addWatch(t.watcher.Add, p); err != nil {
 			return err
 		}
 		t.markWatched(p)
@@ -196,6 +201,25 @@ func (t *watchTree) addDirTree(root string) error {
 		}
 		return nil
 	})
+}
+
+// addWatch는 add로 dir을 감시 목록에 넣는다. add에는 fsnotify.Watcher의 Add를 넘긴다.
+//
+// fsnotify의 kqueue 구현은 감시 중인 폴더가 옮겨지거나 지워지면 이벤트를 읽는 goroutine에서 그 폴더의 감시를
+// 닫고 감시 목록에서 지우는데, 이 일과 Add를 함께 막는 lock이 없다. 감시를 닫은 뒤 목록에서 지우기 전에 같은
+// 경로를 Add하면, Add는 목록에 남은 닫힌 감시 번호로 등록하다가 bad file descriptor로 실패한다. 닫은 쪽은 곧바로
+// 목록에서 지우므로, 잠시 기다렸다가 다시 Add하면 같은 경로에 다시 만든 폴더를 새로 감시하고 폴더가 없으면
+// ErrNotExist를 돌려받는다. 다시 해도 실패하면 마지막 오류를 돌려준다.
+func addWatch(add func(string) error, dir string) error {
+	err := add(dir)
+	for range staleWatchRetries {
+		if !kqueueOS || !errors.Is(err, syscall.EBADF) {
+			break
+		}
+		time.Sleep(staleWatchRetryDelay)
+		err = add(dir)
+	}
+	return err
 }
 
 // reAddDirs는 addDirTree가 감시 목록에 넣은 폴더를 다시 넣는다.
@@ -221,7 +245,7 @@ func (t *watchTree) reAdd(dirs []string) error {
 		if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if err := t.watcher.Add(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := addWatch(t.watcher.Add, dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 	}
@@ -475,7 +499,7 @@ func (t *watchTree) rebuildWatcher() error {
 	nextErrors = injectWatchErrors(t.path, nextErrors, t.stop)
 	for dir := range t.watchedDirs {
 		// 사이에 지워진 폴더의 Remove 이벤트는 retireWatcher가 예전 watcher의 이벤트로 돌려준다.
-		if err := next.Add(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := addWatch(next.Add, dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			_ = next.Close()
 			return err
 		}

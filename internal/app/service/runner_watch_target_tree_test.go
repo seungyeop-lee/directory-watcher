@@ -1,9 +1,11 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"testing"
 
 	"github.com/fsnotify/fsnotify"
@@ -265,6 +267,45 @@ func TestWatchTreeReleaseLeakedWatches(t *testing.T) {
 			}
 			if f.tree.isUnreleasedDir(gone) {
 				t.Error("the unreleased folder is still recorded")
+			}
+		})
+	}
+}
+
+// fsnotify의 kqueue 구현에서 Add가 bad file descriptor로 실패하면 addWatch가 Add를 다시 하고, 그 밖의 오류와
+// kqueue가 아닌 운영체제의 오류는 다시 하지 않고 그대로 돌려주는지 확인한다.
+func TestAddWatchRetriesBadFileDescriptorOnlyOnKqueue(t *testing.T) {
+	errOther := errors.New("other add failure")
+	cases := []struct {
+		name string
+		// errs는 add가 차례로 돌려줄 오류다. 다 쓰면 마지막 오류를 계속 돌려준다.
+		errs []error
+		// kqueueErr와 kqueueCalls는 kqueue에서 기대하는 결과이고, 다른 운영체제에서는 첫 오류를 한 번 만에 돌려준다.
+		kqueueErr   error
+		kqueueCalls int
+	}{
+		{name: "bad file descriptor once", errs: []error{syscall.EBADF, nil}, kqueueErr: nil, kqueueCalls: 2},
+		{name: "bad file descriptor every time", errs: []error{syscall.EBADF}, kqueueErr: syscall.EBADF, kqueueCalls: 1 + staleWatchRetries},
+		{name: "other error", errs: []error{errOther, nil}, kqueueErr: errOther, kqueueCalls: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			add := func(string) error {
+				err := tc.errs[min(calls, len(tc.errs)-1)]
+				calls++
+				return err
+			}
+			err := addWatch(add, "dir")
+			wantErr, wantCalls := tc.errs[0], 1
+			if kqueueOS {
+				wantErr, wantCalls = tc.kqueueErr, tc.kqueueCalls
+			}
+			if !errors.Is(err, wantErr) || (wantErr == nil) != (err == nil) {
+				t.Errorf("addWatch error = %v, want %v", err, wantErr)
+			}
+			if calls != wantCalls {
+				t.Errorf("add called %d times, want %d", calls, wantCalls)
 			}
 		})
 	}
