@@ -58,7 +58,7 @@ func init() {
 	maintenanceFlags.StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
 	rootCmd.Flags().AddFlagSet(maintenanceFlags)
 	rootCmd.Flags().StringP("config-path", "c", "", "set config path (default: "+strings.Join(defaultConfigPaths, ", then ")+")")
-	rootCmd.Flags().BoolP("silent", "s", false, "don't print hook commands before running them")
+	rootCmd.Flags().BoolP("silent", "s", false, "don't print the config file path or hook commands")
 	rootCmd.Flags().BoolP("dry-run", "n", false, "print hook commands without running them")
 	rootCmd.MarkFlagsMutuallyExclusive("silent", "dry-run")
 	rootCmd.SetUsageFunc(printUsage)

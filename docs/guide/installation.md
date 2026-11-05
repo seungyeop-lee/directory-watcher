@@ -30,7 +30,7 @@ Flags:
   -c, --config-path string   set config path (default: config.directory-watcher.yml, then config.yml)
   -n, --dry-run              print hook commands without running them
   -h, --help                 help for directory-watcher
-  -s, --silent               don't print hook commands before running them
+  -s, --silent               don't print the config file path or hook commands
   -v, --version              version for directory-watcher
 
 Maintenance Flags:

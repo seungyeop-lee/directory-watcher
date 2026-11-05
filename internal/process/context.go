@@ -15,6 +15,7 @@ import (
 // 두 필드를 모두 false로 두면 명령을 출력하고 실행한다.
 type CommandMode struct {
 	// Silent이면 명령을 출력하지 않는다. 명령이 내는 출력은 그대로 나온다.
+	// cmd 패키지도 이 값을 보고, 시작할 때 읽은 설정 파일 경로를 알리는 config: <경로> 줄을 출력하지 않는다.
 	Silent bool
 	// DryRun이면 명령을 만들고 작업 폴더까지 확인한 뒤, 실행하지 않고 넘어간다.
 	DryRun bool
