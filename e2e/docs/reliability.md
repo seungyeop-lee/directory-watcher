@@ -31,8 +31,12 @@ go test -race ./...
 - OS E2E does not decide the last received path from the order in which files were created.
 - `e2e/harness/hook_records_test.go` checks a boundary where `normal-19.txt` was received after `last.txt`, rejection of empty records and unfinished hooks, and completion per duplicate receipt under `deliver: each`.
 - The 120ms quiet period is an observation condition, not a guarantee that the OS will send no further notifications.
-- If a late valid event replaces the isolated change, the test does not treat it as success and fails within the completion wait time limit shared by the batch observation and the isolated change.
-- In [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md), this time limit is 30 seconds.
+- The completion wait keeps waiting while the received events or the records grow, and fails when neither changes for 10 seconds.
+  - The time it takes grows with the number of received events and the time one hook takes, so the total time has no fixed limit.
+  - A received event whose hook leaves no record therefore fails the test 10 seconds after the last change.
+  - `e2e/harness/harness_test.go` checks that the wait continues past the limit while progress continues and fails once progress stops.
+- [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.md) and [`TestBatchingOptions`](scenarios/batching-options.md) use this wait.
+- If a late valid event replaces the isolated change, the test does not treat it as success and fails when the isolated change's record does not appear within 10 seconds.
 
 ## Event-loss notification verification
 

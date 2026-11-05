@@ -14,8 +14,8 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
-// TestBatchingOptions는 maxWait를 기다리는 동안 받은 이벤트 수십 개의 hook이 10초 안에 모두 끝나기를 요구한다.
-// Windows에서는 하위 테스트끼리만 함께 실행해도 이 한도를 넘었으므로, 하위 테스트까지 병렬로 실행하지 않는다.
+// TestBatchingOptions의 maxWait 하위 테스트는 수신 간격이 500ms 미만이고 첫 flush가 첫 조작 뒤 1700–3300ms 안에
+// 있기를 요구한다. 이 시간 범위는 다른 시나리오와 CPU를 나눠 쓰면 벗어날 수 있으므로, 하위 테스트까지 병렬로 실행하지 않는다.
 func TestBatchingOptions(t *testing.T) {
 	t.Run("lastPerPath", func(t *testing.T) {
 		s := harness.NewScenario(t)

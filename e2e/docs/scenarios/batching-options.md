@@ -13,6 +13,7 @@
   - The -100ms/+1500ms allowance covers observation and shell scheduling; a gap reaching the 500ms quiet wait fails instead of being accepted as a maximum-wait flush.
   - Hook batching must produce a record during inflow; folder batching must send the initial folder `C` during inflow and forward a subsequently created contained file independently.
 - Completion uses the harness's actual-receipt boundary and 120ms observed quiet period, not a fixed sleep or an assumed correspondence between file operations and OS notifications.
+  - The completion wait fails when neither the received events nor the records change for 10 seconds, so a received `CREATE` whose hook leaves no record fails the subtest.
 - All subtests stop the watcher gracefully with exit code 0 and require `PASS` without `SKIP` on macOS, Linux Docker, and UTM Windows.
 - On 2026-11-04, Windows ARM64 repeated `lastPerPath` fails: duplicate folder `REMOVE` receipts leave a folder `D` with `IsDir: false` and a descendant `D`; the other three subtests pass. The test retains the documented contract rather than accepting this result.
 - The contracts are [Hook batching](../../../docs/guide/running.md#waiting-and-merging-with-hookbatch) and [Folder event collection](../../../docs/guide/events.md#collecting-folder-events).

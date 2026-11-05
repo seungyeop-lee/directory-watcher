@@ -10,8 +10,9 @@
 ## 확인 내용과 성공 조건
 
 - **유입 배치의 완료**: 유효 경로(`initial.txt`, `shared.txt`, `00.txt`~`23.txt`)의 `CREATE`·`WRITE` 이벤트 가운데 DEBUG 로그에 실제로 수신된 것만 대상으로 합니다. 마지막 `DONE:` 기록의 경로가 마지막으로 수신된 경로와 같고, `BEGIN`을 기록한 hook이 모두 완료(`DONE:`)되거나 취소(`CANCEL`)되었으며, 로그와 기록이 120ms 동안 변하지 않아야 합니다. 이 판정의 근거와 한계는 [OS E2E의 수신 경계 판정](../reliability.ko.md#os-e2e의-수신-경계-판정)에 있습니다.
+  - 받은 이벤트와 기록이 10초 동안 변하지 않으면 대기가 실패합니다.
 - **비중단 순차 처리**: `deliver=each/interrupt=none`에서는 `DONE:` 기록 수가 수신된 유효 이벤트 수와 같아야 하고, `00.txt`~`23.txt` 각각에 `DONE:` 기록이 하나 이상 있어야 합니다. 기준은 파일을 조작한 횟수가 아니라 관찰된 수신 횟수입니다.
-- **고립된 변경**: 배치가 안정된 뒤 쓴 `last.txt`의 `DONE:` 기록이 나타나야 합니다. 이 대기와 배치 완료 대기는 하나의 30초 제한을 공유합니다.
+- **고립된 변경**: 배치가 안정된 뒤 쓴 `last.txt`의 `DONE:` 기록이 10초 안에 나타나야 합니다.
 - **제외 파일**: 종료 전까지의 기록에 `excluded.swp`나 `readiness.probe`가 들어 있는 줄이 없어야 합니다.
 - **종료**: watcher가 종료 신호를 받고 10초 안에 종료 코드 0으로 끝나며, `FINISH` 기록이 정확히 한 번 있고 그 뒤에 `BEGIN|` 기록이 없어야 합니다. 즉 종료 시 대기 중인 변경은 실행되지 않습니다. `BEGIN`을 기록한 모든 hook 프로세스는 5초 안에 사라져야 합니다. Windows에서는 기록된 PID를 처음 확인할 때 이미 `hookrec`이 아닌 프로그램이 쓰고 있으면 사라진 것으로 봅니다([생존 판정 방식](../harness.ko.md#책임별-코드-위치)).
 - **알림 미실행**: watcher가 종료된 뒤 `ERROR|` 알림 기록이 하나도 없어야 합니다. 하나라도 있으면 그 기록을 출력하고 실패합니다.
@@ -54,10 +55,9 @@ sequenceDiagram
     watchDir-->>watcherProc: 생성·쓰기 이벤트
     watcherProc->>slowHook: 조합에 따라 이벤트마다 실행, 마지막 경로 실행, 취소
     slowHook->>recordFile: BEGIN, DONE 또는 CANCEL
-    testCode->>recordFile: 수신 경계 완료와 120ms 안정 대기
+    testCode->>recordFile: 수신 경계 완료와 120ms 안정 대기 (수신·기록이 10초 동안 늘지 않으면 실패)
     testCode->>watchDir: last.txt 쓰기, excluded.swp 쓰기
-    testCode->>recordFile: DONE last.txt 대기
-    Note over testCode,recordFile: 배치 완료 대기와 last.txt 대기는 30초 제한을 공유
+    testCode->>recordFile: DONE last.txt 대기 (최대 10초)
     testCode->>recordFile: 제외 파일 기록 없음 확인
     testCode->>watchDir: shutdown.txt 쓰기
     testCode->>watcherProc: 로그의 shutdown.txt 수신 대기 (최대 5초) 뒤 종료 신호

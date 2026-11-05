@@ -144,16 +144,21 @@ func changesCompleted(received, records []string, prefix string, sequential bool
 		(!sequential || completed == len(received))
 }
 
-func (s *Scenario) AwaitChangesComplete(prefix string, paths []string, operations fsnotify.Op, sequential bool, timeout time.Duration) {
+// AwaitChangesComplete는 paths에서 받은 이벤트의 hook이 모두 끝나고 120ms 동안 조용할 때까지 기다린다. 이벤트 수와
+// hook 하나의 비용에 따라 전체 시간이 달라지므로, 받은 이벤트나 기록이 늘어나는 동안은 기다리고 idle 동안 둘 다
+// 그대로이면 실패한다. 그래서 받은 이벤트의 hook이 기록을 남기지 않으면 idle 뒤에 실패한다.
+func (s *Scenario) AwaitChangesComplete(prefix string, paths []string, operations fsnotify.Op, sequential bool, idle time.Duration) {
 	s.t.Helper()
 	allowed := make(map[string]bool, len(paths))
 	for _, path := range paths {
 		allowed[path] = true
 	}
+	started := time.Now()
+	recordsAtStart := len(s.Lines())
 	quietSince := time.Now()
 	previous := ""
 	var received, records []string
-	s.Await("received inflow completes and settles", timeout, func() bool {
+	s.AwaitProgress("received inflow completes and settles", idle, func() (bool, int) {
 		log := s.log.String()
 		received = receivedChanges(log, allowed, operations)
 		records = s.Lines()
@@ -162,7 +167,8 @@ func (s *Scenario) AwaitChangesComplete(prefix string, paths []string, operation
 			previous = snapshot
 			quietSince = time.Now()
 		}
-		return changesCompleted(received, records, prefix, sequential) && time.Since(quietSince) >= 120*time.Millisecond
+		done := changesCompleted(received, records, prefix, sequential) && time.Since(quietSince) >= 120*time.Millisecond
+		return done, len(received) + len(records)
 	})
-	s.t.Logf("inflow settled: received=%d records=%d last-received=%s", len(received), len(records), received[len(received)-1])
+	s.t.Logf("inflow settled after %s: received=%d records=%d (records at wait start=%d) last-received=%s", time.Since(started), len(received), len(records), recordsAtStart, received[len(received)-1])
 }

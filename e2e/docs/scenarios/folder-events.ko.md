@@ -73,7 +73,7 @@ sequenceDiagram
         watchDir-->>watcherProc: 표지 이벤트
         watcherProc->>hookRec: 폴더 이벤트와 다른 이벤트의 onChange를 순서대로 실행
         hookRec->>recordFile: 이벤트마다 한 줄
-        testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (최대 10초)
+        testCode->>recordFile: 표지 기록을 모두 받을 때까지 대기 (새 기록 없이 10초가 지나면 실패)
         testCode->>testCode: 표지 앞의 기록을 기대 기록과 비교
     end
     testCode->>watcherProc: 종료 신호
@@ -111,4 +111,4 @@ make e2e-windows ARGS="-vm=Windows-E2E -- -count=3 -run '^TestFolderEvents$'"
 
 - `e2e/scenarios/folder_events_test.go`: `TestFolderEvents`, watcher를 띄우는 `startFolderEvents`, 동작을 차례로 실행하고 기록을 비교하는 `folderEvents.run`, 폴더 이벤트를 받은 폴더 안에 파일을 만드는 행을 만드는 `createLater`입니다.
 - `e2e/scenarios/helpers_test.go`: `changeSteps`는 동작마다 표지까지 기록을 읽고, `relativeChange`는 기록을 감시 폴더 기준 경로로 바꿉니다. `mkdirAll`과 `createEmpty`는 폴더와 빈 파일을 만듭니다.
-- `e2e/harness`: `Start`, `Hook`, `Await`, `Lines`, `Stop`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitProgress`, `Lines`, `Stop`. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

@@ -47,7 +47,7 @@ sequenceDiagram
             watchDir-->>watcherProc: action and sentinel events
             watcherProc->>hookRec: onChange for allowed events, then sentinels
             hookRec->>recordFile: CHANGE records
-            testCode->>recordFile: await all sentinels and expected records (up to 10s)
+            testCode->>recordFile: await all sentinels and expected records (fails after 10s without a new record)
             testCode->>testCode: compare exact non-sentinel records
         end
     end
@@ -81,4 +81,4 @@ make e2e-windows ARGS="-- -run '^Test(WatchOptions|FolderEvents)$'"
 - `e2e/scenarios/watch_options_test.go`: `TestWatchOptions`, filesystem actions, and linked target.
 - `e2e/scenarios/helpers_test.go`: `changeSteps`, `relativeChange`, `mkdirAll`, and `createEmpty` shared with `TestFolderEvents`.
 - `e2e/scenarios/helpers_test.go`: `changeValues` builds the expected eight-variable record for the linked target.
-- `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitLine`, `Lines`, and `Stop`. Their locations and responsibilities are in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).
+- `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitProgress`, `AwaitLine`, `Lines`, and `Stop`. Their locations and responsibilities are in [Code locations by responsibility](../harness.md#code-locations-by-responsibility).

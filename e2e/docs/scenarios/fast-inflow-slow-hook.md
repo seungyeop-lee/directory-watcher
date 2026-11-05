@@ -10,8 +10,9 @@
 ## What it checks and success criteria
 
 - **Completion of the inflow batch**: Only the `CREATE` and `WRITE` events for valid paths (`initial.txt`, `shared.txt`, `00.txt`–`23.txt`) that were actually received in the DEBUG log count. The path of the last `DONE:` record must equal the last received path, every hook that recorded `BEGIN` must have completed (`DONE:`) or been cancelled (`CANCEL`), and the log and records must stay unchanged for 120ms. The basis and limits of this judgment are in [Receive boundary checks in OS E2E](../reliability.md#receive-boundary-checks-in-os-e2e).
+  - The wait fails when neither the received events nor the records change for 10 seconds.
 - **Sequential processing without interruption**: With `deliver=each/interrupt=none`, the number of `DONE:` records must equal the number of valid events received, and each of `00.txt`–`23.txt` must have at least one `DONE:` record. The baseline is the observed number of receipts, not the number of file operations.
-- **Isolated change**: The `DONE:` record for `last.txt`, written after the batch settles, must appear. This wait and the batch completion wait share one 30-second limit.
+- **Isolated change**: The `DONE:` record for `last.txt`, written after the batch settles, must appear within 10 seconds.
 - **Excluded files**: Records up to shutdown must contain no line with `excluded.swp` or `readiness.probe`.
 - **Shutdown**: The watcher exits with exit code 0 within 10 seconds of receiving the shutdown signal, and there must be exactly one `FINISH` record and no `BEGIN|` record after it. In other words, changes pending at shutdown are not run. Every hook process that recorded `BEGIN` must be gone within 5 seconds. On Windows, a recorded PID that a program other than `hookrec` already holds when it is first checked counts as gone ([how liveness is judged](../harness.md#code-locations-by-responsibility)).
 - **No notification**: After the watcher exits, there must be no `ERROR|` notification record. If there is any, the test prints the records and fails.
@@ -54,10 +55,9 @@ sequenceDiagram
     watchDir-->>watcherProc: create and write events
     watcherProc->>slowHook: run each event, the last path, or cancel by combination
     slowHook->>recordFile: BEGIN, then DONE or CANCEL
-    testCode->>recordFile: wait for receive-boundary completion and 120ms quiet
+    testCode->>recordFile: wait for receive-boundary completion and 120ms quiet (fails after 10s without new receipts or records)
     testCode->>watchDir: write last.txt, write excluded.swp
-    testCode->>recordFile: wait for DONE last.txt
-    Note over testCode,recordFile: batch completion wait and last.txt wait share a 30s limit
+    testCode->>recordFile: wait for DONE last.txt (up to 10s)
     testCode->>recordFile: check no excluded file records
     testCode->>watchDir: write shutdown.txt
     testCode->>watcherProc: shutdown signal after shutdown.txt is received in the log (up to 5s)

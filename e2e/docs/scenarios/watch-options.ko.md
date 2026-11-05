@@ -47,7 +47,7 @@ sequenceDiagram
             watchDir-->>watcherProc: 동작과 표지 이벤트
             watcherProc->>hookRec: 허용된 이벤트와 표지의 onChange
             hookRec->>recordFile: CHANGE 기록
-            testCode->>recordFile: 모든 표지와 기대 기록 대기 (최대 10초)
+            testCode->>recordFile: 모든 표지와 기대 기록 대기 (새 기록 없이 10초가 지나면 실패)
             testCode->>testCode: 표지를 제외한 기록 정확히 비교
         end
     end
@@ -81,4 +81,4 @@ make e2e-windows ARGS="-- -run '^Test(WatchOptions|FolderEvents)$'"
 - `e2e/scenarios/watch_options_test.go`: `TestWatchOptions`, 파일시스템 동작, 링크인 감시 대상입니다.
 - `e2e/scenarios/helpers_test.go`: `TestFolderEvents`와 공유하는 `changeSteps`, `relativeChange`, `mkdirAll`, `createEmpty`입니다.
 - `e2e/scenarios/helpers_test.go`: `changeValues`로 링크 대상의 여덟 변수 기대 기록을 만듭니다.
-- `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitLine`, `Lines`, `Stop`입니다. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.
+- `e2e/harness`: `Start`, `Hook`, `Await`, `AwaitProgress`, `AwaitLine`, `Lines`, `Stop`입니다. 각 함수의 위치와 책임은 [책임별 코드 위치](../harness.ko.md#책임별-코드-위치)에 있습니다.

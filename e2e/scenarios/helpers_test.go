@@ -43,7 +43,7 @@ func (c *changeSteps) next(label string, awaited []string, dirs ...string) []str
 	}
 	c.step++
 	var got []string
-	c.s.Await(label+" sentinels", 10*time.Second, func() bool {
+	c.s.AwaitProgress(label+" sentinels", 10*time.Second, func() (bool, int) {
 		got = nil
 		waiting := map[string]bool{}
 		for _, sentinel := range sentinels {
@@ -59,15 +59,15 @@ func (c *changeSteps) next(label string, awaited []string, dirs ...string) []str
 			}
 		}
 		if len(waiting) > 0 {
-			return false
+			return false, len(lines)
 		}
 		for _, record := range awaited {
 			if !slices.Contains(got, record) {
-				return false
+				return false, len(lines)
 			}
 		}
 		c.seen = len(lines)
-		return true
+		return true, len(lines)
 	})
 	return got
 }

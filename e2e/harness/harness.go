@@ -210,13 +210,34 @@ func (s *Scenario) Exited() bool {
 
 func (s *Scenario) Await(label string, timeout time.Duration, condition func() bool) {
 	s.t.Helper()
-	deadline := time.Now().Add(timeout)
+	s.AwaitProgress(label, timeout, func() (bool, int) { return condition(), 0 })
+}
+
+// AwaitProgress는 condition이 done을 돌려줄 때까지 기다린다. condition이 돌려준 progress가 바뀔 때마다 한도 idle을
+// 다시 세므로, 진행이 이어지는 동안은 전체 시간이 idle을 넘어도 기다리고, idle 동안 progress가 그대로이면 실패한다.
+func (s *Scenario) AwaitProgress(label string, idle time.Duration, condition func() (done bool, progress int)) {
+	s.t.Helper()
+	if !awaitProgress(idle, condition) {
+		s.t.Fatalf("timeout: %s\nrecords:\n%s\nwatcher:\n%s", label, strings.Join(s.Lines(), "\n"), s.log.String())
+	}
+}
+
+// awaitProgress는 progress가 바뀌지 않는 한 고정 대기와 같다: 호출한 때부터 idle을 세고, 20ms마다 condition을
+// 확인하며, condition을 확인한 직후에만 한도를 넘었는지 본다.
+func awaitProgress(idle time.Duration, condition func() (done bool, progress int)) bool {
+	deadline := time.Now().Add(idle)
+	last, checked := 0, false
 	for {
-		if condition() {
-			return
+		done, progress := condition()
+		if done {
+			return true
 		}
+		if checked && progress != last {
+			deadline = time.Now().Add(idle)
+		}
+		last, checked = progress, true
 		if time.Now().After(deadline) {
-			s.t.Fatalf("timeout: %s\nrecords:\n%s\nwatcher:\n%s", label, strings.Join(s.Lines(), "\n"), s.log.String())
+			return false
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

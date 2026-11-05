@@ -10,11 +10,12 @@
 |---|---|
 | `scenarios/main_test.go` | 시나리오 패키지의 `TestMain`. 테스트 실행 전체의 준비·정리를 `harness.Run`에 맡김 |
 | `scenarios/*_test.go` | 시나리오 테스트. 대응은 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응)에 있음 |
-| `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·오류 주입 build tag를 붙인 watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`StartWithin`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
+| `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·오류 주입 build tag를 붙인 watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`StartWithin`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`·`AwaitProgress`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
 | `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN`·`CANCEL` 기록(`delayedHooks`·`DelayedHookBegun`·`DelayedHookCanceled`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
 | `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 레이블별 세대(`GenerationsLabeled`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
 | `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 끝난 시나리오 프로세스의 시작·종료 시각(`processExit`), 시나리오가 소유하는 `processObserver` |
 | `harness/dll_init_failure.go` | Windows에서 0xc0000142로 끝난 프로세스 앞뒤의 CTRL+BREAK와 종료 보고. 하네스가 보낸 CTRL+BREAK 기록(`recordHarnessSignal`), watcher DEBUG 줄 해석(`watcherEvents`), `cleanup`이 `dll-init-failed.log`와 테스트 출력에 남기는 보고 작성(`dllInitFailureReport`·`formatDLLInitFailureReport`) |
+| `harness/harness_test.go` | 진행 기반 대기(`awaitProgress`)의 단위 검증 |
 | `harness/hook_records_test.go` | 수신 경계·완료 판정 함수의 단위 검증 |
 | `harness/dll_init_failure_test.go` | watcher 로그 줄과 하네스 신호로 만드는 보고의 단위 검증 |
 | `harness/cleanup_windows_test.go` | Windows에서 실행 폴더·바이너리 삭제 실패가 비정상 종료로 드러나는지 검증. 같은 `Run`을 거치는 하네스 패키지의 `TestMain` 포함 |
@@ -51,8 +52,8 @@
 | [`TestWindowsShellEmptyArgument`](scenarios/windows-shell-empty-argument.ko.md) | `scenarios/shell_windows_test.go` | `cmd`의 빈 인자 하나 전달과 Windows PowerShell의 빈 인자 생략 | `Start`, `Hook`, `AwaitLine`, `Stop`, `Lines` |
 | [`TestWindowsShellNonASCIIOutput`](scenarios/windows-shell-non-ascii-output.ko.md) | `scenarios/shell_windows_test.go` | `cmd`와 Windows PowerShell hook이 출력한 비ASCII 글자의 UTF-8 출력과, 종료 뒤 콘솔 출력 code page 복원 | `Launch`, `WatcherBin`, `Await`, `Log`, `Stop` |
 | [`TestWindowsShellRejectedOnUnix`](scenarios/windows-shell-rejected-on-unix.ko.md) | `scenarios/shell_unix_test.go` | Unix의 `shell: cmd` 선택 시 hook 미실행·정확한 오류·종료 코드 1 | `Launch`, `Await`, `Exited`, `ExitErr`, `Log`, `Lines` |
-| [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나, 감시 중에 생기거나 옮겨 온 폴더 안에 나중에 만든 파일, 밖으로 옮긴 폴더의 hook 미실행 | `Start`, `Hook`, `Await`, `Lines`, `Stop`, `scenarios/helpers_test.go` |
-| [`TestWatchOptions`](scenarios/watch-options.ko.md) | `scenarios/watch_options_test.go` | exclude 패턴과 예외, `fileEvent: none`, 링크인 대상의 링크를 푼 여덟 이벤트 변수 | `Start`, `Hook`, `Await`, `AwaitLine`, `Lines`, `Stop`, `scenarios/helpers_test.go` |
+| [`TestFolderEvents`](scenarios/folder-events.ko.md) | `scenarios/folder_events_test.go` | 폴더와 파일 동작마다 hook이 받는 이벤트, 맨 위 폴더의 이벤트 하나, 감시 중에 생기거나 옮겨 온 폴더 안에 나중에 만든 파일, 밖으로 옮긴 폴더의 hook 미실행 | `Start`, `Hook`, `Await`, `AwaitProgress`, `Lines`, `Stop`, `scenarios/helpers_test.go` |
+| [`TestWatchOptions`](scenarios/watch-options.ko.md) | `scenarios/watch_options_test.go` | exclude 패턴과 예외, `fileEvent: none`, 링크인 대상의 링크를 푼 여덟 이벤트 변수 | `Start`, `Hook`, `Await`, `AwaitProgress`, `AwaitLine`, `Lines`, `Stop`, `scenarios/helpers_test.go` |
 | [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md) | `scenarios/process_test.go` | 시작 hook의 세 프로세스, 이전 세대 완료 후 재시작, 종료 hook 순서, `DW_E2E_FAULT` | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) | `scenarios/process_test.go` | `run.interrupt` 두 값의 시작 hook 종료·교체 | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
 | [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md) | `scenarios/process_test.go` | `run.concurrency: 2`에서 동시에 도는 프로세스 트리 hook 두 개의 종료, 둘 다 완료한 뒤의 종료 hook | `AwaitReadyGenerations`, `AssertRunning`, `AwaitProcessesGone`, `AssertGracefulCompletion` |
@@ -77,7 +78,7 @@
 
 1. `scenarios/`에 새 `*_test.go`를 만들고(`package scenarios`, `harness` 패키지 import) 설정·입력 순서·성공 조건을 작성합니다. 특정 OS 전용 build tag는 해당 OS에서 실제로 실행해 원인을 확인한 경우에만 붙입니다.
 2. `s := harness.NewScenario(t)`로 실행을 만들고, 설정 YAML의 hook 명령은 `s.Hook("--line=...")`으로 조립합니다. hook 명령은 기본 셸(sh, cmd)이 해석합니다. `Hook`은 템플릿이 없는 인자를 큰따옴표로 감싸고, 템플릿이 든 인자는 값이 인자 하나로 넘어가도록 감싸지 않으므로, 템플릿이 든 인자에는 `|`나 `&`처럼 셸이 해석하는 문자를 넣지 않습니다. 설정의 `option.watch`에 `exclude: ['*.probe']`를 넣고 `s.Start(config)`를 호출합니다. `Start`는 DEBUG 로그에서 제외된 probe 파일의 실제 이벤트를 관찰해 감시 준비를 확인합니다. 기본 ERROR 로그 수준을 검증하려면 `s.Launch(harness.WatcherBin(), config)`로 실행하고 시작 hook 기록으로 준비를 확인합니다. 고정 sleep은 준비·완료 판정에 쓰지 않습니다.
-3. `s.Write`로 행동하고, 기록 개수 대신 기다리는 hook·경로·세대를 `s.AwaitLine`, `s.AwaitReadyGenerations`, `s.Await`의 조건으로 지정합니다. 정확한 개수·순서는 대기 뒤 테스트에서 직접 검사합니다.
+3. `s.Write`로 행동하고, 기록 개수 대신 기다리는 hook·경로·세대를 `s.AwaitLine`, `s.AwaitReadyGenerations`, `s.Await`의 조건으로 지정합니다. 정확한 개수·순서는 대기 뒤 테스트에서 직접 검사합니다. 기다리는 시간이 실행되는 hook 수에 따라 늘어나면 `s.AwaitProgress`를 쓰고, 기록 줄 수처럼 hook이 끝날 때마다 늘어나는 값을 진행 값으로 돌려줘서 제한 시간이 진행 없는 시간만 세게 합니다.
 4. `s.Stop()`으로 정상 종료와 종료 코드 0을 검사한 뒤 프로세스 기록을 판정합니다. 시나리오 정리의 강제 종료는 테스트가 끝난 뒤 실행되며 정상 종료 증거가 아닙니다.
 
 ```go

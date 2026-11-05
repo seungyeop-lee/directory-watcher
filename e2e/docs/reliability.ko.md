@@ -31,8 +31,12 @@ go test -race ./...
 - OS E2E는 파일 생성 순서로 마지막 수신 경로를 정하지 않습니다.
 - `e2e/harness/hook_records_test.go`는 `last.txt` 뒤에 `normal-19.txt`를 수신한 경계, 빈 기록·미완료 hook의 거부, `deliver: each`의 중복 수신별 완료를 검사합니다.
 - 120ms 안정 구간은 관찰 조건이지 OS가 앞으로 알림을 보내지 않는다는 보장은 아닙니다.
-- 늦은 유효 이벤트가 고립된 변경을 대체하면 테스트는 성공 처리하지 않고, 배치 관찰과 고립된 변경이 공유하는 완료 대기 제한 시간 안에 실패합니다.
-- [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md)에서 이 제한 시간은 30초입니다.
+- 완료 대기는 받은 이벤트나 기록이 늘어나는 동안 계속 기다리고, 둘 다 10초 동안 변하지 않으면 실패합니다.
+  - 걸리는 시간이 받은 이벤트 수와 hook 하나에 드는 시간에 따라 늘어나므로, 전체 시간에는 고정 제한을 두지 않습니다.
+  - 그래서 받은 이벤트의 hook이 기록을 남기지 않으면 마지막 변화 뒤 10초가 지나 테스트가 실패합니다.
+  - `e2e/harness/harness_test.go`는 진행이 이어지는 동안에는 제한 시간이 지나도 기다리고, 진행이 멈추면 실패하는지 검사합니다.
+- 이 대기는 [`TestFastInflowSlowHook`](scenarios/fast-inflow-slow-hook.ko.md)과 [`TestBatchingOptions`](scenarios/batching-options.ko.md)가 씁니다.
+- 늦은 유효 이벤트가 고립된 변경을 대체하면 테스트는 성공 처리하지 않고, 고립된 변경의 기록이 10초 안에 나타나지 않아 실패합니다.
 
 ## 이벤트 유실 알림 검증
 

@@ -61,13 +61,12 @@ watchTargets:
 					time.Sleep(10 * time.Millisecond)
 				}
 				elapsed := time.Since(started)
-				deadline := time.Now().Add(30 * time.Second)
 				inflowPaths := append([]string{initial, shared}, paths...)
-				s.AwaitChangesComplete("DONE:", inflowPaths, fsnotify.Create|fsnotify.Write, sequential, time.Until(deadline))
+				s.AwaitChangesComplete("DONE:", inflowPaths, fsnotify.Create|fsnotify.Write, sequential, 10*time.Second)
 				last := filepath.Join(s.Watch, "last.txt")
 				s.Write(last, []byte("last"))
 				s.Write(filepath.Join(s.Watch, "excluded.swp"), []byte("after isolated valid event"))
-				s.AwaitLine("isolated valid change completes after inflow", time.Until(deadline), "DONE:"+last)
+				s.AwaitLine("isolated valid change completes after inflow", 10*time.Second, "DONE:"+last)
 				lines := s.Lines()
 				if sequential {
 					for _, path := range paths {
