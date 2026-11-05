@@ -5,7 +5,7 @@ Output hero.gif
 
 Set Shell "bash"
 Set FontSize 16
-Set Width 1280
+Set Width 1300
 Set Height 540
 Set Padding 16
 Set Framerate 12
