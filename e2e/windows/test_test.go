@@ -4,6 +4,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -17,7 +20,10 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/windows/guestrun"
 )
 
-const fakeRunDir = `C:\dw-e2e\20261103-223804-8cbc351a9c24e6c8`
+const (
+	fakeRunID  = "20261103-223804-8cbc351a9c24e6c8"
+	fakeRunDir = `C:\dw-e2e\` + fakeRunID
+)
 
 // fakeGuest는 rmdir 요청을 받으면 처음 keptFor번은 디렉터리가 남았다고, 그 뒤로는
 // 지워졌다고 요청의 마지막 인자인 표시 파일에 적는 utmctl을 만든다. answers가 false면
@@ -172,7 +178,7 @@ exit 0`
 	return guestTest{
 		runner: runner{utm: fakeUTMCtl(t, script), log: io.Discard},
 		vm:     "95B99283-8256-4360-AA1D-0563FCD5CE09",
-		id:     filepath.Base(strings.ReplaceAll(fakeRunDir, `\`, "/")),
+		id:     fakeRunID,
 		dir:    fakeRunDir,
 	}
 }
@@ -205,6 +211,130 @@ func TestStartGuestProgramReportsAProgramThatDidNotStart(t *testing.T) {
 	err := g.startGuestProgram()
 	if err == nil || !strings.Contains(err.Error(), "guest program did not start") || !strings.Contains(err.Error(), staleExecAnswer) {
 		t.Fatalf("startGuestProgram = %v; want the missing started file and the exec answer", err)
+	}
+}
+
+// otherRunID는 같은 VM에서 동시에 도는 다른 실행의 ID다.
+const otherRunID = "20261105-172120-31f55126cb83b1ee"
+
+// fakeCollectingGuest는 file pull을 받을 때마다 answers에서 그 파일 이름에 준비한 내용을
+// 차례로 출력하고, 준비한 내용을 다 쓰면 마지막 내용을 계속 출력하는 utmctl을 만든다.
+// 동시에 도는 다른 실행의 file pull과 응답이 섞여, 앞선 응답이 다른 실행의 파일 내용인
+// 상황을 흉내 낸다. 내용을 준비하지 않은 파일은 stderr에 오류를 출력하고 0으로 끝난다.
+func fakeCollectingGuest(t *testing.T, answers map[string][]string) guestTest {
+	t.Helper()
+	state := t.TempDir()
+	for name, contents := range answers {
+		for i, content := range contents {
+			if err := os.WriteFile(filepath.Join(state, name+"."+strconv.Itoa(i+1)), []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(state, name+".answers"), []byte(strconv.Itoa(len(contents))), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := `state='` + state + `'
+for last; do :; done
+name=${last##*\\}
+n=$(cat "$state/$name.count" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "$state/$name.count"
+k=$(cat "$state/$name.answers" 2>/dev/null || echo 0)
+[ $n -le $k ] || n=$k
+if [ -f "$state/$name.$n" ]; then cat "$state/$name.$n"; else echo "Error from event: failed to open file '$last'" >&2; fi
+exit 0`
+	return guestTest{
+		runner: runner{utm: fakeUTMCtl(t, script), log: io.Discard},
+		vm:     "95B99283-8256-4360-AA1D-0563FCD5CE09",
+		local:  t.TempDir(),
+		id:     fakeRunID,
+		dir:    fakeRunDir,
+	}
+}
+
+func encodeResult(t *testing.T, result guestrun.Result) string {
+	t.Helper()
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestAwaitResultWaitsForItsOwnResultPastOtherContent(t *testing.T) {
+	shortRetryInterval(t)
+	own := encodeResult(t, guestrun.Result{RunID: fakeRunID, ExitCode: 1})
+	g := fakeCollectingGuest(t, map[string][]string{guestrun.ResultFile: {
+		encodeResult(t, guestrun.Result{RunID: otherRunID}),
+		own[:len(own)/2],
+		own,
+	}})
+	result, data, err := g.awaitResult()
+	if err != nil || result.RunID != g.id || result.ExitCode != 1 || string(data) != own {
+		t.Fatalf("awaitResult = %+v, %q, %v; want the result of this run", result, data, err)
+	}
+}
+
+func TestAwaitResultReportsTheResultItRejected(t *testing.T) {
+	shortWaits(t)
+	g := fakeCollectingGuest(t, map[string][]string{guestrun.ResultFile: {encodeResult(t, guestrun.Result{RunID: otherRunID})}})
+	_, _, err := g.awaitResult()
+	if err == nil || !strings.Contains(err.Error(), "no guest result") || !strings.Contains(err.Error(), otherRunID) {
+		t.Fatalf("awaitResult = %v; want a missing result that names the rejected run", err)
+	}
+}
+
+func sha256Hex(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
+func diagnosticsArchive(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "cleanup.log"), []byte("own cleanup"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	if err := guestrun.ArchiveDir(&archive, dir); err != nil {
+		t.Fatal(err)
+	}
+	return archive.String()
+}
+
+func TestCollectReadsAFileAgainUntilItMatchesTheResult(t *testing.T) {
+	shortRetryInterval(t)
+	diagnostics := diagnosticsArchive(t)
+	g := fakeCollectingGuest(t, map[string][]string{
+		guestrun.StdoutFile:      {"other run stdout", "own stdout"},
+		guestrun.StderrFile:      {""},
+		guestrun.DiagnosticsFile: {"own std", diagnostics},
+	})
+	err := g.collect(nil, map[string]string{
+		guestrun.StdoutFile:      sha256Hex("own stdout"),
+		guestrun.StderrFile:      sha256Hex(""),
+		guestrun.DiagnosticsFile: sha256Hex(diagnostics),
+	})
+	if err != nil {
+		t.Fatalf("collect = %v; want the files of this run", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(g.local, guestrun.StdoutFile)); err != nil || string(got) != "own stdout" {
+		t.Fatalf("stdout.log = %q, %v; want the stdout of this run", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(g.local, "diagnostics", "cleanup.log")); err != nil || string(got) != "own cleanup" {
+		t.Fatalf("diagnostics/cleanup.log = %q, %v; want the diagnostics of this run", got, err)
+	}
+}
+
+func TestCollectReportsAFileThatNeverMatchesTheResult(t *testing.T) {
+	shortRetryInterval(t)
+	g := fakeCollectingGuest(t, map[string][]string{
+		guestrun.StdoutFile:      {"other run stdout"},
+		guestrun.StderrFile:      {""},
+		guestrun.DiagnosticsFile: {diagnosticsArchive(t)},
+	})
+	err := g.collect(nil, map[string]string{guestrun.StdoutFile: sha256Hex("own stdout")})
+	if err == nil || !strings.Contains(err.Error(), guestrun.StdoutFile) || !strings.Contains(err.Error(), "SHA-256") {
+		t.Fatalf("collect = %v; want stdout.log reported as not matching the result", err)
 	}
 }
 

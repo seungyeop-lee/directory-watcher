@@ -25,12 +25,12 @@ func fakeCommand(t *testing.T, name, script string) string {
 	return path
 }
 
-// shortRetryInterval은 테스트 동안 재시도 간격을 줄인다.
+// shortRetryInterval은 테스트 동안 재시도 간격과 결과를 다시 확인하는 간격을 줄인다.
 func shortRetryInterval(t *testing.T) {
 	t.Helper()
-	interval := retryInterval
-	t.Cleanup(func() { retryInterval = interval })
-	retryInterval = 10 * time.Millisecond
+	retry, result := retryInterval, resultInterval
+	t.Cleanup(func() { retryInterval, resultInterval = retry, result })
+	retryInterval, resultInterval = 10*time.Millisecond, 10*time.Millisecond
 }
 
 // shortWaits는 테스트 동안 재시도 간격과 제한 시간을 줄인다. 실패를 보고하는 테스트는
@@ -40,8 +40,10 @@ func shortRetryInterval(t *testing.T) {
 func shortWaits(t *testing.T) {
 	t.Helper()
 	shortRetryInterval(t)
-	remove, dir, start, started := removeLimit, guestDirLimit, programStartLimit, startedLimit
-	t.Cleanup(func() { removeLimit, guestDirLimit, programStartLimit, startedLimit = remove, dir, start, started })
+	remove, dir, start, started, grace := removeLimit, guestDirLimit, programStartLimit, startedLimit, resultGrace
+	t.Cleanup(func() {
+		removeLimit, guestDirLimit, programStartLimit, startedLimit, resultGrace = remove, dir, start, started, grace
+	})
 	const limit = 200 * time.Millisecond
-	removeLimit, guestDirLimit, programStartLimit, startedLimit = limit, limit, limit, limit
+	removeLimit, guestDirLimit, programStartLimit, startedLimit, resultGrace = limit, limit, limit, limit, limit
 }

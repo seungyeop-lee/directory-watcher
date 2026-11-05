@@ -26,6 +26,9 @@ const (
 	DiagnosticsFile = "diagnostics.tar"
 )
 
+// CollectedFiles는 실행기가 결과를 받은 뒤 Mac으로 가져가는 파일이다.
+var CollectedFiles = []string{StdoutFile, StderrFile, DiagnosticsFile}
+
 // Request는 게스트 프로그램에 무엇을 실행할지 알려 준다. Args와 Env는 go 명령에
 // 넘기는 값이며, 게스트 프로그램은 이번 실행 전용 임시 디렉터리와 진단 디렉터리를
 // Env에 더한다.
@@ -49,7 +52,10 @@ type Result struct {
 	Error string
 	// Leftovers는 실행 디렉터리에서 시작되어 go가 끝난 뒤에도 살아 있던 프로세스를
 	// 나열한다. 게스트 프로그램은 이 프로세스들을 종료한다.
-	Leftovers         []string
+	Leftovers []string
+	// SHA256은 CollectedFiles 가운데 게스트에 있는 파일의 SHA-256(16진수)을 파일 이름별로
+	// 적는다. 실행기는 가져온 파일의 내용을 이 값과 대조한다.
+	SHA256            map[string]string
 	Guest             Guest
 	Started, Finished time.Time
 }
@@ -63,9 +69,9 @@ type Guest struct {
 	DriveType string
 }
 
-// Check는 결과 파일을 해석해, 그 파일이 runID의 결과이고 실행이 통과했을 때만 nil을
-// 돌려주고 그 밖에는 오류를 돌려준다. 빈 파일은 게스트가 아직 끝나지 않았다는 뜻이다.
-func Check(data []byte, runID string) (Result, error) {
+// Decode는 결과 파일을 해석해, 그 파일이 runID의 결과일 때만 돌려주고 그 밖에는 오류를
+// 돌려준다. 빈 파일은 게스트가 아직 끝나지 않았다는 뜻이다.
+func Decode(data []byte, runID string) (Result, error) {
 	var result Result
 	if len(data) == 0 {
 		return result, fmt.Errorf("guest result %s is missing", ResultFile)
@@ -73,19 +79,25 @@ func Check(data []byte, runID string) (Result, error) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		return result, fmt.Errorf("guest result is unreadable: %w", err)
 	}
-	switch {
-	case result.RunID != runID:
+	if result.RunID != runID {
 		return result, fmt.Errorf("guest result belongs to run %q, not %q", result.RunID, runID)
-	case result.Error != "":
-		return result, fmt.Errorf("guest run failed: %s", result.Error)
-	case result.TimedOut:
-		return result, fmt.Errorf("go test did not finish within the deadline and was stopped")
-	case result.ExitCode != 0:
-		return result, fmt.Errorf("go test exited with %d", result.ExitCode)
-	case len(result.Leftovers) > 0:
-		return result, fmt.Errorf("processes outlived go test: %s", strings.Join(result.Leftovers, "; "))
 	}
 	return result, nil
+}
+
+// Check는 실행이 통과했을 때만 nil을 돌려주고 그 밖에는 오류를 돌려준다.
+func (result Result) Check() error {
+	switch {
+	case result.Error != "":
+		return fmt.Errorf("guest run failed: %s", result.Error)
+	case result.TimedOut:
+		return fmt.Errorf("go test did not finish within the deadline and was stopped")
+	case result.ExitCode != 0:
+		return fmt.Errorf("go test exited with %d", result.ExitCode)
+	case len(result.Leftovers) > 0:
+		return fmt.Errorf("processes outlived go test: %s", strings.Join(result.Leftovers, "; "))
+	}
+	return nil
 }
 
 // ArchiveDir는 dir 아래의 일반 파일을 dir 기준 상대 경로로 담아 tar 스트림으로

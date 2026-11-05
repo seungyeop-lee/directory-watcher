@@ -48,6 +48,11 @@ func run(dir string) int {
 	if err := archiveDiagnostics(dir); err != nil {
 		problems = append(problems, "archive diagnostics: "+err.Error())
 	}
+	digests, err := digestCollected(dir)
+	if err != nil {
+		problems = append(problems, "digest collected files: "+err.Error())
+	}
+	result.SHA256 = digests
 	result.Error = strings.Join(problems, "; ")
 	result.Finished = time.Now()
 	if err := writeResult(dir, result); err != nil {
@@ -251,6 +256,23 @@ func archiveDiagnostics(dir string) error {
 		archiveErr = err
 	}
 	return archiveErr
+}
+
+// digestCollected는 실행기가 가져갈 파일의 SHA-256을 구한다. 없는 파일은 뺀다.
+func digestCollected(dir string) (map[string]string, error) {
+	digests := map[string]string{}
+	for _, name := range guestrun.CollectedFiles {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return digests, err
+		}
+		sum := sha256.Sum256(data)
+		digests[name] = hex.EncodeToString(sum[:])
+	}
+	return digests, nil
 }
 
 // writeResult는 완성된 파일을 rename으로 제자리에 옮겨, 결과가 나올 때까지 반복해서

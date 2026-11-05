@@ -84,12 +84,12 @@ func (g guestTest) run() error {
 	if err := g.startGuestProgram(); err != nil {
 		return err
 	}
-	data, waitErr := g.awaitResult()
-	collectErr := g.collect(data)
+	result, data, waitErr := g.awaitResult()
+	collectErr := g.collect(data, result.SHA256)
 	if waitErr != nil {
 		return fmt.Errorf("%w; guest files are kept in %s (partial copies: %v)", waitErr, g.dir, collectErr)
 	}
-	result, testErr := guestrun.Check(data, g.id)
+	testErr := result.Check()
 	fmt.Fprintf(g.log, "guest: %s, %s %s, run directory %s on a %s drive\n",
 		result.Guest.Windows, result.Guest.GoVersion, result.Guest.GoEnv, result.Guest.RunDir, result.Guest.DriveType)
 	if testErr == nil && result.Guest.DriveType != "fixed" {
@@ -263,6 +263,17 @@ func (g guestTest) push(name string, data []byte) error {
 	return err
 }
 
+// pull은 게스트 실행 디렉터리의 파일을 읽는다. 읽은 내용은 다른 요청이 연 파일의
+// 내용일 수 있으므로, 호출하는 쪽은 내용이 이번 실행의 것인지 확인한다.
+//
+// UTM이 Guest Agent와 통신하는 QEMUKit(QEMUManager.m의 qmp_rpc_call)은 요청에 ID를
+// 붙이지 않고, 도착한 응답을 그때 기다리는 요청에 넘긴다. 10초 안에 응답이 오지 않은
+// 요청은 시간 초과로 끝나고, 늦게 온 그 응답은 다음 요청이 받는다. 2026-11-05에 같은
+// VM으로 동시에 돈 두 실행 가운데 하나가 아직 없는 자기 result.json을 읽었는데, file
+// pull은 오류 없이 다른 실행의 result.json을 출력했다. 다른 실행의 file open이 시간
+// 초과로 끝난 직후에 보낸 file open이 그 실행이 연 파일의 handle을 받은 것으로 본다.
+// 같은 날 시간 초과가 없을 때는, 없는 파일을 읽는 file pull 140번을 다른 file pull
+// 480번과 동시에 보내도 내용이 섞이지 않았다.
 func (g guestTest) pull(name string, limit time.Duration) ([]byte, error) {
 	return g.utm.call(limit, nil, "file", "pull", g.vm, g.file(name))
 }
@@ -288,60 +299,103 @@ func (g guestTest) awaitStarted() error {
 	}
 }
 
-// awaitResult는 게스트 프로그램이 마지막에 쓰는 결과가 나올 때까지 반복해서
-// 확인한다. 실행의 deadline이 go test를 멈추므로, 결과는 deadline 직후에 나와야
-// 한다. exec는 게스트 프로그램이 끝나기를 기다리지 않으므로(utm.exec 참고), 결과
-// 파일은 실행 결과를 알 수 있는 유일한 근거다. run은 이번 실행의 ID가 적힌 결과만
-// 받아들이므로, 다른 실행이 남긴 결과를 이번 실행의 결과로 받지 않는다.
-func (g guestTest) awaitResult() ([]byte, error) {
-	limit := g.cfg.deadline + 2*time.Minute
+// resultInterval은 결과를 다시 확인하기 전에 기다리는 시간이고, resultGrace는 실행의
+// deadline이 지난 뒤에도 결과를 더 기다리는 시간이다.
+var (
+	resultInterval = 3 * time.Second
+	resultGrace    = 2 * time.Minute
+)
+
+// awaitResult는 게스트 프로그램이 마지막에 쓰는 이번 실행의 결과가 나올 때까지 반복해서
+// 확인한다. 실행의 deadline이 go test를 멈추므로, 결과는 deadline 직후에 나와야 한다.
+// exec는 게스트 프로그램이 끝나기를 기다리지 않으므로(utm.exec 참고), 결과 파일은 실행
+// 결과를 알 수 있는 유일한 근거다. 읽은 내용이 이번 실행의 결과가 아니면(pull 참고)
+// 버리고 계속 기다린다.
+func (g guestTest) awaitResult() (guestrun.Result, []byte, error) {
+	limit := g.cfg.deadline + resultGrace
 	fmt.Fprintf(g.log, "waiting up to %s for the guest result\n", limit)
 	start := time.Now()
 	lastReport := start
 	for {
 		data, err := g.pull(guestrun.ResultFile, requestLimit)
-		if err == nil && len(data) > 0 {
-			return data, nil
+		if err == nil {
+			var result guestrun.Result
+			if result, err = guestrun.Decode(data, g.id); err == nil {
+				return result, data, nil
+			}
+			if len(data) > 0 {
+				fmt.Fprintln(g.log, "ignored a guest result that is not this run's (utmctl file pull may answer with another guest file):", err)
+			}
 		}
 		if time.Since(start) > limit {
-			return nil, fmt.Errorf("no guest result within %s (%v)", limit, err)
+			return guestrun.Result{}, nil, fmt.Errorf("no guest result within %s (%v)", limit, err)
 		}
 		if time.Since(lastReport) >= time.Minute {
 			fmt.Fprintf(g.log, "guest run in progress (%s)\n", time.Since(start).Round(time.Second))
 			lastReport = time.Now()
 		}
-		time.Sleep(3 * time.Second)
+		time.Sleep(resultInterval)
 	}
 }
 
 // collect는 결과가 있으면 결과와 함께 로그와 진단 자료를 Mac으로 복사하고, go test
-// 출력을 표시한다.
-func (g guestTest) collect(result []byte) error {
+// 출력을 표시한다. digests는 결과에 적힌 파일별 SHA-256이다.
+func (g guestTest) collect(result []byte, digests map[string]string) error {
 	var problems []error
 	if result != nil {
 		if err := os.WriteFile(filepath.Join(g.local, guestrun.ResultFile), result, 0644); err != nil {
 			problems = append(problems, err)
 		}
 	}
-	for _, name := range []string{guestrun.StdoutFile, guestrun.StderrFile} {
-		data, err := g.pull(name, pullLimit)
+	for _, name := range guestrun.CollectedFiles {
+		data, err := g.pullCollected(name, digests[name])
 		if err == nil {
-			err = os.WriteFile(filepath.Join(g.local, name), data, 0644)
+			err = g.keep(name, data)
 		}
 		if err != nil {
 			problems = append(problems, fmt.Errorf("%s: %w", name, err))
-			continue
 		}
-		os.Stdout.Write(data)
-	}
-	data, err := g.pull(guestrun.DiagnosticsFile, pullLimit)
-	if err == nil {
-		err = guestrun.Extract(bytes.NewReader(data), filepath.Join(g.local, "diagnostics"))
-	}
-	if err != nil {
-		problems = append(problems, fmt.Errorf("%s: %w", guestrun.DiagnosticsFile, err))
 	}
 	return errors.Join(problems...)
+}
+
+// collectAttempts는 회수할 파일 하나를 가져오는 횟수의 한도다.
+const collectAttempts = 3
+
+// pullCollected는 회수할 파일 name을 가져온다. want가 있으면 내용의 SHA-256이 want와
+// 같을 때까지 다시 가져온다(pull 참고). 결과를 받지 못해 want가 없으면 한 번만 가져온다.
+func (g guestTest) pullCollected(name, want string) ([]byte, error) {
+	for attempt := 1; ; attempt++ {
+		data, err := g.pull(name, pullLimit)
+		if want == "" {
+			return data, err
+		}
+		if err == nil {
+			sum := sha256.Sum256(data)
+			got := hex.EncodeToString(sum[:])
+			if got == want {
+				return data, nil
+			}
+			err = fmt.Errorf("SHA-256 %s differs from %s in the guest result", got, want)
+		}
+		if attempt == collectAttempts {
+			return nil, err
+		}
+		fmt.Fprintf(g.log, "%s: %v; reading it again\n", name, err)
+		time.Sleep(retryInterval)
+	}
+}
+
+// keep은 가져온 파일을 Mac에 둔다. 진단 자료는 풀어 두고, go test 출력은 표시도 한다.
+func (g guestTest) keep(name string, data []byte) error {
+	if name == guestrun.DiagnosticsFile {
+		return guestrun.Extract(bytes.NewReader(data), filepath.Join(g.local, "diagnostics"))
+	}
+	if err := os.WriteFile(filepath.Join(g.local, name), data, 0644); err != nil {
+		return err
+	}
+	os.Stdout.Write(data)
+	return nil
 }
 
 // removeLimit은 게스트 실행 디렉터리를 지우는 데 주는 시간이다. 이 시간 안에서는

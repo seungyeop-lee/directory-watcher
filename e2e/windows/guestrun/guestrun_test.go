@@ -10,32 +10,51 @@ import (
 	"testing"
 )
 
-func TestCheckAcceptsOnlyThePassedResultOfTheRun(t *testing.T) {
-	encode := func(r Result) []byte {
-		data, err := json.Marshal(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return data
+func encode(t *testing.T, r Result) []byte {
+	t.Helper()
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
 	}
-	passed := Result{RunID: "run-a"}
-	if _, err := Check(encode(passed), "run-a"); err != nil {
-		t.Fatalf("passed result rejected: %v", err)
+	return data
+}
+
+func TestDecodeAcceptsOnlyAResultOfTheRun(t *testing.T) {
+	if result, err := Decode(encode(t, Result{RunID: "run-a", ExitCode: 1}), "run-a"); err != nil || result.ExitCode != 1 {
+		t.Fatalf("Decode = %+v, %v; want the result of run-a", result, err)
 	}
 	for name, tc := range map[string]struct {
 		data []byte
 		want string
 	}{
-		"missing":       {nil, "missing"},
-		"truncated":     {[]byte(`{"RunID":"run-a"`), "unreadable"},
-		"other run":     {encode(Result{RunID: "run-b"}), `belongs to run "run-b"`},
-		"guest failure": {encode(Result{RunID: "run-a", ExitCode: -1, Error: "source checksum mismatch"}), "source checksum mismatch"},
-		"timeout":       {encode(Result{RunID: "run-a", ExitCode: -1, TimedOut: true}), "deadline"},
-		"test failure":  {encode(Result{RunID: "run-a", ExitCode: 1}), "exited with 1"},
-		"leftovers":     {encode(Result{RunID: "run-a", Leftovers: []string{"pid=7 watcher.exe"}}), "pid=7 watcher.exe"},
+		"missing":   {nil, "missing"},
+		"truncated": {[]byte(`{"RunID":"run-a"`), "unreadable"},
+		"other run": {encode(t, Result{RunID: "run-b"}), `belongs to run "run-b"`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Check(tc.data, "run-a")
+			_, err := Decode(tc.data, "run-a")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Decode error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckAcceptsOnlyAPassedResult(t *testing.T) {
+	if err := (Result{RunID: "run-a"}).Check(); err != nil {
+		t.Fatalf("passed result rejected: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		result Result
+		want   string
+	}{
+		"guest failure": {Result{ExitCode: -1, Error: "source checksum mismatch"}, "source checksum mismatch"},
+		"timeout":       {Result{ExitCode: -1, TimedOut: true}, "deadline"},
+		"test failure":  {Result{ExitCode: 1}, "exited with 1"},
+		"leftovers":     {Result{Leftovers: []string{"pid=7 watcher.exe"}}, "pid=7 watcher.exe"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := tc.result.Check()
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Check error = %v, want it to mention %q", err, tc.want)
 			}
