@@ -26,6 +26,8 @@ The behaviors below need exact results that do not depend on the number or order
 | No replacement before cancellation completes | `TestReplacementWaitsForCanceledGeneration` in `internal/app/service/hook_runner_test.go` |
 | No runs after shutdown, and pending changes dropped | `TestShutdownDuringReplacementPreventsNewGeneration` and `TestFinishCancelsAllRunsBeforeFinishHook` in `internal/app/service/hook_runner_test.go`, `TestStopDiscardsPendingEvents` in `runner_watch_target_test.go` |
 | Preservation of the first fatal error | `TestRunnerPreservesOnlyFirstFatalError` in `internal/app/service/runner_test.go` |
+| No startup or finish hooks for a target that fails to start watching | `TestTargetThatFailedToStartSkipsFinishHook` in `internal/app/service/runner_test.go` |
+| One finish hook for each started target and the global scope after a fatal error | `TestRunnerFailureFinishesStartedTargets` in `internal/app/service/runner_test.go` |
 | The loss error when the queue is full | `TestQueueFullRejectsRun` in `internal/app/service/runner_watch_target_queue_test.go`, `TestBoundedDispatchReportsLoss` and `TestBatchLargerThanQueueOverflows` in `runner_watch_target_test.go` |
 | Release of the watched directory after `Stop` | `TestNativeWatcherStopReleasesDirectory` in `internal/app/service/runner_watch_target_test.go` |
 | Release of files and directories after the existence and directory predicates | `TestFilesystemPredicatesReleaseResources` in `internal/helper/os_test.go` |

@@ -26,6 +26,8 @@ OS 알림의 수와 순서에 기대지 않고 정확한 결과를 확인해야 
 | 취소가 끝나기 전의 교체 금지 | `internal/app/service/hook_runner_test.go`의 `TestReplacementWaitsForCanceledGeneration` |
 | 종료 뒤 실행 금지와 대기 중인 변경 버리기 | `internal/app/service/hook_runner_test.go`의 `TestShutdownDuringReplacementPreventsNewGeneration`, `TestFinishCancelsAllRunsBeforeFinishHook`, `runner_watch_target_test.go`의 `TestStopDiscardsPendingEvents` |
 | 첫 치명적 오류 보존 | `internal/app/service/runner_test.go`의 `TestRunnerPreservesOnlyFirstFatalError` |
+| 감시 시작에 실패한 대상의 시작·종료 hook 미실행 | `internal/app/service/runner_test.go`의 `TestTargetThatFailedToStartSkipsFinishHook` |
+| 치명적 오류 뒤 시작한 각 대상과 전역 종료 hook의 1회 실행 | `internal/app/service/runner_test.go`의 `TestRunnerFailureFinishesStartedTargets` |
 | 대기열이 가득 찼을 때의 유실 오류 | `internal/app/service/runner_watch_target_queue_test.go`의 `TestQueueFullRejectsRun`, `runner_watch_target_test.go`의 `TestBoundedDispatchReportsLoss`, `TestBatchLargerThanQueueOverflows` |
 | `Stop` 뒤 감시 디렉터리 해제 | `internal/app/service/runner_watch_target_test.go`의 `TestNativeWatcherStopReleasesDirectory` |
 | 존재·디렉터리 판별 뒤 파일과 디렉터리 해제 | `internal/helper/os_test.go`의 `TestFilesystemPredicatesReleaseResources` |

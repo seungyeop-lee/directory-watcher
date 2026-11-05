@@ -225,26 +225,73 @@ func TestRunnerPreservesOnlyFirstFatalError(t *testing.T) {
 }
 
 func TestTargetThatFailedToStartSkipsFinishHook(t *testing.T) {
-	set := testCommandSet(filepath.Join(t.TempDir(), "missing-dir"), t.TempDir())
-	var missingFinished, startedFinished, globalFinished atomic.Int32
+	set := testCommandSet(filepath.Join(t.TempDir(), "missing-dir"))
+	var started, finished, globalFinished atomic.Int32
 	counter := func(calls *atomic.Int32) domain.Cmd {
 		return runnerCommand(func(*process.WatcherContext, *domain.Event) error { calls.Add(1); return nil })
 	}
-	set.WatchTargets[0].LifeCycle.OnFinishWatch = counter(&missingFinished)
-	set.WatchTargets[1].LifeCycle.OnFinishWatch = counter(&startedFinished)
+	set.WatchTargets[0].LifeCycle.OnStartWatch = counter(&started)
+	set.WatchTargets[0].LifeCycle.OnFinishWatch = counter(&finished)
 	set.Global.LifeCycle.OnFinishWatch = counter(&globalFinished)
 	r := NewRunner(set, newMockLogger(), process.CommandMode{})
-	assertWatchDirectoriesRemovable(t, r.watchTargets[1])
 	go r.Run()
+	t.Cleanup(r.Stop)
 	if err := <-r.Errors(); err == nil {
 		t.Fatal("missing target path did not stop the watcher")
 	}
 	r.Stop()
-	if missingFinished.Load() != 0 {
-		t.Fatal("onFinishWatch ran for the target that failed to start watching")
+	if started.Load() != 0 || finished.Load() != 0 {
+		t.Fatalf("hooks of failed target: start=%d finish=%d, want 0 each", started.Load(), finished.Load())
 	}
-	if startedFinished.Load() != 1 || globalFinished.Load() != 1 {
-		t.Fatalf("finish hooks of started target=%d global=%d, want 1 each", startedFinished.Load(), globalFinished.Load())
+	if globalFinished.Load() != 1 {
+		t.Fatalf("global finish hooks=%d, want 1", globalFinished.Load())
+	}
+}
+
+func TestRunnerFailureFinishesStartedTargets(t *testing.T) {
+	set := testCommandSet(t.TempDir(), t.TempDir())
+	started := make(chan struct{}, len(set.WatchTargets))
+	finished := make([]atomic.Int32, len(set.WatchTargets))
+	var globalFinished atomic.Int32
+	for n := range set.WatchTargets {
+		set.WatchTargets[n].LifeCycle.OnStartWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+			started <- struct{}{}
+			return nil
+		})
+		set.WatchTargets[n].LifeCycle.OnFinishWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+			finished[n].Add(1)
+			return nil
+		})
+	}
+	set.Global.LifeCycle.OnFinishWatch = runnerCommand(func(*process.WatcherContext, *domain.Event) error {
+		globalFinished.Add(1)
+		return nil
+	})
+	r := NewRunner(set, newMockLogger(), process.CommandMode{})
+	assertWatchDirectoriesRemovable(t, r.watchTargets...)
+	_, source := controlledSource(r.watchTargets[0])
+	go r.Run()
+	t.Cleanup(r.Stop)
+	for range set.WatchTargets {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("target startup hook did not run")
+		}
+	}
+	failure := errors.New("watcher failed")
+	source <- failure
+	if err := <-r.Errors(); !errors.Is(err, failure) {
+		t.Fatalf("watcher error=%v, want %v", err, failure)
+	}
+	r.Stop()
+	for n := range finished {
+		if calls := finished[n].Load(); calls != 1 {
+			t.Errorf("target %d finish hooks=%d, want 1", n, calls)
+		}
+	}
+	if globalFinished.Load() != 1 {
+		t.Fatalf("global finish hooks=%d, want 1", globalFinished.Load())
 	}
 }
 
