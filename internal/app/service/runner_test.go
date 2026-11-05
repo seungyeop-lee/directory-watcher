@@ -168,6 +168,7 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 				})
 			}
 			r := NewRunner(set, logger, process.CommandMode{})
+			r.global.onErrorTimeout = 200 * time.Millisecond
 			assertWatchDirectoriesRemovable(t, r.watchTargets...)
 			_, source := controlledSource(r.watchTargets[0])
 			go r.Run()
@@ -189,7 +190,7 @@ func TestNotificationFailureAndTimeoutPreserveFirstError(t *testing.T) {
 			if calls.Load() != want {
 				t.Fatalf("notification calls=%d want=%d", calls.Load(), want)
 			}
-			if mode == "timeout" && time.Since(before) > 7*time.Second {
+			if mode == "timeout" && time.Since(before) > 2*time.Second {
 				t.Fatal("notification timeout not bounded")
 			}
 			if (mode == "failure" || mode == "timeout") && !strings.Contains(logger.String(), "onError notification failed") {

@@ -17,18 +17,21 @@ type globalRunner struct {
 	onStartWatch  domain.Cmd
 	onFinishWatch domain.Cmd
 	onError       domain.Cmd
+	// onErrorTimeout은 onError hook을 한 번 실행할 때의 시간 제한이다. 제품에서는 notificationTimeout이고, 테스트만 줄인다.
+	onErrorTimeout time.Duration
 
 	logger helper.Logger
 }
 
 func NewGlobalRunner(commandSet domain.GlobalCommandSet, logger helper.Logger, mode process.CommandMode) *globalRunner {
 	return &globalRunner{
-		watchCtx:      process.NewWatcherContext("[GLOBAL]", mode),
-		mode:          mode,
-		onStartWatch:  commandSet.LifeCycle.OnStartWatch,
-		onFinishWatch: commandSet.LifeCycle.OnFinishWatch,
-		logger:        logger,
-		onError:       commandSet.LifeCycle.OnError,
+		watchCtx:       process.NewWatcherContext("[GLOBAL]", mode),
+		mode:           mode,
+		onStartWatch:   commandSet.LifeCycle.OnStartWatch,
+		onFinishWatch:  commandSet.LifeCycle.OnFinishWatch,
+		logger:         logger,
+		onError:        commandSet.LifeCycle.OnError,
+		onErrorTimeout: notificationTimeout,
 	}
 }
 
@@ -88,7 +91,7 @@ func (g *globalRunner) CallOnError(err error) {
 	for _, v := range errorVariables {
 		env = append(env, v.name+"="+v.value(fatal))
 	}
-	ctx := base.NewTimeoutRun(notificationTimeout, env)
+	ctx := base.NewTimeoutRun(g.onErrorTimeout, env)
 	defer ctx.Cancel()
 	if notifyErr := g.onError.Run(ctx.WithHook("onError"), "", nil); notifyErr != nil {
 		if ctx.Context().Err() != nil {
