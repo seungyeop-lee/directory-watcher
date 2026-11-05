@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"syscall"
 	"time"
 	"unsafe"
@@ -181,6 +182,9 @@ func stopTreeOnCancel(cmd *exec.Cmd) (markStarted func(tree processTree)) {
 // 가므로, cmd.exe가 명령 목록의 다음 프로그램을 시작하는 것처럼 첫 신호 뒤에 job에 들어온 프로세스가 있으면 다시 보낸다.
 // 들어온 프로세스가 minRunBeforeBreak만큼 실행된 뒤에 보내고, 새 프로세스가 없으면 다시 보내지 않아 이미 신호를 받고 정상
 // 종료하는 프로그램에는 두 번째 신호가 가지 않는다.
+// 신호를 보낸 순간 콘솔에 아직 연결되지 않았던 프로세스도 그 신호를 받지 못한다. 만들어진 뒤 초기화가 늦어진 프로세스는
+// job에 이미 들어 있어 프로세스 수가 늘지 않으므로, 그런 프로세스가 콘솔에 연결된 지 minRunBeforeBreak가 지나면 다시 보낸다
+// (breakReach).
 // 첫 신호 뒤 breakGrace가 지나도 남은 프로세스는 job과 함께 끝낸다. 신호를 받지 못한 프로세스와 PowerShell처럼
 // 신호로 끝나지 않는 프로세스가 여기서 끝난다. Windows PowerShell은 명령을 실행하는 중에 CTRL+BREAK를 받으면 끝나지
 // 않고 디버거로 들어가며, 표준 입력이 콘솔이면 거기서 입력을 기다린다.
@@ -189,6 +193,7 @@ func stopJob(job windows.Handle, send func() error) error {
 	if err != nil {
 		return errors.Join(send(), err)
 	}
+	reach := newBreakReach(attachedJobProcesses(job))
 	sendErr := send()
 	deadline := time.Now().Add(breakGrace)
 	joined, lastJoin := signaled, time.Time{}
@@ -207,12 +212,58 @@ func stopJob(job windows.Handle, send func() error) error {
 		if accounting.totalProcesses != joined {
 			joined, lastJoin = accounting.totalProcesses, now
 		}
-		if joined != signaled && now.Sub(lastJoin) >= minRunBeforeBreak {
+		attached := attachedJobProcesses(job)
+		attachedLate := reach.observe(attached, now)
+		if (joined != signaled && now.Sub(lastJoin) >= minRunBeforeBreak) || attachedLate {
 			signaled = joined
+			reach = newBreakReach(attached)
 			_ = send()
 		}
 		time.Sleep(jobPollInterval)
 	}
+}
+
+// breakReach는 마지막 CTRL+BREAK가 닿은 job의 프로세스, 곧 신호를 보내기 직전에 콘솔에 연결되어 있던 프로세스의 PID와,
+// 그 뒤에 콘솔에 연결된 프로세스가 처음 연결된 채로 보인 시각이다. 연결 목록을 읽은 뒤 신호를 보내기 전에 연결된 프로세스는
+// 신호를 받았어도 받지 못한 것으로 보므로, 그 프로세스에는 신호가 한 번 더 간다.
+type breakReach struct {
+	reached       map[uint32]bool
+	attachedSince map[uint32]time.Time
+}
+
+func newBreakReach(attached map[uint32]bool) breakReach {
+	return breakReach{reached: attached, attachedSince: map[uint32]time.Time{}}
+}
+
+// observe는 지금 콘솔에 연결된 job의 프로세스 attached를 기록하고, 마지막 신호가 닿지 않은 프로세스 가운데 콘솔에 연결된
+// 지 minRunBeforeBreak가 지난 프로세스가 있는지 돌려준다. 더는 연결되어 있지 않은 PID는 지워, 끝난 프로세스의 PID를
+// 새 프로세스가 받아도 신호가 닿은 것으로 보지 않는다. attached가 nil이면 목록을 읽지 못한 것이므로 기록을 그대로 둔다.
+func (r breakReach) observe(attached map[uint32]bool, now time.Time) bool {
+	if attached == nil {
+		return false
+	}
+	for pid := range r.reached {
+		if !attached[pid] {
+			delete(r.reached, pid)
+		}
+	}
+	for pid := range r.attachedSince {
+		if !attached[pid] {
+			delete(r.attachedSince, pid)
+		}
+	}
+	late := false
+	for pid := range attached {
+		if r.reached[pid] {
+			continue
+		}
+		since, seen := r.attachedSince[pid]
+		if !seen {
+			r.attachedSince[pid], since = now, now
+		}
+		late = late || now.Sub(since) >= minRunBeforeBreak
+	}
+	return late
 }
 
 // waitBeforeFirstBreak은 job에서 가장 늦게 만들어진 프로세스가 minRunBeforeBreak만큼 실행될 때까지 기다리고, 기다림을
@@ -256,21 +307,67 @@ var (
 	kernel32                      = windows.NewLazySystemDLL("kernel32.dll")
 	procQueryInformationJobObject = kernel32.NewProc("QueryInformationJobObject")
 	procSetInformationJobObject   = kernel32.NewProc("SetInformationJobObject")
+	procGetConsoleProcessList     = kernel32.NewProc("GetConsoleProcessList")
 )
+
+// jobProcesses는 job에서 실행 중인 프로세스의 PID를 돌려준다. 프로세스가 목록 크기보다 많으면 windows.ERROR_MORE_DATA를
+// 감싼 오류를 돌려준다.
+func jobProcesses(job windows.Handle) ([]uintptr, error) {
+	list := new(jobProcessIDList)
+	if ok, _, err := procQueryInformationJobObject.Call(uintptr(job), windows.JobObjectBasicProcessIdList, uintptr(unsafe.Pointer(list)), unsafe.Sizeof(*list), 0); ok == 0 {
+		return nil, fmt.Errorf("list job processes: %w", err)
+	}
+	return list.ids[:list.listed], nil
+}
+
+// attachedJobProcesses는 job의 프로세스 가운데 이 프로세스와 같은 콘솔에 연결된 프로세스의 PID를 돌려준다. CTRL+BREAK는
+// 보낸 순간 콘솔에 연결된 프로세스에만 가므로, 여기에 없는 프로세스는 지금 보내는 신호를 받지 못한다. job이나 콘솔의
+// 프로세스 목록을 읽지 못하면 nil을 돌려준다.
+func attachedJobProcesses(job windows.Handle) map[uint32]bool {
+	pids, err := jobProcesses(job)
+	console := consoleProcesses()
+	if err != nil || console == nil {
+		return nil
+	}
+	attached := map[uint32]bool{}
+	for _, pid := range pids {
+		if slices.Contains(console, uint32(pid)) {
+			attached[uint32(pid)] = true
+		}
+	}
+	return attached
+}
+
+// consoleProcesses는 이 프로세스의 콘솔에 연결된 프로세스의 PID를 돌려준다. 목록에는 이 프로세스도 들어 있으므로, 콘솔이
+// 없거나 목록을 읽지 못하면 nil을 돌려준다.
+func consoleProcesses() []uint32 {
+	pids := make([]uint32, 64)
+	for {
+		n, _, _ := procGetConsoleProcessList.Call(uintptr(unsafe.Pointer(&pids[0])), uintptr(len(pids)))
+		if n == 0 {
+			return nil
+		}
+		if n <= uintptr(len(pids)) {
+			return pids[:n]
+		}
+		// 목록이 버퍼보다 크면 PID를 채우지 않고 필요한 개수만 돌려준다.
+		pids = make([]uint32, n)
+	}
+}
 
 // lastProcessCreation은 job에서 실행 중인 프로세스 가운데 가장 늦게 만들어진 프로세스의 생성 시각을 돌려준다.
 // 생성 시각을 읽기 전에 끝난 프로세스는 건너뛴다. 프로세스가 목록 크기보다 많으면 목록에 담기지 않은 프로세스가
 // 방금 만들어졌다고 보고 지금 시각을 돌려준다.
 func lastProcessCreation(job windows.Handle) (time.Time, error) {
-	var list jobProcessIDList
-	if ok, _, err := procQueryInformationJobObject.Call(uintptr(job), windows.JobObjectBasicProcessIdList, uintptr(unsafe.Pointer(&list)), unsafe.Sizeof(list), 0); ok == 0 {
-		if errors.Is(err, windows.ERROR_MORE_DATA) {
-			return time.Now(), nil
-		}
-		return time.Time{}, fmt.Errorf("list job processes: %w", err)
+	pids, err := jobProcesses(job)
+	if errors.Is(err, windows.ERROR_MORE_DATA) {
+		return time.Now(), nil
+	}
+	if err != nil {
+		return time.Time{}, err
 	}
 	var last time.Time
-	for _, pid := range list.ids[:list.listed] {
+	for _, pid := range pids {
 		process, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 		if err != nil {
 			continue

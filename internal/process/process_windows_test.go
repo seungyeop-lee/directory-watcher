@@ -29,6 +29,8 @@ const breakSignalExit = 3
 // DW_BREAK_SIGNAL_CHILD=1이면 minRunBeforeBreak가 지난 뒤 자기 사본을 자식으로 시작하고 나서 ready를 쓴다.
 // DW_BREAK_SIGNAL_LATE_CHILD=1이면 ready를 쓴 뒤 표준 입력에서 1바이트를 읽고 나서 자기 사본을 자식으로 하나 더 시작한다.
 // DW_BREAK_SIGNAL_EXIT_ON_EOF=1이면 시작을 기록한 뒤 표준 입력을 끝까지 읽고 0으로 끝난다.
+// DW_BREAK_SIGNAL_SUSPENDED_CHILD=1이면 자기 사본을 일시 중단된 자식으로 만들고 ready를 쓴 뒤, minRunBeforeBreak의 세 배가
+// 지나서야 자식을 다시 실행한다. 만들어졌지만 아직 콘솔에 연결되지 않은 프로세스를 흉내 낸다.
 func TestBreakSignalProcess(t *testing.T) {
 	if os.Getenv("DW_BREAK_SIGNAL_HELPER") != "1" {
 		return
@@ -58,7 +60,21 @@ func TestBreakSignalProcess(t *testing.T) {
 		time.Sleep(minRunBeforeBreak)
 		startBreakSignalChild()
 	}
+	var suspended *exec.Cmd
+	if os.Getenv("DW_BREAK_SIGNAL_SUSPENDED_CHILD") == "1" {
+		suspended = breakSignalChild()
+		suspended.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_SUSPENDED}
+		if err := suspended.Start(); err != nil {
+			os.Exit(2)
+		}
+	}
 	os.Stdout.WriteString("ready\n")
+	if suspended != nil {
+		time.Sleep(3 * minRunBeforeBreak)
+		if err := resumeProcess(suspended.Process.Pid); err != nil {
+			os.Exit(2)
+		}
+	}
 	if os.Getenv("DW_BREAK_SIGNAL_LATE_CHILD") == "1" {
 		if _, err := os.Stdin.Read(make([]byte, 1)); err != nil {
 			os.Exit(2)
@@ -84,11 +100,16 @@ func TestBreakSignalProcess(t *testing.T) {
 
 // startBreakSignalChild는 TestBreakSignalProcess의 사본을 자식을 만들지 않는 자식으로 시작한다.
 func startBreakSignalChild() {
-	child := exec.Command(os.Args[0], "-test.run=^TestBreakSignalProcess$")
-	child.Env = append(os.Environ(), "DW_BREAK_SIGNAL_CHILD=", "DW_BREAK_SIGNAL_LATE_CHILD=")
-	if err := child.Start(); err != nil {
+	if err := breakSignalChild().Start(); err != nil {
 		os.Exit(2)
 	}
+}
+
+// breakSignalChild는 자식을 만들지 않는 TestBreakSignalProcess 사본의 명령을 돌려준다.
+func breakSignalChild() *exec.Cmd {
+	child := exec.Command(os.Args[0], "-test.run=^TestBreakSignalProcess$")
+	child.Env = append(os.Environ(), "DW_BREAK_SIGNAL_CHILD=", "DW_BREAK_SIGNAL_LATE_CHILD=", "DW_BREAK_SIGNAL_SUSPENDED_CHILD=")
+	return child
 }
 
 // breakSignalHook은 RunCommand로 실행할 TestBreakSignalProcess 명령과, 그 명령에 CTRL+BREAK를 보낸 시각들을 돌려준다.
@@ -380,6 +401,35 @@ func TestRunCommandDelaysBreakForDescendantStartedWhileWaiting(t *testing.T) {
 				t.Fatalf("CTRL+BREAK sent %s after a program started, want at least %s", sent.Sub(c), minRunBeforeBreak)
 			}
 		}
+	}
+	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
+}
+
+// 첫 CTRL+BREAK를 보낼 때 이미 job에 있었지만 아직 콘솔에 연결되지 않아 신호를 받지 못한 자손도, 나중에 콘솔에 연결되면
+// CTRL+BREAK를 받고 끝나야 한다. job의 프로세스 수는 첫 신호 뒤에 늘지 않는다.
+func TestRunCommandSendsBreakAgainToProcessAttachedToConsoleAfterBreak(t *testing.T) {
+	record := filepath.Join(t.TempDir(), "record")
+	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
+	t.Setenv("DW_BREAK_SIGNAL_SUSPENDED_CHILD", "1")
+	ctx := NewWatcherContext("", CommandMode{}).NewRun()
+	cmd, sentAt := breakSignalHook(t, ctx)
+	done := runUntilReady(t, ctx, cmd)
+	canceled := time.Now()
+	ctx.Cancel()
+	select {
+	case <-done:
+	case <-time.After(breakGrace / 2):
+		t.Fatal("canceled hook and the program that attached to the console after CTRL+BREAK did not end on CTRL+BREAK")
+	}
+
+	// 자식은 첫 신호 뒤에 다시 실행되어 시작을 기록하므로 기록 순서는 보지 않는다.
+	events := recordedEvents(t, record)
+	slices.Sort(events)
+	if !slices.Equal(events, []string{"signal", "signal", "start", "start"}) {
+		t.Fatalf("recorded %v, want both programs to start and get CTRL+BREAK", events)
+	}
+	if sent := sentAt(); len(sent) != 2 {
+		t.Fatalf("CTRL+BREAK sent %d times, want once more after the child attached to the console", len(sent))
 	}
 	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
 }

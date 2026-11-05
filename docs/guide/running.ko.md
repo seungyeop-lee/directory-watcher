@@ -192,6 +192,7 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
 - 대상의 감시를 시작하지 못해도 치명적 오류로 처리합니다. `path`가 없거나, 폴더 링크를 풀지 못하거나, 폴더를 감시 목록에 넣지 못한 경우가 여기에 해당합니다. 이 대상은 `onStartWatch`를 실행하지 않았으므로 `onFinishWatch`도 실행하지 않습니다. 감시를 시작한 다른 대상의 `onFinishWatch`와 전역 `onFinishWatch`는 그대로 실행하고, CLI는 종료 코드 1로 끝납니다.
 - 종료 신호는 실행 중인 시작·변경 실행을 모두 취소하고, 대기 변경을 버리고, 이벤트 처리와 취소한 실행이 모두 멈출 때까지 기다린 뒤 종료 hook을 실행합니다. 종료 hook에는 기존 명령 실행 규칙을 유지하며 별도 제한 시간을 추가하지 않습니다. 감시 대상끼리는 독립 실행합니다.
 - Windows에서 취소된 hook은 CTRL+BREAK를 받고, `cmd`에서 `a & b`의 다음 프로그램처럼 hook이 취소 뒤에 시작한 프로그램도 시작된 지 500ms가 지나면 CTRL+BREAK를 받습니다. 첫 CTRL+BREAK 뒤 20초가 지나도 실행 중인 hook의 프로세스는 함께 끝내며, 신호를 무시하거나 자기만의 콘솔이나 프로세스 그룹을 쓰는 프로세스도 여기서 끝납니다. 교체와 종료는 hook의 프로세스가 모두 끝날 때까지 기다리므로, 일부 `powershell` hook처럼 CTRL+BREAK로 끝나지 않는 hook은 교체와 종료를 최대 20초 늦춥니다.
+  - 부하 때문에 늦게 시작하는 것처럼, 만들어졌지만 CTRL+BREAK를 보낸 순간 아직 콘솔에 연결되지 않은 hook의 프로세스는 그 CTRL+BREAK를 받지 못합니다. 이 프로세스는 콘솔에 연결된 지 500ms가 지나면 CTRL+BREAK를 다시 받고, hook의 다른 프로세스도 이 CTRL+BREAK를 함께 받습니다.
 - Windows에서 시작한 지 500ms가 지나기 전에 취소된 hook은 시작 후 500ms가 지났을 때 CTRL+BREAK를 받으므로, hook이 시작된 직후의 교체와 종료는 최대 500ms 늦어집니다.
   - hook이 프로그램을 시작한 지 500ms가 지나기 전에 취소되어도, hook과 그 프로그램은 프로그램이 시작된 뒤 500ms가 지났을 때 CTRL+BREAK를 받습니다.
 - Windows에서 취소되지 않고 끝난 hook이 시작한 프로세스는 계속 실행됩니다.
