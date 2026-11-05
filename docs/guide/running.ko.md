@@ -28,6 +28,9 @@ server      | onChange: echo building (dir: web)
 server      | building
 ```
 
+- hook 명령이 끝나도 그 명령이 시작한 프로세스가 출력을 열어 두면, watcher는 그 출력을 최대 1초 기다린 뒤 다음으로 넘어갑니다.
+  - 기다리는 동안 받은 출력은 계속 표시하지만, 기다림이 끝난 뒤 남은 프로세스가 쓰는 출력은 더 이상 표시하지 않습니다.
+  - 명령이 여러 개인 hook에서는 명령마다 이 대기를 따로 적용합니다.
 - `-s`, `--silent`는 명령 줄과, 시작할 때 읽은 [설정 파일](configuration.ko.md#configyml)을 알리는 `config: <경로>` 줄을 출력하지 않습니다. hook 명령이 내는 출력은 그대로 나옵니다.
 - `-n`, `--dry-run`은 명령 줄을 출력하고 명령은 실행하지 않습니다.
   - watcher는 감시 대상을 실제로 감시하고 `onError`와 `onQueueWarning`을 포함한 모든 hook을 실행하되, 명령만 실행하지 않고 넘어갑니다.
@@ -220,5 +223,6 @@ Error: watchTargets[0].option.run.interrupt: unknown value "true"; use none, sam
   - hook이 프로그램을 시작한 지 500ms가 지나기 전에 취소되어도, hook과 그 프로그램은 프로그램이 시작된 뒤 500ms가 지났을 때 CTRL+BREAK를 받습니다.
   - hook이 프로그램을 잇달아 시작하면, watcher는 hook이 취소된 때와 hook이 시작되고 500ms가 지난 때 가운데 늦은 때로부터 최대 1초까지만 첫 CTRL+BREAK를 미룹니다. 이때는 시작한 지 500ms가 지나지 않은 프로그램에도 CTRL+BREAK를 보냅니다.
 - Windows E2E가 취소된 hook의 종료에 대해 확인하는 내용은 [Windows E2E](../../e2e/docs/windows.ko.md#hook-취소-검증)에 있습니다.
+- 명령이 끝난 뒤에도 열려 있는 출력을 기다리는 규칙은 [hook 명령 출력](#hook-명령-출력)에 있습니다.
 
 - 이 단계들의 순서는 [동작 방식](how-it-works.ko.md)에 그려 두었습니다.

@@ -28,6 +28,9 @@ server      | onChange: echo building (dir: web)
 server      | building
 ```
 
+- If a hook command ends but a process it started still holds its output open, the watcher waits up to 1 second for that output before moving on.
+  - Output received during this wait is still displayed; output written by the remaining process after the wait is no longer displayed.
+  - For a hook with multiple commands, this wait applies to each command separately.
 - `-s`, `--silent` turns off the command lines and the `config: <path>` line that names the [config file](configuration.md#configyml) read at startup. The output of the hook commands still appears.
 - `-n`, `--dry-run` prints the command lines without running the commands.
   - The watcher still watches the targets and runs every hook, including `onError` and `onQueueWarning`, but skips the commands themselves.
@@ -218,5 +221,6 @@ Error context is passed as environment variables, never interpolated into comman
   - If the hook is canceled less than 500 ms after it starts a program, the hook and that program also get CTRL+BREAK only when 500 ms have passed since the program started.
   - When the hook keeps starting programs, the watcher delays the first CTRL+BREAK by at most 1 second from the cancel or from 500 ms after the hook started, whichever is later. That CTRL+BREAK also goes to programs that started less than 500 ms before.
 - What the Windows E2E checks about stopping canceled hooks is listed in [Windows E2E](../../e2e/docs/windows.md#hook-cancellation-checks).
+- The rules for waiting for output left open after a command ends are in [Printing hook commands](#printing-hook-commands).
 
 - The order of these steps is drawn in [How it works](how-it-works.md).
