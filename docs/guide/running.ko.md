@@ -28,7 +28,7 @@ server      | onChange: echo building (dir: web)
 server      | building
 ```
 
-- `-s`, `--silent`는 명령 줄만 출력하지 않습니다. hook 명령이 내는 출력은 그대로 나옵니다.
+- `-s`, `--silent`는 명령 줄과, 시작할 때 읽은 [설정 파일](configuration.ko.md#configyml)을 알리는 `config: <경로>` 줄을 출력하지 않습니다. hook 명령이 내는 출력은 그대로 나옵니다.
 - `-n`, `--dry-run`은 명령 줄을 출력하고 명령은 실행하지 않습니다.
   - watcher는 감시 대상을 실제로 감시하고 `onError`와 `onQueueWarning`을 포함한 모든 hook을 실행하되, 명령만 실행하지 않고 넘어갑니다.
   - 명령을 넘어가기 전에 명령을 만들고 작업 폴더를 확인하므로, 작업 폴더가 없으면 실제로 실행할 때처럼 오류를 보고합니다.

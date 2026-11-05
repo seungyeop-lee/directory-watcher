@@ -7,7 +7,8 @@
 ## 확인 내용과 성공 조건
 
 - 프로세스는 10초 안에 종료 코드 1로 끝나야 합니다.
-- stdout과 stderr를 합친 출력의 앞뒤 공백을 제거하면 정확히 `Error: shell "cmd" runs only on Windows`여야 합니다.
+- stdout과 stderr를 합친 출력의 앞뒤 공백을 제거하면 정확히 `config: <경로>`와 `Error: shell "cmd" runs only on Windows` 두 줄이어야 합니다.
+  - `<경로>`는 `Launch`가 `-c`로 넘기는 `config.yml`의 경로입니다.
 - 기록 파일이 비어 있어 전역·대상 생명주기 명령이 실행되지 않았어야 합니다.
 
 ## 설정

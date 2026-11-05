@@ -28,7 +28,7 @@ server      | onChange: echo building (dir: web)
 server      | building
 ```
 
-- `-s`, `--silent` turns off only the command lines. The output of the hook commands still appears.
+- `-s`, `--silent` turns off the command lines and the `config: <path>` line that names the [config file](configuration.md#configyml) read at startup. The output of the hook commands still appears.
 - `-n`, `--dry-run` prints the command lines without running the commands.
   - The watcher still watches the targets and runs every hook, including `onError` and `onQueueWarning`, but skips the commands themselves.
   - Before it skips a command, the watcher builds it and checks its working directory, so a missing working directory is reported as in a real run.

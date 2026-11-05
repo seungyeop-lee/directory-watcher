@@ -6,6 +6,14 @@
 
 - The `config.yml` file defines the directories to watch and the commands to run for changes in each directory.
 - You can also define commands to run when watching starts or stops.
+- Without `-c`, `--config-path`, the watcher reads `config.directory-watcher.yml` in the working directory, or `config.yml` if that file does not exist.
+  - If neither file exists, the watcher prints `Error: no config file found: tried config.directory-watcher.yml, config.yml (use -c to set a path)` and exits with code 1.
+  - With `-c`, the watcher reads only the given path, so it exits with an error if that file does not exist, even when one of the two files does.
+- When the watcher reads a config file, it prints a `config: <path>` line on standard output before it checks the settings.
+  - Errors in the settings do not name the file, so this line tells you which file an error comes from.
+  - `<path>` is the file name the watcher found, or the value given to `-c` as it is.
+  - The line has no log prefix such as `[INFO]`, and `--log-level` does not change it.
+  - `-s`, `--silent` turns the line off, and `-n`, `--dry-run` still prints it.
 - For a practical example, see [`config.example.yml`](../../config.example.yml).
 - [`directory-watcher.schema.json`](../../directory-watcher.schema.json) describes the same format as a JSON schema.
 - Running `make run` from the repository root first creates the folders this example watches and then starts the watcher with the example.

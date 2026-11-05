@@ -7,7 +7,8 @@
 ## What it checks and success criteria
 
 - The process exits within 10 seconds with exit code 1.
-- The combined stdout and stderr, after trimming surrounding whitespace, is exactly `Error: shell "cmd" runs only on Windows`.
+- The combined stdout and stderr, after trimming surrounding whitespace, is exactly two lines: `config: <path>` and then `Error: shell "cmd" runs only on Windows`.
+  - `<path>` is the path of the `config.yml` that `Launch` passes with `-c`.
 - The record file remains empty, so neither global nor target lifecycle commands ran.
 
 ## Configuration

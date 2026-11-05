@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,8 +18,15 @@ import (
 func executeRoot(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&errOut)
+	err = executeRootWriting(t, &out, &errOut, args...)
+	return out.String(), errOut.String(), err
+}
+
+// executeRootWriting은 rootCmd의 표준 출력을 out에, 표준 오류를 errOut에 쓰게 하고 rootCmd를 실행한다.
+func executeRootWriting(t *testing.T, out, errOut io.Writer, args ...string) error {
+	t.Helper()
+	rootCmd.SetOut(out)
+	rootCmd.SetErr(errOut)
 	rootCmd.SetArgs(args)
 	t.Cleanup(func() {
 		rootCmd.SetOut(nil)
@@ -30,8 +39,7 @@ func executeRoot(t *testing.T, args ...string) (stdout, stderr string, err error
 			f.Changed = false
 		})
 	})
-	err = rootCmd.Execute()
-	return out.String(), errOut.String(), err
+	return rootCmd.Execute()
 }
 
 func TestRunErrorPrintsErrorWithoutUsage(t *testing.T) {
@@ -266,6 +274,143 @@ func TestSilentWithDryRunStopsBeforeWatching(t *testing.T) {
 		if !strings.Contains(string(data), "Error: "+err.Error()) {
 			t.Errorf("%s has no error example %q", file, "Error: "+err.Error())
 		}
+	}
+}
+
+// writeMissingTargetConfig는 감시를 시작하지 못해 watcher를 바로 끝내는 감시 대상 하나를 적은 설정 파일을 path에 만든다.
+// 감시 대상 경로에 path를 넣어서, 끝날 때의 오류로 어느 설정 파일을 읽었는지 알 수 있다.
+func writeMissingTargetConfig(t *testing.T, path string) {
+	t.Helper()
+	data := fmt.Sprintf("watchTargets:\n  - path: %q\n", "missing-from-"+filepath.Base(path))
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConfigLookupWithoutConfigPath(t *testing.T) {
+	cases := map[string]struct {
+		files []string
+		want  string
+	}{
+		"only config.directory-watcher.yml": {[]string{"config.directory-watcher.yml"}, "config.directory-watcher.yml"},
+		"only config.yml":                   {[]string{"config.yml"}, "config.yml"},
+		"both":                              {[]string{"config.directory-watcher.yml", "config.yml"}, "config.directory-watcher.yml"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			for _, file := range tc.files {
+				writeMissingTargetConfig(t, file)
+			}
+
+			stdout, _, err := executeRoot(t)
+
+			if err == nil || !strings.Contains(err.Error(), "missing-from-"+tc.want) {
+				t.Fatalf("Execute error = %v, want the missing target of %s", err, tc.want)
+			}
+			if line := "config: " + tc.want + "\n"; !strings.Contains(stdout, line) {
+				t.Errorf("stdout lacks %q:\n%s", line, stdout)
+			}
+		})
+	}
+}
+
+func TestNoConfigFileFound(t *testing.T) {
+	guide, err := filepath.Abs(filepath.Join("..", "docs", "guide"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(t.TempDir())
+
+	stdout, stderr, err := executeRoot(t)
+
+	want := "Error: no config file found: tried config.directory-watcher.yml, config.yml (use -c to set a path)"
+	if err == nil || !strings.Contains(stderr, want) {
+		t.Fatalf("Execute error = %v, stderr:\n%s\nwant %q", err, stderr, want)
+	}
+	if strings.Contains(stdout, "config:") {
+		t.Errorf("config line printed without a config file:\n%s", stdout)
+	}
+	// 설정 파일 문서 두 판은 이 오류 메시지를 옮겨 적은 것이다.
+	for _, file := range []string{"configuration.md", "configuration.ko.md"} {
+		data, readErr := os.ReadFile(filepath.Join(guide, file))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !strings.Contains(string(data), want) {
+			t.Errorf("%s has no error example %q", file, want)
+		}
+	}
+}
+
+func TestConfigPathReadsOnlyThatPath(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeMissingTargetConfig(t, "config.directory-watcher.yml")
+	writeMissingTargetConfig(t, "config.yml")
+
+	stdout, _, err := executeRoot(t, "-c", "missing.yml")
+
+	if !errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), "missing.yml") {
+		t.Fatalf("Execute error = %v, want missing.yml not to exist", err)
+	}
+	if strings.Contains(stdout, "config:") {
+		t.Errorf("config line printed for a missing -c path:\n%s", stdout)
+	}
+}
+
+func TestConfigLineComesBeforeConfigError(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("config.yml", []byte("watchTargets:\n  - path: .\n    option:\n      excludeDir: [dist]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+
+	err := executeRootWriting(t, &output, &output)
+
+	if err == nil {
+		t.Fatal("Execute returned nil for a config error")
+	}
+	line, errLine := strings.Index(output.String(), "config: config.yml\n"), strings.Index(output.String(), "Error: ")
+	if line < 0 || errLine < 0 || line > errLine {
+		t.Fatalf("want the config line before the error line:\n%s", output.String())
+	}
+}
+
+func TestConfigLinePrintingOptions(t *testing.T) {
+	custom := filepath.Join("sub", "custom.yml")
+	cases := map[string]struct {
+		args []string
+		want string
+	}{
+		"found":            {nil, "config: config.yml\n"},
+		"-c":               {[]string{"-c", custom}, "config: " + custom + "\n"},
+		"--config-path":    {[]string{"--config-path", custom}, "config: " + custom + "\n"},
+		"-n":               {[]string{"-n"}, "config: config.yml\n"},
+		"-s":               {[]string{"-s"}, ""},
+		"-c with --silent": {[]string{"-c", custom, "--silent"}, ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			if err := os.Mkdir("sub", 0700); err != nil {
+				t.Fatal(err)
+			}
+			writeMissingTargetConfig(t, "config.yml")
+			writeMissingTargetConfig(t, custom)
+
+			stdout, _, err := executeRoot(t, tc.args...)
+
+			if err == nil || !strings.Contains(err.Error(), "missing-from-") {
+				t.Fatalf("Execute error = %v, want the missing target error", err)
+			}
+			if tc.want == "" {
+				if strings.Contains(stdout, "config:") {
+					t.Errorf("config line printed:\n%s", stdout)
+				}
+			} else if !strings.Contains(stdout, tc.want) {
+				t.Errorf("stdout lacks %q:\n%s", tc.want, stdout)
+			}
+		})
 	}
 }
 

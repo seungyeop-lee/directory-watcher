@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +42,8 @@ watchTargets:
 	if !errors.As(s.ExitErr(), &exit) || exit.ExitCode() != 1 {
 		t.Fatalf("exit = %v, want exit code 1\n%s", s.ExitErr(), s.Log())
 	}
-	if got, want := strings.TrimSpace(s.Log()), `Error: shell "cmd" runs only on Windows`; got != want {
+	want := "config: " + filepath.Join(s.Work, "config.yml") + "\n" + `Error: shell "cmd" runs only on Windows`
+	if got := strings.TrimSpace(s.Log()); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 	if got := s.Lines(); len(got) != 0 {

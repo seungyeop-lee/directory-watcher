@@ -6,6 +6,14 @@
 
 - `config.yml` 파일에는 감시할 디렉터리와 각 디렉터리에서 변경이 생겼을 때 실행할 명령을 정의합니다.
 - 감시를 시작하거나 끝낼 때 실행할 명령도 정의할 수 있습니다.
+- `-c`, `--config-path`를 주지 않으면 watcher는 작업 폴더의 `config.directory-watcher.yml`을 읽고, 이 파일이 없으면 `config.yml`을 읽습니다.
+  - 두 파일이 모두 없으면 `Error: no config file found: tried config.directory-watcher.yml, config.yml (use -c to set a path)`를 출력하고 종료 코드 1로 끝납니다.
+  - `-c`로 경로를 주면 그 경로만 읽으므로, 그 파일이 없으면 두 파일 가운데 하나가 있어도 오류로 끝납니다.
+- watcher는 설정 파일을 읽으면 설정을 검사하기 전에 `config: <경로>` 줄을 표준 출력에 출력합니다.
+  - 설정 오류 메시지에는 파일 이름이 없으므로, 이 줄을 보고 어느 파일에서 난 오류인지 알 수 있습니다.
+  - `<경로>`는 watcher가 찾은 파일 이름이거나, `-c`로 준 값 그대로입니다.
+  - 이 줄에는 `[INFO]` 같은 로그 머리말이 붙지 않고, `--log-level`로 바뀌지도 않습니다.
+  - `-s`, `--silent`로 실행하면 이 줄을 출력하지 않고, `-n`, `--dry-run`으로 실행하면 출력합니다.
 - 실제 예시는 [`config.example.yml`](../../config.example.yml)에 있습니다.
 - 같은 형식을 JSON 스키마로 기술한 파일은 [`directory-watcher.schema.json`](../../directory-watcher.schema.json)입니다.
 - 저장소 루트에서 `make run`을 실행하면 이 예시가 감시하는 폴더를 먼저 만든 뒤 이 예시로 watcher를 실행합니다.

@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -25,6 +27,9 @@ var (
 	executeFileName string
 	version         string
 )
+
+// defaultConfigPaths는 -c가 없을 때 작업 폴더에서 차례로 찾는 설정 파일 이름이다.
+var defaultConfigPaths = []string{"config.directory-watcher.yml", "config.yml"}
 
 func Execute() {
 	executeFileName = filepath.Base(os.Args[0])
@@ -52,7 +57,7 @@ var maintenanceFlags = pflag.NewFlagSet("maintenance", pflag.ContinueOnError)
 func init() {
 	maintenanceFlags.StringP("log-level", "l", helper.LogLevelStringDefaultValue, "set log level")
 	rootCmd.Flags().AddFlagSet(maintenanceFlags)
-	rootCmd.Flags().StringP("config-path", "c", "config.yml", "set config path")
+	rootCmd.Flags().StringP("config-path", "c", "", "set config path (default: "+strings.Join(defaultConfigPaths, ", then ")+")")
 	rootCmd.Flags().BoolP("silent", "s", false, "don't print hook commands before running them")
 	rootCmd.Flags().BoolP("dry-run", "n", false, "print hook commands without running them")
 	rootCmd.MarkFlagsMutuallyExclusive("silent", "dry-run")
@@ -88,9 +93,18 @@ var rootCmd = &cobra.Command{
 		}
 		helper.GlobalLogger = logger
 
-		configFile, err := getConfigFile(cmd)
+		mode, err := getCommandMode(cmd)
 		if err != nil {
 			return err
+		}
+
+		configPath, configFile, err := getConfigFile(cmd)
+		if err != nil {
+			return err
+		}
+		// 설정 오류 메시지에는 파일 이름이 없으므로, 설정을 검사하기 전에 어느 파일을 읽었는지 알린다.
+		if !mode.Silent {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "config: %s\n", configPath)
 		}
 
 		config := yamlConfig.NewConfig(configFile)
@@ -102,10 +116,6 @@ var rootCmd = &cobra.Command{
 		}
 		debugLogCommandSet(logger, commandSet)
 
-		mode, err := getCommandMode(cmd)
-		if err != nil {
-			return err
-		}
 		r := service.NewRunner(commandSet, logger, mode)
 
 		sigs := make(chan os.Signal, 1)
@@ -153,18 +163,24 @@ func getCommandMode(cmd *cobra.Command) (process.CommandMode, error) {
 	return process.CommandMode{Silent: silent, DryRun: dryRun}, nil
 }
 
-func getConfigFile(cmd *cobra.Command) ([]byte, error) {
-	configPath, err := cmd.Flags().GetString("config-path")
+// getConfigFile은 -c로 받은 경로를, -c가 없으면 defaultConfigPaths 가운데 처음 있는 파일을 읽고, 읽은 경로와 내용을 돌려준다.
+func getConfigFile(cmd *cobra.Command) (path string, data []byte, err error) {
+	path, err = cmd.Flags().GetString("config-path")
 	if err != nil {
-		return nil, err
+		return "", nil, err
+	}
+	if path != "" {
+		data, err = os.ReadFile(path)
+		return path, data, err
 	}
 
-	configFile, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, err
+	for _, candidate := range defaultConfigPaths {
+		data, err = os.ReadFile(candidate)
+		if !errors.Is(err, fs.ErrNotExist) {
+			return candidate, data, err
+		}
 	}
-
-	return configFile, nil
+	return "", nil, fmt.Errorf("no config file found: tried %s (use -c to set a path)", strings.Join(defaultConfigPaths, ", "))
 }
 
 func debugLogConfig(logger helper.Logger, config config.Config) {
