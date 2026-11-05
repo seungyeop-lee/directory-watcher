@@ -129,6 +129,7 @@ The following files are left in this directory as UTF-8 text.
   - When no result arrives, the runner copies these files once without checking them, so they may belong to another run.
 - Uncommitted modifications, additions, and deletions in the working tree are sent as they are, and files excluded by `.gitignore` and symbolic links such as `.agents/skills` are not sent.
 - The guest's per-run directory `<guest-dir>\<run ID>` is deleted once collection finishes.
+- As soon as it starts, the guest program writes the start marker file `<guest-dir>\<run ID>.started` next to the run directory. The runner deletes this file in the step that removes the run directory, and does not warn if it cannot delete it.
 - If collection fails, it is left in place and the error message shows its path.
 - If the directory cannot be removed after collection, the test result and the exit code stay as they are, and a warning starting with `Windows E2E cleanup:` shows the remaining path and the command that removes that directory.
 - Tests against the same VM from the same Mac can run at the same time, and each uses a different run directory.
@@ -185,8 +186,24 @@ The following files are left in this directory as UTF-8 text.
 ### Guest run directory is left behind
 
 - `Windows E2E cleanup: guest run directory <path> is still there after ...` means the directory remained although the runner repeated `rmdir` for 1 minute.
-- The cause is a guest process that keeps a file in the directory open or uses a directory inside it as its current directory.
-- On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`.
+
+The directory remains for one of the following three causes, and the warning alone does not tell which one.
+
+- A guest process is left that keeps a file in the directory open or uses a directory inside it as its current directory.
+  - On 2026-11-03, a `hookrec.exe` still running after the tests ended held `src\e2e\scenarios`.
+  - End that process with steps 1 and 2 below.
+- Windows cannot delete `guest.exe` for several minutes after the guest program ended.
+  - On 2026-11-05, when three runners ran at the same time on the same VM, 2 of 9 runs were left this way, and the directories could be removed after about 4 minutes.
+  - `rmdir` then printed `guest.exe - Access is denied.` (`액세스가 거부되었습니다.` on a Korean guest), but Restart Manager found no process that had the file open. The XtaCache service, which stores translations of x64 programs on an ARM64 guest, is presumed to hold the file, but this was not confirmed.
+  - Wait a few minutes, then continue from step 3 below.
+- The QEMU Guest Agent left a file in the directory open.
+  - `utmctl file pull` and `file push` send the Guest Agent separate requests to open, read or write, and close the file. If `utmctl` ends between the open and the close, or another request receives the open answer, the file stays open.
+  - On 2026-11-05, a `started.txt` left open this way kept a run directory in place, and Restart Manager reported `QEMU Guest Agent` as the process that had the file open. The runner keeps the start marker file next to the run directory and does not stop a `file pull` before 2 minutes pass. The runner cannot prevent another request from receiving the open answer.
+  - A file the Guest Agent opened is closed only when the Guest Agent process ends, so `taskkill` in steps 1 and 2 does not make it removable. If steps 1 and 2 found no leftover process and the directory is still there in step 4 a few minutes later, treat it as this case.
+  - After the other runs on the same VM end, restart the VM with `make e2e-windows-down` and `make e2e-windows-up`, then continue from step 3.
+
+Check the following before running the procedure below.
+
 - `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below.
 - The last line of either warning holds only the command that removes the directory.
 - `utmctl exec` does not wait for the guest command to finish, and the output and exit code it returns may belong to another guest command run earlier.

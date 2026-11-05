@@ -149,28 +149,30 @@ const staleExecAnswer = "exit status 13"
 
 // fakePreparingGuest는 exec를 받을 때마다 앞서 실행한 다른 게스트 명령의 응답처럼 그
 // 명령의 출력 BBB-4를 출력하고 13으로 끝나는 utmctl을 만든다. performs가 true면 exec는 응답과 관계없이
-// mkdir로 실행 디렉터리를 만들거나 guest.exe가 시작됐다는 파일을 쓴다. file push와
-// pull은 실행 디렉터리가 없거나 파일이 없으면 stderr에 오류를 출력하고 0으로 끝난다.
+// mkdir로 실행 디렉터리를 만들거나, 게스트 프로그램처럼 실행 디렉터리 옆에 시작 표시
+// 파일을 쓴다. 게스트 경로 C:\dw-e2e\<경로>는 state 디렉터리의 <경로>로 바꿔 다룬다.
+// file push와 pull은 상위 디렉터리가 없거나 파일이 없으면 stderr에 오류를 출력하고
+// 0으로 끝난다.
 func fakePreparingGuest(t *testing.T, performs bool) guestTest {
 	t.Helper()
 	state := t.TempDir()
-	script := `run='` + state + `/run'
+	script := `state='` + state + `'
 for last; do :; done
+local=$state/$(printf '%s' "$last" | sed -e 's|^C:\\dw-e2e\\||' | tr '\\' '/')
 case "$1" in
 exec)
 	if [ ` + strconv.FormatBool(performs) + ` = true ]; then
 		case "$*" in
-		*mkdir*) mkdir -p "$run" ;;
-		*guest.exe*) mkdir -p "$run"; printf '%s' "${last##*\\}" > "$run/started.txt" ;;
+		*mkdir*) mkdir -p "$local" ;;
+		*guest.exe*) printf '%s' "${last##*\\}" > "$local.started" ;;
 		esac
 	fi
 	echo 'BBB-4'
 	exit 13 ;;
 file)
-	file="$run/${last##*\\}"
 	case "$2" in
-	push) if [ -d "$run" ]; then cat > "$file"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
-	pull) if [ -f "$file" ]; then cat "$file"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
+	push) if [ -d "$(dirname "$local")" ]; then cat > "$local"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
+	pull) if [ -f "$local" ]; then cat "$local"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
 	esac ;;
 esac
 exit 0`

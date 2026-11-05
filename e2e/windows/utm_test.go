@@ -61,9 +61,14 @@ exit 0`)
 	if _, err := u.call(time.Second, nil, "pull", "vm"); err == nil || !strings.Contains(err.Error(), "failed to open file") {
 		t.Fatalf("pull error = %v; want the stderr message although the exit code is 0", err)
 	}
+	var log strings.Builder
+	u.log = &log
 	began := time.Now()
 	if _, err := u.call(200*time.Millisecond, nil, "hang"); err == nil || !strings.Contains(err.Error(), "did not answer") {
 		t.Fatalf("hang error = %v", err)
+	}
+	if !strings.Contains(log.String(), "utmctl hang did not answer within 200ms; killed utmctl") {
+		t.Fatalf("log = %q; want the killed request in the runner log", log.String())
 	}
 	if elapsed := time.Since(began); elapsed > 3*time.Second {
 		t.Fatalf("hang returned after %s", elapsed)

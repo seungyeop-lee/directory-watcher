@@ -241,7 +241,7 @@ func (g guestTest) createGuestDir(request []byte) error {
 		err := g.push(guestrun.RequestFile, request)
 		if err == nil {
 			var back []byte
-			if back, err = g.pull(guestrun.RequestFile, requestLimit); err == nil && !bytes.Equal(back, request) {
+			if back, err = g.pull(g.file(guestrun.RequestFile)); err == nil && !bytes.Equal(back, request) {
 				err = errors.New("request read back from the guest differs from the one sent")
 			}
 		}
@@ -263,8 +263,9 @@ func (g guestTest) push(name string, data []byte) error {
 	return err
 }
 
-// pull은 게스트 실행 디렉터리의 파일을 읽는다. 읽은 내용은 다른 요청이 연 파일의
-// 내용일 수 있으므로, 호출하는 쪽은 내용이 이번 실행의 것인지 확인한다.
+// pull은 게스트 파일 path를 읽는다. 읽은 내용은 다른 요청이 연 파일의 내용일 수
+// 있으므로, 호출하는 쪽은 내용이 이번 실행의 것인지 확인한다. 없는 파일을 읽은 오류는
+// 결과를 기다리는 동안 늘 나오므로 남기지 않고, 그 밖의 오류는 runner.log에 남긴다.
 //
 // UTM이 Guest Agent와 통신하는 QEMUKit(QEMUManager.m의 qmp_rpc_call)은 요청에 ID를
 // 붙이지 않고, 도착한 응답을 그때 기다리는 요청에 넘긴다. 10초 안에 응답이 오지 않은
@@ -274,8 +275,12 @@ func (g guestTest) push(name string, data []byte) error {
 // 초과로 끝난 직후에 보낸 file open이 그 실행이 연 파일의 handle을 받은 것으로 본다.
 // 같은 날 시간 초과가 없을 때는, 없는 파일을 읽는 file pull 140번을 다른 file pull
 // 480번과 동시에 보내도 내용이 섞이지 않았다.
-func (g guestTest) pull(name string, limit time.Duration) ([]byte, error) {
-	return g.utm.call(limit, nil, "file", "pull", g.vm, g.file(name))
+func (g guestTest) pull(path string) ([]byte, error) {
+	data, err := g.utm.call(pullLimit, nil, "file", "pull", g.vm, path)
+	if err != nil && !strings.Contains(err.Error(), "failed to open file") {
+		fmt.Fprintln(g.log, "pull:", err)
+	}
+	return data, err
 }
 
 // startGuestProgram은 exec로 게스트 프로그램을 시작하고, 프로그램이 쓰는 시작 표시
@@ -288,7 +293,7 @@ func (g guestTest) startGuestProgram() error {
 func (g guestTest) awaitStarted() error {
 	deadline := time.Now().Add(programStartLimit)
 	for {
-		data, err := g.pull(guestrun.StartedFile, requestLimit)
+		data, err := g.pull(g.dir + guestrun.StartedSuffix)
 		if err == nil && string(data) == g.id {
 			return nil
 		}
@@ -317,7 +322,7 @@ func (g guestTest) awaitResult() (guestrun.Result, []byte, error) {
 	start := time.Now()
 	lastReport := start
 	for {
-		data, err := g.pull(guestrun.ResultFile, requestLimit)
+		data, err := g.pull(g.file(guestrun.ResultFile))
 		if err == nil {
 			var result guestrun.Result
 			if result, err = guestrun.Decode(data, g.id); err == nil {
@@ -366,7 +371,7 @@ const collectAttempts = 3
 // 같을 때까지 다시 가져온다(pull 참고). 결과를 받지 못해 want가 없으면 한 번만 가져온다.
 func (g guestTest) pullCollected(name, want string) ([]byte, error) {
 	for attempt := 1; ; attempt++ {
-		data, err := g.pull(name, pullLimit)
+		data, err := g.pull(g.file(name))
 		if want == "" {
 			return data, err
 		}
@@ -411,7 +416,7 @@ var removeLimit = time.Minute
 // 읽자 디렉터리에 request.json만 남았다. 디렉터리를 현재 디렉터리로 쓰는 프로세스가
 // 남아 있어도 rmdir는 디렉터리를 지우지 못한다.
 func (g guestTest) removeGuestDir() error {
-	defer g.deleteRemovalMarkers()
+	defer g.deleteMarkers()
 	deadline := time.Now().Add(removeLimit)
 	for attempt := 1; ; attempt++ {
 		marker := g.dir + ".rmdir-" + strconv.Itoa(attempt)
@@ -444,7 +449,7 @@ func (g guestTest) removeGuestDir() error {
 // 없으면 빈 문자열을 돌려준다.
 func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
 	for {
-		data, err := g.utm.call(requestLimit, nil, "file", "pull", g.vm, marker)
+		data, err := g.pull(marker)
 		if state := strings.TrimSpace(string(data)); err == nil && (state == "removed" || state == "kept") {
 			return state
 		}
@@ -455,11 +460,11 @@ func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
 	}
 }
 
-// deleteRemovalMarkers는 이번 실행의 표시 파일을 지운다. 지우지 못한 표시 파일은 몇
-// 바이트뿐이므로 확인하지 않는다.
-func (g guestTest) deleteRemovalMarkers() {
-	if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "del", "/q", g.dir+".rmdir-*"); err != nil {
-		fmt.Fprintln(g.log, "delete rmdir markers request (utmctl exec may answer with the result of another guest command):", err)
+// deleteMarkers는 이번 실행이 실행 디렉터리 옆에 둔 시작 표시 파일과 rmdir 표시 파일을
+// 지운다. 지우지 못한 표시 파일은 몇 바이트뿐이므로 확인하지 않는다.
+func (g guestTest) deleteMarkers() {
+	if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "del", "/q", g.dir+guestrun.StartedSuffix, g.dir+".rmdir-*"); err != nil {
+		fmt.Fprintln(g.log, "delete markers request (utmctl exec may answer with the result of another guest command):", err)
 	}
 }
 

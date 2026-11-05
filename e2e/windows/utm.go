@@ -20,6 +20,13 @@ import (
 // start는 VM을 시작하지 못한 채 2분 뒤 OSStatus error -1712로 끝났고, UTM #8006
 // (https://github.com/utmapp/UTM/issues/8006)도 같은 멈춤을 보고한다. 원인은
 // 알려지지 않았다.
+//
+// file pull에는 크기가 작은 파일에도 긴 한도인 pullLimit을 준다. utmctl file pull은
+// Guest Agent에 파일 열기, 읽기, 닫기를 따로 요청하므로(UTM utmctl/UTMCtl.swift의
+// FilePull), 열기와 닫기 사이에 utmctl을 죽이면 Guest Agent는 그 파일을 연 채로 둔다.
+// 게스트는 열린 파일을 지우지 못하므로, 그 파일이 든 실행 디렉터리도 지울 수 없다.
+// Guest Agent 요청 하나는 응답이 없어도 UTM이 10초 뒤에 실패로 끝낸다(QEMUKit
+// QEMUManager.m의 qmp_rpc_call).
 const (
 	requestLimit = 15 * time.Second
 	startLimit   = 30 * time.Second
@@ -65,7 +72,9 @@ func (u utm) call(limit time.Duration, stdin io.Reader, args ...string) ([]byte,
 	err := cmd.Run()
 	request := "utmctl " + strings.Join(args, " ")
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("%s did not answer within %s", request, limit)
+		err := fmt.Errorf("%s did not answer within %s", request, limit)
+		fmt.Fprintf(u.log, "%v; killed utmctl\n", err)
+		return nil, err
 	}
 	var problems []string
 	if err != nil {

@@ -38,7 +38,7 @@ func run(dir string) int {
 	// utmctl exec의 응답으로는 이 프로그램이 시작됐는지 알 수 없으므로(e2e/windows의
 	// utm.exec 참고), 실행기에게는 이 파일이 Guest Agent가 실제로 이 프로그램을 시작했다는
 	// 유일한 표시다.
-	if err := os.WriteFile(filepath.Join(dir, guestrun.StartedFile), []byte(result.RunID), 0644); err != nil {
+	if err := os.WriteFile(dir+guestrun.StartedSuffix, []byte(result.RunID), 0644); err != nil {
 		return 1
 	}
 	var problems []string
