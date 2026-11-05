@@ -25,7 +25,7 @@ const breakSignalExit = 3
 
 // TestBreakSignalProcess는 hook 대신 실행되는 Go 프로그램이다. CTRL+BREAK를 받으면 breakSignalExit로 끝난다.
 // DW_BREAK_SIGNAL_RECORD가 있으면 그 파일에 시작과 신호 수신을 pid와 함께 한 줄씩 덧붙이고, 시작에는 프로세스 생성 시각도
-// 덧붙인다. DW_BREAK_SIGNAL_IGNORE=1이면 신호를 받아도 끝나지 않는다.
+// 덧붙인다. DW_BREAK_SIGNAL_IGNORE=1이면 신호를 받아도 끝나지 않고, DW_BREAK_SIGNAL_EXIT_ZERO=1이면 신호를 받고 0으로 끝난다.
 // DW_BREAK_SIGNAL_CHILD=1이면 minRunBeforeBreak가 지난 뒤 자기 사본을 자식으로 시작하고 나서 ready를 쓴다.
 // DW_BREAK_SIGNAL_LATE_CHILD=1이면 ready를 쓴 뒤 표준 입력에서 1바이트를 읽고 나서 자기 사본을 자식으로 하나 더 시작한다.
 // DW_BREAK_SIGNAL_EXIT_ON_EOF=1이면 시작을 기록한 뒤 표준 입력을 끝까지 읽고 0으로 끝난다.
@@ -70,6 +70,9 @@ func TestBreakSignalProcess(t *testing.T) {
 		select {
 		case <-signals:
 			record("signal")
+			if os.Getenv("DW_BREAK_SIGNAL_EXIT_ZERO") == "1" {
+				os.Exit(0)
+			}
 			if os.Getenv("DW_BREAK_SIGNAL_IGNORE") != "1" {
 				os.Exit(breakSignalExit)
 			}
@@ -95,12 +98,15 @@ func breakSignalHook(t *testing.T, ctx *WatcherContext) (*exec.Cmd, func() []tim
 	return cmd, recordBreaks(t, ctx, cmd)
 }
 
-// breakSignalShellHook은 TestBreakSignalProcess를 programs번 차례로 실행하는 cmd.exe 명령 목록(a & b)과,
-// 그 명령에 CTRL+BREAK를 보낸 시각들을 돌려준다.
-func breakSignalShellHook(t *testing.T, ctx *WatcherContext, programs int) (*exec.Cmd, func() []time.Time) {
+// breakSignalShellHook은 TestBreakSignalProcess 실행을 separators로 이은 cmd.exe 명령 목록(a & b, a && b 등)과, 그 명령에
+// CTRL+BREAK를 보낸 시각들을 돌려준다. separators가 없으면 TestBreakSignalProcess를 한 번만 실행한다.
+func breakSignalShellHook(t *testing.T, ctx *WatcherContext, separators ...string) (*exec.Cmd, func() []time.Time) {
 	t.Helper()
 	program := `"` + os.Args[0] + `" "-test.run=^TestBreakSignalProcess$"`
-	script := strings.Repeat(program+" & ", programs-1) + program
+	script := program
+	for _, separator := range separators {
+		script += " " + separator + " " + program
+	}
 	cmd := exec.CommandContext(ctx.Context(), "cmd.exe")
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + script + `"`}
 	return cmd, recordBreaks(t, ctx, cmd)
@@ -255,29 +261,49 @@ func TestRunCommandSendsBreakAtOnceAfterMinimumRunTime(t *testing.T) {
 	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
 }
 
-// 취소된 명령 목록에서 셸이 첫 CTRL+BREAK 뒤에 시작한 프로그램도 CTRL+BREAK를 받고 끝나야 한다.
+// 취소된 명령 목록에서 셸이 첫 CTRL+BREAK 뒤에 시작한 프로그램도, 구분자가 무엇이든 CTRL+BREAK를 받고 끝나야 한다.
 func TestRunCommandSendsBreakAgainToProgramStartedAfterBreak(t *testing.T) {
-	record := filepath.Join(t.TempDir(), "record")
-	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
-	ctx := NewWatcherContext("", CommandMode{}).NewRun()
-	cmd, sentAt := breakSignalShellHook(t, ctx, 2)
-	done := runUntilReady(t, ctx, cmd)
-	canceled := time.Now()
-	ctx.Cancel()
-	select {
-	case <-done:
-	case <-time.After(breakGrace / 2):
-		t.Fatal("canceled command list did not end on CTRL+BREAK")
-	}
+	// 셸이 다음 프로그램을 시작하도록, &&에서는 프로그램이 신호를 받고 0으로, ||에서는 breakSignalExit로 끝나게 한다.
+	for _, list := range []struct {
+		separator string
+		exitZero  bool
+	}{
+		{"&", false},
+		{"&&", true},
+		{"||", false},
+	} {
+		t.Run("separator="+list.separator, func(t *testing.T) {
+			record := filepath.Join(t.TempDir(), "record")
+			t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
+			exit := uint32(breakSignalExit)
+			if list.exitZero {
+				t.Setenv("DW_BREAK_SIGNAL_EXIT_ZERO", "1")
+				exit = 0
+			}
+			ctx := NewWatcherContext("", CommandMode{}).NewRun()
+			cmd, sentAt := breakSignalShellHook(t, ctx, list.separator)
+			done := runUntilReady(t, ctx, cmd)
+			canceled := time.Now()
+			ctx.Cancel()
+			select {
+			case <-done:
+			case <-time.After(breakGrace / 2):
+				t.Fatal("canceled command list did not end on CTRL+BREAK")
+			}
 
-	events := recordedEvents(t, record)
-	if !slices.Equal(events, []string{"start", "signal", "start", "signal"}) {
-		t.Fatalf("recorded %v, want both programs to start and get CTRL+BREAK", events)
+			// 두 번째 start가 없어도 명령 목록의 종료 코드가 statusControlCExit이면, 셸은 두 번째 프로그램을 시작했고 그
+			// 프로그램이 signal.Notify를 부르기 전에 CTRL+BREAK를 받아 start를 기록하지 못하고 끝난 것이다.
+			events := recordedEvents(t, record)
+			if !slices.Equal(events, []string{"start", "signal", "start", "signal"}) {
+				t.Fatalf("recorded %v with command list exit code 0x%X, want both programs to start and get CTRL+BREAK",
+					events, uint32(cmd.ProcessState.ExitCode()))
+			}
+			if sent := sentAt(); len(sent) != 2 {
+				t.Fatalf("CTRL+BREAK sent %d times, want once per program", len(sent))
+			}
+			assertEndedBySignal(t, cmd, time.Since(canceled), exit)
+		})
 	}
-	if sent := sentAt(); len(sent) != 2 {
-		t.Fatalf("CTRL+BREAK sent %d times, want once per program", len(sent))
-	}
-	assertEndedBySignal(t, cmd, time.Since(canceled), breakSignalExit)
 }
 
 // 자손을 막 시작한 hook이 취소되면, 그 자손도 시작 후 minRunBeforeBreak가 지난 뒤에 CTRL+BREAK를 한 번 받고 끝나야 한다.
@@ -367,7 +393,7 @@ func TestRunCommandEndsProcessTreeAfterGrace(t *testing.T) {
 	t.Setenv("DW_BREAK_SIGNAL_RECORD", record)
 	t.Setenv("DW_BREAK_SIGNAL_IGNORE", "1")
 	ctx := NewWatcherContext("", CommandMode{}).NewRun()
-	cmd, sentAt := breakSignalShellHook(t, ctx, 1)
+	cmd, sentAt := breakSignalShellHook(t, ctx)
 	done := runUntilReady(t, ctx, cmd)
 	// 끝난 프로그램의 pid는 바로 다른 프로세스가 쓸 수 있으므로, 실행 중에 연 handle로 종료를 확인한다.
 	program, err := windows.OpenProcess(windows.SYNCHRONIZE, false, recordedPID(t, record))

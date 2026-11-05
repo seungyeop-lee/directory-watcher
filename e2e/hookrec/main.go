@@ -23,7 +23,6 @@ func main() {
 	queueContext := flag.Bool("queue-context", false, "record queue warning environment")
 	workdir := flag.Bool("workdir", false, "record working directory before the line")
 	exitCode := flag.Int("exit-code", 0, "exit status after recording")
-	cancelExitCode := flag.Int("cancel-exit-code", 0, "exit status after recording a canceled delay")
 	releaseFile := flag.String("release-file", "", "exit parent when this file appears, leaving descendants running")
 	label := flag.String("label", "", "text recorded with the process tree generation")
 	flag.Parse()
@@ -83,10 +82,6 @@ func main() {
 			select {
 			case <-signals:
 				appendLine(fmt.Sprintf("CANCEL|%d|%s", os.Getpid(), *line))
-				if *cancelExitCode != 0 {
-					_ = f.Close()
-					os.Exit(*cancelExitCode)
-				}
 				return
 			case <-time.After(*delay):
 			}

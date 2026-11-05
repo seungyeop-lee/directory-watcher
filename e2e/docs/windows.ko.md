@@ -34,7 +34,6 @@ Windows E2E는 Git Bash 없이 watcher를 실행해, watcher가 취소된 hook�
 
 - `run.interrupt: oldest`의 교체와 종료에서 hook의 부모·자식·손자 프로세스가 신호를 받고 끝납니다: [`TestProcessLifecycle`](scenarios/process-lifecycle.ko.md), [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.ko.md) (2026-11-04).
 - 종료할 때 `run.concurrency: 2`로 동시에 도는 hook 두 개의 부모·자식·손자 프로세스가 모두 신호를 받고 끝난 뒤 종료 hook이 실행됩니다: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.ko.md) (2026-11-04).
-- 취소된 `cmd` 명령 목록의 다음 프로그램이 끝납니다: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md) (2026-11-04).
 - 시작 후 0–1000ms에 취소한 `powershell` hook은 프로그램을 끝까지 실행하지 않습니다: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md) (2026-11-04).
 
 ## CI 단계
@@ -56,7 +55,7 @@ Windows E2E는 Git Bash 없이 watcher를 실행해, watcher가 취소된 hook�
 ## CI 결과 확인
 
 - GitHub Actions에서 **검증할 커밋 SHA**의 `ci` → `test (windows-latest)`를 엽니다.
-- `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestQueueWarningCLI`·`TestConcurrentRunsShutdown`·`TestRunInterrupt`의 네 하위 테스트·`TestCanceledCommandListStopsNextProgram`의 세 구분자·`TestCanceledPowershellHookStops`의 열한 시점, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 두 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다.
+- `go test -count=1 -race ./...` 단계의 `TestFastInflowSlowHook` 네 조합·`TestQueueWarningCLI`·`TestConcurrentRunsShutdown`·`TestRunInterrupt`의 네 하위 테스트·`TestRunCommandSendsBreakAgainToProgramStartedAfterBreak`의 세 구분자·`TestCanceledPowershellHookStops`의 열한 시점, 알림 검증 단계의 여섯 모드, 반복 단계의 세 테스트와 두 옵션 조합에 `PASS`가 있고 `SKIP`이 없는지, 의도적 실패 검증 단계는 성공했는지 확인합니다.
 - 같은 `go test -count=1 -race ./...` 단계에서 [`TestBatchingOptions`](scenarios/batching-options.ko.md)의 네 하위 테스트도 `SKIP` 없이 `PASS`인지 확인합니다.
 - `e2e-diagnostics-windows-latest` artifact에서 알림 정리 전후 기록과 `notification.log`·`failure.log`·`timeout.log`를 받습니다.
 - 과거 다른 SHA의 성공, 교차 컴파일, Linux Docker 결과는 해당 커밋의 Windows 실행 증거가 아닙니다.

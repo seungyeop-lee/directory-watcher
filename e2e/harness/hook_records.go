@@ -87,17 +87,6 @@ func DelayedHookBegun(lines []string, line string) bool {
 	return false
 }
 
-// DelayedHookCanceled는 line을 기록하는 지연 hook이 CANCEL을 기록했는지 알려 준다.
-func DelayedHookCanceled(lines []string, line string) bool {
-	for _, record := range lines {
-		fields := strings.SplitN(record, "|", 3)
-		if len(fields) == 3 && fields[0] == "CANCEL" && fields[2] == line {
-			return true
-		}
-	}
-	return false
-}
-
 func receivedChanges(log string, paths map[string]bool, operations fsnotify.Op) []string {
 	var received []string
 	for _, line := range strings.Split(log, "\n") {

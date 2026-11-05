@@ -15,46 +15,6 @@ import (
 // 기다리는 시간이다(docs/guide/running.md의 과부하와 종료).
 const windowsBreakGrace = 20 * time.Second
 
-// 명령 목록의 첫 프로그램이 실행 중일 때 취소하면, cmd.exe가 그 뒤에 시작한 다음 프로그램도 CTRL+BREAK를 받고 끝나야 한다.
-func TestCanceledCommandListStopsNextProgram(t *testing.T) {
-	t.Parallel()
-	for _, list := range []struct {
-		separator       string
-		firstCancelExit string
-	}{
-		{"&", "0"},
-		{"&&", "0"},
-		{"||", "1"},
-	} {
-		t.Run(fmt.Sprintf("separator=%s", list.separator), func(t *testing.T) {
-			t.Parallel()
-			s := harness.NewScenario(t)
-			first := unquotedHook(s, "--delay=30s", "--line=FIRST", "--cancel-exit-code="+list.firstCancelExit)
-			second := unquotedHook(s, "--delay=30s", "--line=SECOND")
-			s.Launch(harness.WatcherBin(), fmt.Sprintf(`watchTargets:
-  - path: '%s'
-    lifeCycle:
-      onStartWatch:
-        - '%s %s %s'
-`, s.Watch, first, list.separator, second))
-			s.Await("first program of the command list begins", 10*time.Second, func() bool {
-				return harness.DelayedHookBegun(s.Lines(), "FIRST")
-			})
-			stopping := time.Now()
-			s.Stop()
-			t.Logf("watcher exited %s after stop", time.Since(stopping))
-
-			lines := s.Lines()
-			for _, program := range []string{"FIRST", "SECOND"} {
-				if !harness.DelayedHookCanceled(lines, program) || harness.CountRecord(lines, program) != 0 {
-					t.Errorf("%s did not end on CTRL+BREAK: %v", program, lines)
-				}
-			}
-			s.AwaitDelayedHooksGone()
-		})
-	}
-}
-
 // PowerShell hook을 시작 후 0–1000ms에 취소하면, PowerShell이 그때 시작 중이든 디버거에 들어가든 hook 프로그램이
 // 끝까지 실행되지 않고 watcher가 유예 시간 안에 끝나야 한다.
 func TestCanceledPowershellHookStops(t *testing.T) {

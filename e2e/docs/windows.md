@@ -34,7 +34,6 @@ The Windows E2E runs the watcher without Git Bash and checks that the watcher st
 
 - For `run.interrupt: oldest` replacement and for shutdown, a hook's parent, child, and grandchild processes end on the signal: [`TestProcessLifecycle`](scenarios/process-lifecycle.md) and [`TestStartHookShutdownModes`](scenarios/start-hook-shutdown-modes.md) (2026-11-04).
 - On shutdown, the parent, child, and grandchild processes of two hooks that run at the same time with `run.concurrency: 2` all end on the signal before the finish hook runs: [`TestConcurrentRunsShutdown`](scenarios/concurrent-runs-shutdown.md) (2026-11-04).
-- The next program of a canceled `cmd` command list ends: [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.md) (2026-11-04).
 - A `powershell` hook canceled 0–1000 ms after it starts does not run its program to completion: [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.md) (2026-11-04).
 
 ## CI steps
@@ -56,7 +55,7 @@ The Windows E2E runs the watcher without Git Bash and checks that the watcher st
 ## Checking CI results
 
 - In GitHub Actions, open `ci` → `test (windows-latest)` for **the commit SHA you are verifying**.
-- Check that the four combinations of `TestFastInflowSlowHook`, `TestQueueWarningCLI`, `TestConcurrentRunsShutdown`, the four subtests of `TestRunInterrupt`, the three separators of `TestCanceledCommandListStopsNextProgram`, and the eleven cancel points of `TestCanceledPowershellHookStops` in the `go test -count=1 -race ./...` step, the six modes in the notification verification step, and the three tests and two option combinations in the repeat step show `PASS` and no `SKIP`, and that the intentional failure verification step succeeded.
+- Check that the four combinations of `TestFastInflowSlowHook`, `TestQueueWarningCLI`, `TestConcurrentRunsShutdown`, the four subtests of `TestRunInterrupt`, the three separators of `TestRunCommandSendsBreakAgainToProgramStartedAfterBreak`, and the eleven cancel points of `TestCanceledPowershellHookStops` in the `go test -count=1 -race ./...` step, the six modes in the notification verification step, and the three tests and two option combinations in the repeat step show `PASS` and no `SKIP`, and that the intentional failure verification step succeeded.
 - In the same `go test -count=1 -race ./...` step, also check that all four subtests of [`TestBatchingOptions`](scenarios/batching-options.md) show `PASS` without `SKIP`.
 - From the `e2e-diagnostics-windows-latest` artifact, download the records from before and after notification cleanup and `notification.log`, `failure.log`, and `timeout.log`.
 - A past success on a different SHA, a cross-compilation, or a Linux Docker result is not evidence of a Windows run for that commit.

@@ -11,7 +11,7 @@
 | `scenarios/main_test.go` | 시나리오 패키지의 `TestMain`. 테스트 실행 전체의 준비·정리를 `harness.Run`에 맡김 |
 | `scenarios/*_test.go` | 시나리오 테스트. 대응은 [시나리오와 지원 코드의 대응](#시나리오와-지원-코드의-대응)에 있음 |
 | `harness/harness.go` | 테스트 실행 전체의 콘솔 준비, watcher·오류 주입 build tag를 붙인 watcher·`hookrec` 빌드와 바이너리 삭제(`Run`, `WatcherBin`, `InjectWatcherBin`, `HookrecBin`). 시나리오별 실행 폴더(`NewScenario`), watcher 실행(`Start`·`Launch`), 보조 프로세스 실행(`StartProcess`), 출력·종료 관찰(`Log`·`Done`·`Exited`·`ExitErr`), 관찰 기반 대기(`Await`·`AwaitProgress`), 정상 종료 검사(`Stop`·`StopWithin`), 진단 보존·정리(`cleanup`) |
-| `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN`·`CANCEL` 기록(`delayedHooks`·`DelayedHookBegun`·`DelayedHookCanceled`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
+| `harness/hook_records.go` | `hookrec` 한 줄 기록 해석. 기록 읽기(`Lines`·`ReadLinesLenient`), hook 명령 조립(`Hook`), 기록 대기(`AwaitLine`), 기록 개수(`CountRecord`), 지연 hook의 `BEGIN` 기록(`delayedHooks`·`DelayedHookBegun`), 수신 이벤트의 완료 경계(`AwaitChangesComplete`) |
 | `harness/process_records.go` | 프로세스 트리 기록(`ProcessRecord`) 해석. 세대 준비 대기(`AwaitReadyGenerations`), 레이블별 세대(`GenerationsLabeled`), 생존·부재 확인(`Alive`·`AssertRunning`·`ProcessesGone`·`AwaitProcessesGone`·`AwaitDelayedHooksGone`), 정상 완료 판정(`AssertGracefulCompletion`), 단계별 생존 기록(`SnapshotProcesses`), 시나리오 기록에 한정한 강제 정리(`rescueRecordedProcesses`) |
 | `harness/signal_unix.go`, `harness/signal_windows.go` | 플랫폼별 프로세스 그룹, 정상 종료 신호, watcher 강제 종료, 끝난 시나리오 프로세스의 시작·종료 시각(`processExit`), 시나리오가 소유하는 `processObserver` |
 | `harness/dll_init_failure.go` | Windows에서 0xc0000142로 끝난 프로세스 앞뒤의 CTRL+BREAK와 종료 보고. 하네스가 보낸 CTRL+BREAK 기록(`recordHarnessSignal`), watcher DEBUG 줄 해석(`watcherEvents`), `cleanup`이 `dll-init-failed.log`와 테스트 출력에 남기는 보고 작성(`dllInitFailureReport`·`formatDLLInitFailureReport`) |
@@ -62,7 +62,6 @@
 | [`TestEventLossNotificationCLI`](scenarios/event-loss-notification-cli.ko.md) | `scenarios/error_notification_test.go` | 유실 알림 여섯 모드, 알림 부모가 먼저 종료된 뒤 자손 정리, 보호 트리 생존 | `Launch`, `StartProcess`, `DelayedHookBegun`, `AwaitReadyGenerations`, `SnapshotProcesses`, `ProcessesGone`, `Alive`, `AwaitDelayedHooksGone` |
 | [`TestInjectedLossNotificationCLI`](scenarios/injected-loss-notification-cli.ko.md) | `scenarios/error_notification_test.go` | watcher 오류 채널에 주입한 오류의 알림과 종료 코드. `hookBatch.deliver`·`run.interrupt` 네 조합과 유실이 아닌 치명적 오류 | `InjectWatcherBin`, `Launch`, `AwaitReadyGenerations`, `Exited`, `AwaitProcessesGone` |
 | [`TestQueueWarningCLI`](scenarios/queue-warning-cli.ko.md) | `scenarios/queue_warning_test.go` | `queue.size`의 70%·90%에 닿을 때와 내려갈 때의 `onQueueWarning`과 `DW_QUEUE_*` 변수 | `AwaitReadyGenerations`, `Await`, `AwaitLine` |
-| [`TestCanceledCommandListStopsNextProgram`](scenarios/canceled-command-list-stops-next-program.ko.md) | `scenarios/windows_cancel_test.go` | Windows에서 취소된 `cmd` 명령 목록(`&`, `&&`, `\|\|`)의 다음 프로그램 정지 | `Launch`, `Hook`, `DelayedHookBegun`, `DelayedHookCanceled`, `Stop`, `AwaitDelayedHooksGone` |
 | [`TestCanceledPowershellHookStops`](scenarios/canceled-powershell-hook-stops.ko.md) | `scenarios/windows_cancel_test.go` | Windows에서 시작 후 0–1000ms에 취소한 `powershell` hook의 정지 | `Launch`, `Hook`, `Log`, `StopWithin`, `AwaitDelayedHooksGone` |
 | `TestCleanupReportsLockedResources` | `harness/cleanup_windows_test.go` | Windows 삭제 실패의 비정상 종료 | `cleanup` |
 | `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram` | `harness/process_observer_windows_test.go` | Windows에서 다른 프로그램이 쓰는 기록된 PID의 부재 판정 | `NewScenario`, `AwaitDelayedHooksGone` |
@@ -136,7 +135,6 @@ func TestCreateAnotherFile(t *testing.T) {
 ### 지연 hook
 
 - 지연 hook은 `s.Hook("--delay=80ms", "--line=...")`으로 만들며 `BEGIN|PID|기록`과 취소 시 `CANCEL|PID|기록`을 남깁니다.
-- `--cancel-exit-code=<코드>`를 더하면 `CANCEL`을 기록한 뒤 그 코드로 끝나며, 셸의 `||`처럼 앞 프로그램의 실패로 다음 프로그램을 시작하는 명령 목록에 씁니다.
 
 ### 오류 알림과 대기열 경고의 환경 기록
 
