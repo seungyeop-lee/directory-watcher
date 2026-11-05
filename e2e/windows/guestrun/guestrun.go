@@ -5,6 +5,8 @@ package guestrun
 
 import (
 	"archive/tar"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +21,7 @@ import (
 const (
 	RequestFile     = "request.json"
 	SourceFile      = "source.tar"
+	ProgramFile     = "guest.exe"
 	ResultFile      = "result.json"
 	StdoutFile      = "stdout.log"
 	StderrFile      = "stderr.log"
@@ -39,11 +42,41 @@ var CollectedFiles = []string{StdoutFile, StderrFile, DiagnosticsFile}
 // 넘기는 값이며, 게스트 프로그램은 이번 실행 전용 임시 디렉터리와 진단 디렉터리를
 // Env에 더한다.
 type Request struct {
-	Go           string
-	Args         []string
-	Env          []string
-	Deadline     time.Duration
-	SourceSHA256 string
+	// RunID가 있어서, 같은 소스와 인자로 동시에 도는 두 실행의 요청도 내용이 다르다.
+	RunID    string
+	Go       string
+	Args     []string
+	Env      []string
+	Deadline time.Duration
+	// SHA256은 실행기가 요청과 함께 보낸 파일의 SHA-256을 파일 이름별로 적는다. 게스트
+	// 프로그램은 테스트를 시작하기 전에 Verify로 이 값과 파일을 대조한다.
+	SHA256 map[string]string
+}
+
+// Verify는 요청이 runID의 것이고, 요청에 적힌 파일이 모두 dir에 같은 내용으로 있을 때만
+// nil을 돌려준다. utmctl file push는 Guest Agent가 다른 요청에 준 file handle에 쓸 수
+// 있어서, 보낸 파일이 비거나 다른 실행의 내용을 담을 수 있다.
+func (req Request) Verify(dir, runID string) error {
+	if req.RunID != runID {
+		return fmt.Errorf("request belongs to run %q, not %q", req.RunID, runID)
+	}
+	for name, want := range req.SHA256 {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if got := Digest(data); got != want {
+			return fmt.Errorf("%s has SHA-256 %s, not %s from the request (%d bytes received; "+
+				"utmctl file push may have written it to another guest file)", name, got, want, len(data))
+		}
+	}
+	return nil
+}
+
+// Digest는 Request와 Result에 적는 SHA-256(16진수)을 구한다.
+func Digest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // Result는 go가 끝나거나 멈춘 뒤 진단 자료를 아카이브로 묶고 나서, 게스트 프로그램이
@@ -53,14 +86,15 @@ type Result struct {
 	// ExitCode는 go가 시작하지 못했거나 deadline에 멈췄을 때 -1이다.
 	ExitCode int
 	TimedOut bool
-	// Error는 테스트 실패가 아닌 게스트 쪽 실패를 알린다. 소스 체크섬이
-	// 맞지 않거나 실행 디렉터리가 고정 디스크 밖에 있는 경우가 여기에 해당한다.
+	// Error는 테스트 실패가 아닌 게스트 쪽 실패를 알린다. 보낸 파일이 요청과
+	// 다르거나(Request.Verify) 실행 디렉터리가 고정 디스크 밖에 있는 경우가 여기에 해당한다.
 	Error string
 	// Leftovers는 실행 디렉터리에서 시작되어 go가 끝난 뒤에도 살아 있던 프로세스를
 	// 나열한다. 게스트 프로그램은 이 프로세스들을 종료한다.
 	Leftovers []string
-	// SHA256은 CollectedFiles 가운데 게스트에 있는 파일의 SHA-256(16진수)을 파일 이름별로
-	// 적는다. 실행기는 가져온 파일의 내용을 이 값과 대조한다.
+	// SHA256은 CollectedFiles 가운데 게스트에 있는 파일의 SHA-256을 파일 이름별로 적는다.
+	// 실행기는 가져온 파일의 내용을 이 값과 대조하고, 이 값이 없는 파일은 게스트에 없던
+	// 파일로 보아 가져오지 않는다.
 	SHA256            map[string]string
 	Guest             Guest
 	Started, Finished time.Time

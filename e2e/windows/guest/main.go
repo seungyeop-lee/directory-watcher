@@ -6,9 +6,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,7 +74,10 @@ func test(dir string, result *guestrun.Result) error {
 	if result.Guest.DriveType != "fixed" {
 		return fmt.Errorf("run directory %s is on a %s drive; use a directory on the guest's internal disk", dir, result.Guest.DriveType)
 	}
-	if err := extractSource(dir, req.SourceSHA256); err != nil {
+	if err := req.Verify(dir, result.RunID); err != nil {
+		return err
+	}
+	if err := extractSource(dir); err != nil {
 		return err
 	}
 	result.ExitCode, result.TimedOut, err = goTest(dir, req)
@@ -134,18 +134,15 @@ func windowsVersion() string {
 	return strings.TrimSpace(fmt.Sprintf("%s %s (%s)", product, display, version))
 }
 
-// extractSource는 소스 아카이브를 풀기 전에 Mac에서 계산한 체크섬과 대조한다. utmctl
-// file push는 전송에 실패해도 성공을 보고하기 때문이다.
-func extractSource(dir, want string) error {
-	data, err := os.ReadFile(filepath.Join(dir, guestrun.SourceFile))
+// extractSource는 소스 아카이브를 푼다. 아카이브의 내용은 test가 Request.Verify로 미리
+// 확인한다.
+func extractSource(dir string) error {
+	file, err := os.Open(filepath.Join(dir, guestrun.SourceFile))
 	if err != nil {
 		return err
 	}
-	sum := sha256.Sum256(data)
-	if got := hex.EncodeToString(sum[:]); got != want {
-		return fmt.Errorf("source checksum mismatch: got %s, want %s (%d bytes received)", got, want, len(data))
-	}
-	return guestrun.Extract(bytes.NewReader(data), dir)
+	defer file.Close()
+	return guestrun.Extract(file, dir)
 }
 
 func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err error) {
@@ -269,8 +266,7 @@ func digestCollected(dir string) (map[string]string, error) {
 		if err != nil {
 			return digests, err
 		}
-		sum := sha256.Sum256(data)
-		digests[name] = hex.EncodeToString(sum[:])
+		digests[name] = guestrun.Digest(data)
 	}
 	return digests, nil
 }

@@ -62,6 +62,42 @@ func TestCheckAcceptsOnlyAPassedResult(t *testing.T) {
 	}
 }
 
+// TestRequestVerifyAcceptsOnlyFilesSentForTheRun은 utmctl file push가 다른 요청이 연
+// 파일에 쓴 경우를 흉내 낸다. 그러면 이번 실행의 파일은 비거나 다른 실행이 보낸 내용을 담는다.
+func TestRequestVerifyAcceptsOnlyFilesSentForTheRun(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "run-a")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(SourceFile, "own source")
+	write(ProgramFile, "")
+	sent := map[string]string{SourceFile: Digest([]byte("own source"))}
+	if err := (Request{RunID: "run-a", SHA256: sent}).Verify(dir, "run-a"); err != nil {
+		t.Fatalf("Verify = %v; want the files sent for run-a accepted", err)
+	}
+	for name, tc := range map[string]struct {
+		request Request
+		want    string
+	}{
+		"other run":    {Request{RunID: "run-b", SHA256: sent}, `belongs to run "run-b"`},
+		"empty file":   {Request{RunID: "run-a", SHA256: map[string]string{ProgramFile: Digest([]byte("own program"))}}, ProgramFile},
+		"missing file": {Request{RunID: "run-a", SHA256: map[string]string{StdoutFile: Digest(nil)}}, StdoutFile},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := tc.request.Verify(dir, "run-a")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Verify error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestArchiveDirRoundTripsThroughExtract(t *testing.T) {
 	src := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(src, "run", "nested"), 0755); err != nil {

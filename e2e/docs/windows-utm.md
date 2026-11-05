@@ -118,18 +118,18 @@ The following files are left in this directory as UTF-8 text.
 |---|---|
 | `runner.log` | Runner progress log |
 | `source.txt` | Commit, size and SHA-256 of the source tar that was sent, go test arguments, list of uncommitted changes |
-| `request.json`, `result.json` | Request sent to the guest and the guest's result. The result contains the run ID, go exit code, whether it timed out, leftover processes, Windows and Go versions, the run directory and its drive type, and the SHA-256 of `stdout.log`, `stderr.log`, and `diagnostics.tar` in the guest. |
+| `request.json`, `result.json` | Request sent to the guest and the guest's result. The request contains the run ID, go test arguments, and the SHA-256 of `source.tar` and `guest.exe` that were sent with it, and the guest program checks the request and both files against it before `go test` and fails if they differ. The result contains the run ID, go exit code, whether it timed out, leftover processes, Windows and Go versions, the run directory and its drive type, and the SHA-256 of `stdout.log`, `stderr.log`, and `diagnostics.tar` in the guest. |
 | `stdout.log`, `stderr.log` | Output of the guest go test |
 | `diagnostics/` | Guest E2E diagnostics files. Analyze `cleanup.log` and `records.log.processes` as in [Windows failure analysis](windows.md#failure-analysis), and `dll-init-failed.log` as in [A hook exits with 0xc0000142](#a-hook-exits-with-0xc0000142). |
 
 - The runner judges a run successful only when the result's run ID matches this run, there are no errors, timeouts, or leftover processes, the go exit code is 0, and the run directory is on an internal disk (`fixed`).
-- While other runs use the same VM, `utmctl file pull` can return the contents of a file that another run opened, without an error.
-  - The runner ignores a `result.json` whose run ID is not this run's or that cannot be read, writes `ignored a guest result that is not this run's` to `runner.log`, and keeps waiting for this run's result.
-  - After the result arrives, the runner reads `stdout.log`, `stderr.log`, and `diagnostics.tar` up to three times each until their SHA-256 matches the result, and collection fails if one still differs.
+- While other runs use the same VM, `utmctl file pull` can return the contents of a file that another run opened, and `utmctl file push` can write to a file that another run opened, both without an error.
+  - When a `request.json`, start marker file, `result.json`, or `rmdir` removal result read from the guest does not carry this run's run ID or cannot be read, the runner ignores it, writes `ignored <guest path> read from the guest` and the reason to `runner.log`, and checks again.
+  - After the result arrives, the runner reads those of `stdout.log`, `stderr.log`, and `diagnostics.tar` that have a SHA-256 in the result up to three times each until their SHA-256 matches the result, and collection fails if one still differs.
   - When no result arrives, the runner copies these files once without checking them, so they may belong to another run.
 - Uncommitted modifications, additions, and deletions in the working tree are sent as they are, and files excluded by `.gitignore` and symbolic links such as `.agents/skills` are not sent.
 - The guest's per-run directory `<guest-dir>\<run ID>` is deleted once collection finishes.
-- As soon as it starts, the guest program writes the start marker file `<guest-dir>\<run ID>.started` next to the run directory. The runner deletes this file in the step that removes the run directory, and does not warn if it cannot delete it.
+- As soon as it starts, the guest program writes its run ID to the start marker file `<guest-dir>\<run ID>.started` next to the run directory. The runner deletes this file in the step that removes the run directory, and does not warn if it cannot delete it.
 - If collection fails, it is left in place and the error message shows its path.
 - If the directory cannot be removed after collection, the test result and the exit code stay as they are, and a warning starting with `Windows E2E cleanup:` shows the remaining path and the command that removes that directory.
 - Tests against the same VM from the same Mac can run at the same time, and each uses a different run directory.
@@ -204,7 +204,7 @@ The directory remains for one of the following three causes, and the warning alo
 
 Check the following before running the procedure below.
 
-- `could not confirm that guest run directory <path> was removed` means the guest did not report the removal result; check whether the directory remains with step 4 below.
+- `could not confirm that guest run directory <path> was removed` means the runner could not read a removal result of this run within 1 minute; check whether the directory remains with step 4 below.
 - The last line of either warning holds only the command that removes the directory.
 - `utmctl exec` does not wait for the guest command to finish, and the output and exit code it returns may belong to another guest command run earlier.
 - While other runs or other cleanups use the same VM, `utmctl file pull` may also return, without an error, the contents of a file that another request opened.

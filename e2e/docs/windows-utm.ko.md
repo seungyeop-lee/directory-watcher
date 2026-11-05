@@ -118,18 +118,18 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 |---|---|
 | `runner.log` | 실행기 진행 기록 |
 | `source.txt` | 커밋, 전달한 소스 tar의 크기와 SHA-256, go test 인자, 미커밋 변경 목록 |
-| `request.json`, `result.json` | 게스트에 보낸 요청과 게스트 결과. 결과에는 실행 ID, go 종료 코드, 시간 초과 여부, 잔존 프로세스, Windows·Go 버전, 실행 디렉터리와 드라이브 종류, 게스트에 있는 `stdout.log`·`stderr.log`·`diagnostics.tar`의 SHA-256이 있습니다. |
+| `request.json`, `result.json` | 게스트에 보낸 요청과 게스트 결과. 요청에는 실행 ID, go test 인자, 요청과 함께 보낸 `source.tar`·`guest.exe`의 SHA-256이 있고, 게스트 프로그램은 `go test` 전에 이 값으로 요청과 두 파일을 확인해 다르면 실패합니다. 결과에는 실행 ID, go 종료 코드, 시간 초과 여부, 잔존 프로세스, Windows·Go 버전, 실행 디렉터리와 드라이브 종류, 게스트에 있는 `stdout.log`·`stderr.log`·`diagnostics.tar`의 SHA-256이 있습니다. |
 | `stdout.log`, `stderr.log` | 게스트 go test의 출력 |
 | `diagnostics/` | 게스트 E2E 진단 파일. `cleanup.log`·`records.log.processes`의 분석은 [Windows 실패 분석](windows.ko.md#실패-분석)과 같고, `dll-init-failed.log`를 읽는 방법은 [hook이 0xc0000142로 끝남](#hook이-0xc0000142로-끝남)에 있습니다. |
 
 - 실행기는 결과의 실행 ID가 이번 실행과 같고, 오류·시간 초과·잔존 프로세스가 없으며, go 종료 코드가 0이고, 실행 디렉터리가 내부 디스크(`fixed`)일 때만 성공으로 판정합니다.
-- 같은 VM을 다른 실행이 함께 쓰는 동안에는 `utmctl file pull`이 다른 실행이 연 파일의 내용을 오류 없이 돌려줄 수 있습니다.
-  - 실행기는 실행 ID가 이번 실행과 다르거나 해석할 수 없는 `result.json`을 버리고, `runner.log`에 `ignored a guest result that is not this run's`를 적은 뒤 이번 실행의 결과를 계속 기다립니다.
-  - 결과를 받은 뒤에는 `stdout.log`·`stderr.log`·`diagnostics.tar`를 SHA-256이 결과와 같아질 때까지 파일마다 세 번까지 가져오고, 그래도 다르면 회수에 실패합니다.
+- 같은 VM을 다른 실행이 함께 쓰는 동안에는 `utmctl file pull`이 다른 실행이 연 파일의 내용을 돌려주고 `utmctl file push`가 다른 실행이 연 파일에 쓸 수 있으며, 둘 다 오류를 내지 않습니다.
+  - 실행기는 게스트에서 읽은 `request.json`, 시작 표시 파일, `result.json`, `rmdir`의 삭제 결과에 이번 실행의 실행 ID가 없거나 내용을 해석할 수 없으면 그 내용을 버리고, `runner.log`에 `ignored <게스트 경로> read from the guest`와 그 이유를 적은 뒤 다시 확인합니다.
+  - 결과를 받은 뒤에는 `stdout.log`·`stderr.log`·`diagnostics.tar` 가운데 결과에 SHA-256이 적힌 파일을, SHA-256이 결과와 같아질 때까지 파일마다 세 번까지 가져오고, 그래도 다르면 회수에 실패합니다.
   - 결과를 받지 못하면 이 파일들을 확인하지 않고 한 번만 복사하므로, 다른 실행의 내용일 수 있습니다.
 - 작업 트리의 미커밋 수정·추가·삭제가 그대로 전달되며, `.gitignore`로 제외한 파일과 `.agents/skills` 같은 심볼릭 링크는 전달하지 않습니다.
 - 게스트의 실행별 디렉터리 `<guest-dir>\<실행 ID>`는 회수가 끝나면 삭제됩니다.
-- 게스트 프로그램은 시작하자마자 실행 디렉터리 옆에 시작 표시 파일 `<guest-dir>\<실행 ID>.started`를 씁니다. 실행기는 실행 디렉터리를 지우는 단계에서 이 파일도 지우며, 지우지 못해도 경고하지 않습니다.
+- 게스트 프로그램은 시작하자마자 실행 디렉터리 옆의 시작 표시 파일 `<guest-dir>\<실행 ID>.started`에 실행 ID를 씁니다. 실행기는 실행 디렉터리를 지우는 단계에서 이 파일도 지우며, 지우지 못해도 경고하지 않습니다.
 - 회수에 실패하면 남겨 두고 오류 메시지에 경로를 표시합니다.
 - 회수한 뒤에 디렉터리를 지우지 못하면 테스트 결과와 종료 코드는 그대로 두고, `Windows E2E cleanup:`으로 시작하는 경고에 남은 경로와 그 디렉터리를 지우는 명령을 표시합니다.
 - 같은 Mac에서 같은 VM에 대한 테스트는 동시에 실행할 수 있고, 각자 다른 실행 디렉터리를 사용합니다.
@@ -204,7 +204,7 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 
 아래 절차를 진행하기 전에 다음 사항을 확인합니다.
 
-- `could not confirm that guest run directory <경로> was removed`는 게스트가 삭제 결과를 알려 오지 않은 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다.
+- `could not confirm that guest run directory <경로> was removed`는 실행기가 1분 안에 이번 실행의 삭제 결과를 읽지 못한 경우이며, 디렉터리가 남았는지는 아래 4단계로 확인합니다.
 - 두 경고 모두 마지막 줄에는 디렉터리를 지우는 명령만 있습니다.
 - `utmctl exec`는 게스트 명령이 끝나기를 기다리지 않고, 돌려주는 출력과 종료 코드가 앞서 실행한 다른 게스트 명령의 것일 수 있습니다.
 - 같은 VM을 다른 실행이나 다른 정리 작업이 함께 쓰는 동안에는 `utmctl file pull`도 다른 요청이 연 파일의 내용을 오류 없이 돌려줄 수 있습니다.

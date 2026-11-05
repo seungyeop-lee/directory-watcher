@@ -26,8 +26,10 @@ const (
 )
 
 // fakeGuest는 rmdir 요청을 받으면 처음 keptFor번은 디렉터리가 남았다고, 그 뒤로는
-// 지워졌다고 요청의 마지막 인자인 표시 파일에 적는 utmctl을 만든다. answers가 false면
-// exec는 아무것도 하지 않는다. 받은 요청은 state 디렉터리의 requests에 남는다.
+// 지워졌다고 요청의 마지막 인자인 표시 파일에 적는 utmctl을 만든다. 표시 파일에 적는 내용은
+// cmd.exe처럼 요청에 든 두 echo에서 가져온다. answers가 false면 exec는 아무것도 하지
+// 않는다. 받은 요청은 state 디렉터리의 requests에 남는다. state 디렉터리에 mixed 파일이
+// 있으면 file pull은 다른 실행의 파일을 연 것처럼 그 내용을 출력한다.
 func fakeGuest(t *testing.T, keptFor int, answers bool) (guestTest, string) {
 	t.Helper()
 	state := t.TempDir()
@@ -39,16 +41,21 @@ exec)
 	case "$*" in
 	*rmdir*)
 		[ ` + strconv.FormatBool(answers) + ` = true ] || exit 0
+		kept=$(printf '%s' "$*" | sed -n 's/.*(echo \([^)]*\)) else.*/\1/p')
+		removed=$(printf '%s' "$*" | sed -n 's/.* else (echo \([^)]*\)))>.*/\1/p')
 		n=$(cat "$state/attempts" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "$state/attempts"
-		if [ $n -gt ` + strconv.Itoa(keptFor) + ` ]; then printf 'removed\r\n'; else printf 'kept\r\n'; fi > "$state/${last##*\\}" ;;
+		if [ $n -gt ` + strconv.Itoa(keptFor) + ` ]; then printf '%s\r\n' "$removed"; else printf '%s\r\n' "$kept"; fi > "$state/${last##*\\}" ;;
 	esac ;;
 file)
-	if [ -f "$state/${last##*\\}" ]; then cat "$state/${last##*\\}"; else echo 'Error from event: (OSStatus error -2700.)' >&2; fi ;;
+	if [ -f "$state/mixed" ]; then cat "$state/mixed"
+	elif [ -f "$state/${last##*\\}" ]; then cat "$state/${last##*\\}"
+	else echo 'Error from event: (OSStatus error -2700.)' >&2; fi ;;
 esac
 exit 0`
 	g := guestTest{
 		runner: runner{utm: fakeUTMCtl(t, script), log: io.Discard},
 		vm:     "95B99283-8256-4360-AA1D-0563FCD5CE09",
+		id:     fakeRunID,
 		dir:    fakeRunDir,
 	}
 	return g, state
@@ -125,6 +132,25 @@ func TestRemoveGuestDirReportsAnUnansweredRemoval(t *testing.T) {
 	runRemoveCommand(t, g, err, state)
 }
 
+func TestRemoveGuestDirIgnoresARemovalReportOfAnotherRun(t *testing.T) {
+	for name, report := range map[string]string{
+		"without a run ID": "removed\r\n",
+		"of another run":   otherRunID + " removed\r\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			shortWaits(t)
+			g, state := fakeGuest(t, 0, true)
+			if err := os.WriteFile(filepath.Join(state, "mixed"), []byte(report), 0644); err != nil {
+				t.Fatal(err)
+			}
+			err := g.removeGuestDir()
+			if err == nil || !strings.Contains(err.Error(), "could not confirm") {
+				t.Fatalf("removeGuestDir = %v; want the removal unconfirmed because every report read was not this run's", err)
+			}
+		})
+	}
+}
+
 func TestReportKeepsACleanupFailureOutOfTheTestResult(t *testing.T) {
 	cleanupErr := errors.New("guest run directory " + fakeRunDir + " is still there")
 	var warning bytes.Buffer
@@ -152,10 +178,16 @@ const staleExecAnswer = "exit status 13"
 // mkdir로 실행 디렉터리를 만들거나, 게스트 프로그램처럼 실행 디렉터리 옆에 시작 표시
 // 파일을 쓴다. 게스트 경로 C:\dw-e2e\<경로>는 state 디렉터리의 <경로>로 바꿔 다룬다.
 // file push와 pull은 상위 디렉터리가 없거나 파일이 없으면 stderr에 오류를 출력하고
-// 0으로 끝난다.
-func fakePreparingGuest(t *testing.T, performs bool) guestTest {
+// 0으로 끝난다. mixed에 파일 이름별로 내용을 준비한 파일은, file pull이 다른 실행의
+// 파일을 연 것처럼 언제나 그 내용을 출력한다.
+func fakePreparingGuest(t *testing.T, performs bool, mixed map[string]string) guestTest {
 	t.Helper()
 	state := t.TempDir()
+	for name, content := range mixed {
+		if err := os.WriteFile(filepath.Join(state, "mixed."+name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	script := `state='` + state + `'
 for last; do :; done
 local=$state/$(printf '%s' "$last" | sed -e 's|^C:\\dw-e2e\\||' | tr '\\' '/')
@@ -170,9 +202,13 @@ exec)
 	echo 'BBB-4'
 	exit 13 ;;
 file)
+	name=${last##*\\}
 	case "$2" in
 	push) if [ -d "$(dirname "$local")" ]; then cat > "$local"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
-	pull) if [ -f "$local" ]; then cat "$local"; else echo "Error from event: failed to open file '$last'" >&2; fi ;;
+	pull)
+		if [ -f "$state/mixed.$name" ]; then cat "$state/mixed.$name"
+		elif [ -f "$local" ]; then cat "$local"
+		else echo "Error from event: failed to open file '$last'" >&2; fi ;;
 	esac ;;
 esac
 exit 0`
@@ -186,14 +222,14 @@ exit 0`
 }
 
 func TestCreateGuestDirTrustsTheReadBackOverTheExecAnswer(t *testing.T) {
-	g := fakePreparingGuest(t, true)
+	g := fakePreparingGuest(t, true, nil)
 	if err := g.createGuestDir([]byte(`{"go":"go"}`)); err != nil {
 		t.Fatalf("createGuestDir = %v; want success because the request was read back", err)
 	}
 }
 
 func TestCreateGuestDirReportsADirectoryThatWasNotCreated(t *testing.T) {
-	g := fakePreparingGuest(t, false)
+	g := fakePreparingGuest(t, false, nil)
 	err := g.createGuestDir([]byte(`{"go":"go"}`))
 	if err == nil || !strings.Contains(err.Error(), "create guest run directory "+fakeRunDir) ||
 		!strings.Contains(err.Error(), "failed to open file") || !strings.Contains(err.Error(), staleExecAnswer) {
@@ -202,14 +238,14 @@ func TestCreateGuestDirReportsADirectoryThatWasNotCreated(t *testing.T) {
 }
 
 func TestStartGuestProgramTrustsTheStartedFileOverTheExecAnswer(t *testing.T) {
-	g := fakePreparingGuest(t, true)
+	g := fakePreparingGuest(t, true, nil)
 	if err := g.startGuestProgram(); err != nil {
 		t.Fatalf("startGuestProgram = %v; want success because the guest program wrote its started file", err)
 	}
 }
 
 func TestStartGuestProgramReportsAProgramThatDidNotStart(t *testing.T) {
-	g := fakePreparingGuest(t, false)
+	g := fakePreparingGuest(t, false, nil)
 	err := g.startGuestProgram()
 	if err == nil || !strings.Contains(err.Error(), "guest program did not start") || !strings.Contains(err.Error(), staleExecAnswer) {
 		t.Fatalf("startGuestProgram = %v; want the missing started file and the exec answer", err)
@@ -218,6 +254,41 @@ func TestStartGuestProgramReportsAProgramThatDidNotStart(t *testing.T) {
 
 // otherRunID는 같은 VM에서 동시에 도는 다른 실행의 ID다.
 const otherRunID = "20261105-172120-31f55126cb83b1ee"
+
+// TestCreateGuestDirRejectsTheRequestOfAnotherRun은 같은 소스와 인자로 동시에 도는 다른
+// 실행의 request.json을 file pull이 돌려주는 경우를 흉내 낸다.
+func TestCreateGuestDirRejectsTheRequestOfAnotherRun(t *testing.T) {
+	files := map[string][]byte{guestrun.SourceFile: []byte("source"), guestrun.ProgramFile: []byte("program")}
+	own, err := json.Marshal(guestTest{id: fakeRunID}.newRequest(files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := json.Marshal(guestTest{id: otherRunID}.newRequest(files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := fakePreparingGuest(t, true, map[string]string{guestrun.RequestFile: string(other)})
+	err = g.createGuestDir(own)
+	if err == nil || !strings.Contains(err.Error(), "differs from the one sent") {
+		t.Fatalf("createGuestDir = %v; want the request of run %s rejected", err, otherRunID)
+	}
+}
+
+func TestNewRequestListsTheSHA256OfEveryFileSent(t *testing.T) {
+	files := map[string][]byte{guestrun.SourceFile: []byte("source"), guestrun.ProgramFile: []byte("program")}
+	request := guestTest{id: fakeRunID}.newRequest(files)
+	if request.RunID != fakeRunID || len(request.SHA256) != 2 ||
+		request.SHA256[guestrun.SourceFile] != sha256Hex("source") || request.SHA256[guestrun.ProgramFile] != sha256Hex("program") {
+		t.Fatalf("newRequest = %+v; want the run ID and the SHA-256 of both files", request)
+	}
+}
+
+func TestStartGuestProgramIgnoresTheStartedFileOfAnotherRun(t *testing.T) {
+	g := fakePreparingGuest(t, true, map[string]string{fakeRunID + guestrun.StartedSuffix: otherRunID})
+	if err := g.startGuestProgram(); err == nil || !strings.Contains(err.Error(), "guest program did not start") {
+		t.Fatalf("startGuestProgram = %v; want the started file of run %s ignored", err, otherRunID)
+	}
+}
 
 // fakeCollectingGuest는 file pull을 받을 때마다 answers에서 그 파일 이름에 준비한 내용을
 // 차례로 출력하고, 준비한 내용을 다 쓰면 마지막 내용을 계속 출력하는 utmctl을 만든다.
@@ -337,6 +408,28 @@ func TestCollectReportsAFileThatNeverMatchesTheResult(t *testing.T) {
 	err := g.collect(nil, map[string]string{guestrun.StdoutFile: sha256Hex("own stdout")})
 	if err == nil || !strings.Contains(err.Error(), guestrun.StdoutFile) || !strings.Contains(err.Error(), "SHA-256") {
 		t.Fatalf("collect = %v; want stdout.log reported as not matching the result", err)
+	}
+}
+
+// TestCollectLeavesOutAFileTheResultHasNoSHA256For는 결과에 SHA-256이 없는 파일, 곧
+// 게스트에 없던 파일을 file pull이 다른 실행의 파일 내용으로 돌려주는 경우를 흉내 낸다.
+func TestCollectLeavesOutAFileTheResultHasNoSHA256For(t *testing.T) {
+	shortRetryInterval(t)
+	diagnostics := diagnosticsArchive(t)
+	g := fakeCollectingGuest(t, map[string][]string{
+		guestrun.StdoutFile:      {"own stdout"},
+		guestrun.StderrFile:      {"other run stderr"},
+		guestrun.DiagnosticsFile: {diagnostics},
+	})
+	err := g.collect(nil, map[string]string{
+		guestrun.StdoutFile:      sha256Hex("own stdout"),
+		guestrun.DiagnosticsFile: sha256Hex(diagnostics),
+	})
+	if err != nil {
+		t.Fatalf("collect = %v; want success without the file the guest did not have", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(g.local, guestrun.StderrFile)); !os.IsNotExist(err) {
+		t.Fatalf("stderr.log = %q, %v; want it not collected", got, err)
 	}
 }
 

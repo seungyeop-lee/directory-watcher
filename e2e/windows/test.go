@@ -5,15 +5,16 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -139,12 +140,16 @@ func (g guestTest) send() error {
 	// 2026-11-03 실험의 ARM64 게스트에서는 Guest Agent 자체도 x64 프로세스로
 	// 실행되었다(Guest Agent가 실행한 명령에서 PROCESSOR_ARCHITECTURE=AMD64). 테스트는
 	// 그래도 게스트에 설치된 Go 툴체인으로, 게스트의 아키텍처에서 실행한다.
-	program := filepath.Join(g.local, "guest.exe")
+	program := filepath.Join(g.local, guestrun.ProgramFile)
 	build := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", program, "./e2e/windows/guest")
 	build.Dir = root
 	build.Env = append(os.Environ(), "GOOS=windows", "GOARCH=amd64", "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("build guest program: %v %s", err, out)
+	}
+	programData, err := os.ReadFile(program)
+	if err != nil {
+		return err
 	}
 	files, err := worktree.Files(root)
 	if err != nil {
@@ -154,17 +159,8 @@ func (g guestTest) send() error {
 	if err := archiveSource(&source, root, files); err != nil {
 		return err
 	}
-	sum := sha256.Sum256(source.Bytes())
-	request := guestrun.Request{
-		Go:           g.cfg.guestGo,
-		Args:         append(append([]string{"test", "-count=1", "-v"}, g.cfg.goTestArgs...), "./e2e/scenarios"),
-		Env:          []string{"DW_E2E_KEEP=1"},
-		Deadline:     g.cfg.deadline,
-		SourceSHA256: hex.EncodeToString(sum[:]),
-	}
-	if fault := os.Getenv("DW_E2E_FAULT"); fault != "" {
-		request.Env = append(request.Env, "DW_E2E_FAULT="+fault)
-	}
+	sent := map[string][]byte{guestrun.SourceFile: source.Bytes(), guestrun.ProgramFile: programData}
+	request := g.newRequest(sent)
 	requestData, err := json.MarshalIndent(request, "", "  ")
 	if err != nil {
 		return err
@@ -172,17 +168,34 @@ func (g guestTest) send() error {
 	if err := g.recordSource(root, request, requestData, source.Len()); err != nil {
 		return err
 	}
-	programData, err := os.ReadFile(program)
-	if err != nil {
-		return err
-	}
 	if err := g.createGuestDir(requestData); err != nil {
 		return err
 	}
-	if err := g.push(guestrun.SourceFile, source.Bytes()); err != nil {
-		return err
+	for _, name := range slices.Sorted(maps.Keys(sent)) {
+		if err := g.push(name, sent[name]); err != nil {
+			return err
+		}
 	}
-	return g.push("guest.exe", programData)
+	return nil
+}
+
+// newRequest는 files를 함께 보내는 이번 실행의 요청을 만든다.
+func (g guestTest) newRequest(files map[string][]byte) guestrun.Request {
+	request := guestrun.Request{
+		RunID:    g.id,
+		Go:       g.cfg.guestGo,
+		Args:     append(append([]string{"test", "-count=1", "-v"}, g.cfg.goTestArgs...), "./e2e/scenarios"),
+		Env:      []string{"DW_E2E_KEEP=1"},
+		Deadline: g.cfg.deadline,
+		SHA256:   map[string]string{},
+	}
+	if fault := os.Getenv("DW_E2E_FAULT"); fault != "" {
+		request.Env = append(request.Env, "DW_E2E_FAULT="+fault)
+	}
+	for name, data := range files {
+		request.SHA256[name] = guestrun.Digest(data)
+	}
+	return request
 }
 
 // archiveSource는 files에서 심볼릭 링크를 뺀 나머지를 worktree.Archive로 묶는다.
@@ -215,7 +228,7 @@ func (g guestTest) recordSource(root string, request guestrun.Request, requestDa
 		return err
 	}
 	summary := fmt.Sprintf("commit: %s\nsource.tar: %d bytes, sha256 %s\ngo %s\nuncommitted changes:\n%s",
-		strings.TrimSpace(string(head)), size, request.SourceSHA256, strings.Join(request.Args, " "), status)
+		strings.TrimSpace(string(head)), size, request.SHA256[guestrun.SourceFile], strings.Join(request.Args, " "), status)
 	fmt.Fprint(g.log, summary)
 	if err := os.WriteFile(filepath.Join(g.local, "source.txt"), []byte(summary), 0644); err != nil {
 		return err
@@ -233,17 +246,21 @@ var (
 // createGuestDir는 exec로 mkdir를 실행해 실행 디렉터리를 만들고, 요청을 보낸 뒤 다시
 // 읽어 만들어졌는지 확인한다. exec의 응답으로는 mkdir의 결과를 알 수 없고(utm.exec
 // 참고) push와 pull은 실패해도 0으로 끝나므로, 디렉터리가 있는지와 파일 전송이
-// 동작하는지는 다시 읽어 보는 방법으로만 확인할 수 있다.
+// 동작하는지는 다시 읽어 보는 방법으로만 확인할 수 있다. 요청에는 실행 ID가 들어 있어서,
+// 다른 실행의 요청을 읽으면 보낸 요청과 다르다.
 func (g guestTest) createGuestDir(request []byte) error {
 	answer := g.utm.exec(g.vm, "cmd.exe", "/d", "/c", "mkdir", g.dir)
 	deadline := time.Now().Add(guestDirLimit)
+	sameRequest := func(back []byte) error {
+		if !bytes.Equal(back, request) {
+			return errors.New("request read back from the guest differs from the one sent")
+		}
+		return nil
+	}
 	for {
 		err := g.push(guestrun.RequestFile, request)
 		if err == nil {
-			var back []byte
-			if back, err = g.pull(g.file(guestrun.RequestFile)); err == nil && !bytes.Equal(back, request) {
-				err = errors.New("request read back from the guest differs from the one sent")
-			}
+			_, err = g.pull(g.file(guestrun.RequestFile), sameRequest)
 		}
 		if err == nil {
 			return nil
@@ -255,6 +272,11 @@ func (g guestTest) createGuestDir(request []byte) error {
 	}
 }
 
+// push는 게스트 실행 디렉터리에 파일을 쓴다. utmctl file push는 file open의 응답으로 받은
+// handle에 쓰므로, 그 응답이 다른 요청의 것이면(pull 참고) 다른 파일에 쓴다. 그래서
+// 보낸 파일은 모두 게스트에서 확인한다: request.json은 createGuestDir가 다시 읽어 보고,
+// 나머지는 게스트 프로그램이 요청에 적힌 SHA-256과 대조한다(guestrun.Request.Verify).
+//
 // push는 30초에 128 KiB마다 1초를 더한 시간을 허용한다. 실험에서 push는 초당 약
 // 570 KB로 전송되었다.
 func (g guestTest) push(name string, data []byte) error {
@@ -263,9 +285,10 @@ func (g guestTest) push(name string, data []byte) error {
 	return err
 }
 
-// pull은 게스트 파일 path를 읽는다. 읽은 내용은 다른 요청이 연 파일의 내용일 수
-// 있으므로, 호출하는 쪽은 내용이 이번 실행의 것인지 확인한다. 없는 파일을 읽은 오류는
-// 결과를 기다리는 동안 늘 나오므로 남기지 않고, 그 밖의 오류는 runner.log에 남긴다.
+// pull은 게스트 파일 path를 읽고, 읽은 내용이 이번 실행의 것이라고 check가 받아들일 때만
+// 돌려준다. check가 거절한 내용은 runner.log에 남기고 오류로 돌려준다. 실행기가 게스트에서
+// 읽는 파일은 모두 이 함수로 읽는다. 없는 파일을 읽은 오류는 결과를 기다리는 동안 늘
+// 나오므로 남기지 않고, 그 밖의 오류는 runner.log에 남긴다.
 //
 // UTM이 Guest Agent와 통신하는 QEMUKit(QEMUManager.m의 qmp_rpc_call)은 요청에 ID를
 // 붙이지 않고, 도착한 응답을 그때 기다리는 요청에 넘긴다. 10초 안에 응답이 오지 않은
@@ -275,33 +298,48 @@ func (g guestTest) push(name string, data []byte) error {
 // 초과로 끝난 직후에 보낸 file open이 그 실행이 연 파일의 handle을 받은 것으로 본다.
 // 같은 날 시간 초과가 없을 때는, 없는 파일을 읽는 file pull 140번을 다른 file pull
 // 480번과 동시에 보내도 내용이 섞이지 않았다.
-func (g guestTest) pull(path string) ([]byte, error) {
+func (g guestTest) pull(path string, check func([]byte) error) ([]byte, error) {
 	data, err := g.utm.call(pullLimit, nil, "file", "pull", g.vm, path)
-	if err != nil && !strings.Contains(err.Error(), "failed to open file") {
-		fmt.Fprintln(g.log, "pull:", err)
+	if err != nil {
+		if !strings.Contains(err.Error(), "failed to open file") {
+			fmt.Fprintln(g.log, "pull:", err)
+		}
+		return nil, err
 	}
-	return data, err
+	if err := check(data); err != nil {
+		fmt.Fprintf(g.log, "ignored %s read from the guest (utmctl file pull may answer with another guest file): %v\n", path, err)
+		return nil, err
+	}
+	return data, nil
 }
 
 // startGuestProgram은 exec로 게스트 프로그램을 시작하고, 프로그램이 쓰는 시작 표시
 // 파일로 시작했는지 확인한다. exec의 응답으로는 시작 여부를 알 수 없다(utm.exec 참고).
 func (g guestTest) startGuestProgram() error {
-	answer := g.utm.exec(g.vm, g.file("guest.exe"), g.dir)
+	answer := g.utm.exec(g.vm, g.file(guestrun.ProgramFile), g.dir)
 	return withExecAnswer(g.awaitStarted(), answer)
 }
 
 func (g guestTest) awaitStarted() error {
 	deadline := time.Now().Add(programStartLimit)
 	for {
-		data, err := g.pull(g.dir + guestrun.StartedSuffix)
-		if err == nil && string(data) == g.id {
+		_, err := g.pull(g.dir+guestrun.StartedSuffix, g.startedByThisRun)
+		if err == nil {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("guest program did not start within %s (%v); check that the Guest Agent can run %s", programStartLimit, err, g.file("guest.exe"))
+			return fmt.Errorf("guest program did not start within %s (%v); check that the Guest Agent can run %s", programStartLimit, err, g.file(guestrun.ProgramFile))
 		}
 		time.Sleep(retryInterval)
 	}
+}
+
+// startedByThisRun은 게스트 프로그램이 시작 표시 파일에 적는 실행 ID를 확인한다.
+func (g guestTest) startedByThisRun(data []byte) error {
+	if string(data) != g.id {
+		return fmt.Errorf("started file names run %q, not %q", data, g.id)
+	}
+	return nil
 }
 
 // resultInterval은 결과를 다시 확인하기 전에 기다리는 시간이고, resultGrace는 실행의
@@ -322,15 +360,13 @@ func (g guestTest) awaitResult() (guestrun.Result, []byte, error) {
 	start := time.Now()
 	lastReport := start
 	for {
-		data, err := g.pull(g.file(guestrun.ResultFile))
+		var result guestrun.Result
+		data, err := g.pull(g.file(guestrun.ResultFile), func(data []byte) (err error) {
+			result, err = guestrun.Decode(data, g.id)
+			return err
+		})
 		if err == nil {
-			var result guestrun.Result
-			if result, err = guestrun.Decode(data, g.id); err == nil {
-				return result, data, nil
-			}
-			if len(data) > 0 {
-				fmt.Fprintln(g.log, "ignored a guest result that is not this run's (utmctl file pull may answer with another guest file):", err)
-			}
+			return result, data, nil
 		}
 		if time.Since(start) > limit {
 			return guestrun.Result{}, nil, fmt.Errorf("no guest result within %s (%v)", limit, err)
@@ -344,7 +380,8 @@ func (g guestTest) awaitResult() (guestrun.Result, []byte, error) {
 }
 
 // collect는 결과가 있으면 결과와 함께 로그와 진단 자료를 Mac으로 복사하고, go test
-// 출력을 표시한다. digests는 결과에 적힌 파일별 SHA-256이다.
+// 출력을 표시한다. digests는 결과에 적힌 파일별 SHA-256이고 결과가 없으면 nil이다. 결과에
+// SHA-256이 없는 파일은 게스트에 없던 파일이므로 가져오지 않는다.
 func (g guestTest) collect(result []byte, digests map[string]string) error {
 	var problems []error
 	if result != nil {
@@ -353,6 +390,10 @@ func (g guestTest) collect(result []byte, digests map[string]string) error {
 		}
 	}
 	for _, name := range guestrun.CollectedFiles {
+		if digests != nil && digests[name] == "" {
+			fmt.Fprintf(g.log, "%s: not collected because the guest result has no SHA-256 for it (the file was not in the guest)\n", name)
+			continue
+		}
 		data, err := g.pullCollected(name, digests[name])
 		if err == nil {
 			err = g.keep(name, data)
@@ -368,25 +409,23 @@ func (g guestTest) collect(result []byte, digests map[string]string) error {
 const collectAttempts = 3
 
 // pullCollected는 회수할 파일 name을 가져온다. want가 있으면 내용의 SHA-256이 want와
-// 같을 때까지 다시 가져온다(pull 참고). 결과를 받지 못해 want가 없으면 한 번만 가져온다.
+// 같을 때까지 다시 가져온다. 결과를 받지 못해 want가 없으면 대조할 값이 없으므로, 내용을
+// 확인하지 않고 한 번만 가져온다.
 func (g guestTest) pullCollected(name, want string) ([]byte, error) {
+	if want == "" {
+		return g.pull(g.file(name), func([]byte) error { return nil })
+	}
+	sameDigest := func(data []byte) error {
+		if got := guestrun.Digest(data); got != want {
+			return fmt.Errorf("SHA-256 %s differs from %s in the guest result", got, want)
+		}
+		return nil
+	}
 	for attempt := 1; ; attempt++ {
-		data, err := g.pull(g.file(name))
-		if want == "" {
+		data, err := g.pull(g.file(name), sameDigest)
+		if err == nil || attempt == collectAttempts {
 			return data, err
 		}
-		if err == nil {
-			sum := sha256.Sum256(data)
-			got := hex.EncodeToString(sum[:])
-			if got == want {
-				return data, nil
-			}
-			err = fmt.Errorf("SHA-256 %s differs from %s in the guest result", got, want)
-		}
-		if attempt == collectAttempts {
-			return nil, err
-		}
-		fmt.Fprintf(g.log, "%s: %v; reading it again\n", name, err)
 		time.Sleep(retryInterval)
 	}
 }
@@ -408,8 +447,8 @@ func (g guestTest) keep(name string, data []byte) error {
 var removeLimit = time.Minute
 
 // removeGuestDir는 파일이 Mac에 도착한 뒤 게스트 실행 디렉터리를 지운다. rmdir를 실행한
-// cmd.exe가 디렉터리가 남았는지를 실행 디렉터리 옆의 표시 파일에 적고, 실행기는 그
-// 파일을 읽어 삭제를 확인한다. exec의 응답은 근거로 쓰지 않는다(utm.exec 참고).
+// cmd.exe가 디렉터리가 남았는지를 실행 ID와 함께 실행 디렉터리 옆의 표시 파일에 적고,
+// 실행기는 그 파일을 읽어 삭제를 확인한다. exec의 응답은 근거로 쓰지 않는다(utm.exec 참고).
 //
 // 삭제를 확인하려고 실행 디렉터리 안의 파일을 읽으면 안 된다. Guest Agent가 file
 // pull로 열어 둔 파일은 rmdir가 지우지 못해서, 그날 rmdir가 지우는 동안 request.json을
@@ -421,7 +460,7 @@ func (g guestTest) removeGuestDir() error {
 	for attempt := 1; ; attempt++ {
 		marker := g.dir + ".rmdir-" + strconv.Itoa(attempt)
 		if err := g.utm.exec(g.vm, "cmd.exe", "/d", "/c",
-			"rmdir", "/s", "/q", g.dir, "&", "(if", "exist", g.dir, "(echo", "kept)", "else", "(echo", "removed))>", marker); err != nil {
+			"rmdir", "/s", "/q", g.dir, "&", "(if", "exist", g.dir, "(echo", g.id, "kept)", "else", "(echo", g.id, "removed))>", marker); err != nil {
 			fmt.Fprintln(g.log, "rmdir request (utmctl exec may answer with the result of another guest command):", err)
 		}
 		switch g.awaitRemoval(marker, deadline) {
@@ -445,19 +484,28 @@ func (g guestTest) removeGuestDir() error {
 	}
 }
 
-// awaitRemoval은 rmdir 한 번이 표시 파일에 적은 결과를 deadline까지 기다린다. 결과가
-// 없으면 빈 문자열을 돌려준다.
+// awaitRemoval은 rmdir 한 번이 표시 파일에 적은 결과를 deadline까지 기다려 "removed"나
+// "kept"를 돌려준다. 이번 실행의 결과를 읽지 못하면 빈 문자열을 돌려준다.
 func (g guestTest) awaitRemoval(marker string, deadline time.Time) string {
 	for {
-		data, err := g.pull(marker)
-		if state := strings.TrimSpace(string(data)); err == nil && (state == "removed" || state == "kept") {
-			return state
+		data, err := g.pull(marker, g.removalReport)
+		if err == nil {
+			return strings.TrimPrefix(strings.TrimSpace(string(data)), g.id+" ")
 		}
 		if time.Now().After(deadline) {
 			return ""
 		}
 		time.Sleep(retryInterval)
 	}
+}
+
+// removalReport는 표시 파일에 이번 실행의 ID와 rmdir의 결과가 적혀 있는지 확인한다.
+func (g guestTest) removalReport(data []byte) error {
+	switch strings.TrimSpace(string(data)) {
+	case g.id + " removed", g.id + " kept":
+		return nil
+	}
+	return fmt.Errorf("rmdir report %q is not this run's", strings.TrimSpace(string(data)))
 }
 
 // deleteMarkers는 이번 실행이 실행 디렉터리 옆에 둔 시작 표시 파일과 rmdir 표시 파일을
