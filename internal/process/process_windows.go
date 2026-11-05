@@ -12,6 +12,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/seungyeop-lee/directory-watcher/v3/internal/helper"
 )
 
 // minRunBeforeBreak는 프로세스가 시작된 뒤 CTRL+BREAK를 보내기까지 기다리는 최소 시간이다.
@@ -39,7 +41,38 @@ const jobPollInterval = 10 * time.Millisecond
 // terminateProcess는 cmd가 리더인 프로세스 그룹에 CTRL+BREAK를 보낸다. 그룹은 리더의 PID로 고르므로, 리더가 이미 끝났어도
 // processTree가 리더의 handle을 쥐고 있어야 그 PID가 다른 프로세스에 재사용되지 않는다.
 func terminateProcess(cmd *exec.Cmd) error {
-	return windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
+	sent := time.Now()
+	err := windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
+	message := fmt.Sprintf("sent CTRL+BREAK to process group %d at %s", cmd.Process.Pid, debugTime(sent))
+	if err != nil {
+		message += fmt.Sprintf(" (error: %v)", err)
+	}
+	logDebug(message)
+	return err
+}
+
+// logProcessExit는 끝난 cmd의 PID와 종료 코드, 시작·종료 시각을 DEBUG 수준으로 남긴다. 시각은 Wait가 프로세스 handle을
+// 닫기 전에 읽은 값이다.
+// e2e/harness/dll_init_failure.go는 이 줄과 terminateProcess가 남기는 줄을 읽어, 0xc0000142로 끝난 hook 앞뒤에 같은 콘솔에서
+// 보낸 CTRL+BREAK를 보고한다. 두 줄의 형식을 바꾸면 그 파일의 정규식도 함께 바꾼다.
+func logProcessExit(cmd *exec.Cmd) {
+	if cmd.ProcessState == nil {
+		return
+	}
+	usage, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage)
+	if !ok {
+		return
+	}
+	logDebug(fmt.Sprintf("process %d exited with code %#x (started %s, exited %s)", cmd.Process.Pid, uint32(cmd.ProcessState.ExitCode()),
+		debugTime(time.Unix(0, usage.CreationTime.Nanoseconds())), debugTime(time.Unix(0, usage.ExitTime.Nanoseconds()))))
+}
+
+func debugTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+
+func logDebug(message string) {
+	if helper.GlobalLogger != nil {
+		helper.GlobalLogger.Debug(message)
+	}
 }
 
 // processTree는 명령을 넣은 job과 명령 프로세스(프로세스 그룹의 리더)의 handle이다. os/exec는 cmd.Wait에서 cmd.Cancel이

@@ -213,3 +213,37 @@ DW_E2E_FAULT=failure make e2e-windows ARGS="-- -timeout=2m -run '^TestProcessLif
 
 - 디스플레이 장치가 남은 VM은 `up`이 거절합니다.
 - 창 없이 켜졌는데 소리가 난다면 사운드 장치가 남아 있는 것이므로, [E2E 전용 VM 만들기](#e2e-전용-vm-만들기)의 3단계를 진행합니다.
+
+### hook이 0xc0000142로 끝남
+
+- 하네스는 시나리오를 정리할 때, 그 시나리오에서 종료 코드 0xc0000142(STATUS_DLL_INIT_FAILED)로 끝난 프로세스가 있으면 보고를 남깁니다.
+  - 보고는 `stdout.log`에 있는 그 테스트의 출력에서 `STATUS_DLL_INIT_FAILED (0xc0000142):` 줄로 시작합니다.
+  - 같은 내용이 `diagnostics/` 아래 그 시나리오 실행 디렉터리의 `dll-init-failed.log`에도 남습니다. 실행기가 게스트에 `DW_E2E_KEEP=1`을 넘기므로 테스트가 통과해도 이 파일은 남습니다.
+- watcher는 hook을 `cmd.exe`로 실행하므로, 보고에 나오는 hook의 PID와 시각은 `cmd.exe`의 것입니다.
+  - `cmd.exe`는 `hookrec.exe`의 종료 코드를 그대로 돌려주고, `hookrec.exe`는 `cmd.exe`의 프로세스 그룹에 속합니다.
+- `./e2e/harness`를 함께 실행하면 `TestDLLInitFailureReportFromWatcher`가 일부러 0xc0000142로 끝나는 hook으로 보고를 만듭니다. 이 테스트의 보고는 실제 실패가 아닙니다.
+
+보고의 첫 줄 다음에 오는 줄은 UTC 시각 순서로 적히며, 다음 두 형식 가운데 하나입니다.
+
+| 줄 | 뜻 |
+|---|---|
+| `<시각> exit pid=<PID> code=<종료 코드> started=<시작 시각> from=<기록한 쪽>` | 프로세스 하나가 `<시각>`에 끝났습니다. 0xc0000142로 끝난 프로세스와, CTRL+BREAK를 받은 PID의 프로세스만 적습니다. |
+| `<시각> CTRL+BREAK pid=<대상 PID> from=<보낸 쪽>` | 시나리오를 시작한 뒤 이 테스트 바이너리의 콘솔에서 `<대상 PID>`의 프로세스 그룹으로 CTRL+BREAK를 보냈습니다. 보내지 못했으면 `error=<오류>`가 붙고, 대상이 0xc0000142로 끝난 프로세스의 PID이면 `target=failed-process`가 붙습니다. |
+
+- `from=harness`는 하네스가 시나리오 프로세스를 멈추려고 보낸 신호이거나, 하네스가 기다린 시나리오 프로세스의 종료입니다.
+- `from=watcher:<PID>`는 그 watcher가 DEBUG 로그에 남긴 기록입니다. 같은 실행 디렉터리의 `watcher.log`에서는 `sent CTRL+BREAK to process group`과 `exited with code`가 든 줄입니다.
+
+보고는 다음 순서로 읽습니다.
+
+1. 0xc0000142로 끝난 `exit` 줄의 `started`와 종료 시각 사이에 `target=failed-process`인 CTRL+BREAK 줄이 있으면, 그 신호가 시작 중이던 프로세스 그룹에 간 것입니다.
+2. CTRL+BREAK 줄보다 앞에 같은 PID의 `exit` 줄이 있으면, 그 신호는 이미 끝난 프로세스의 PID로 간 것입니다. 그 사이에 이 콘솔의 다른 프로세스 그룹이 그 PID를 받았다면 신호는 그 그룹에 갑니다.
+3. 두 경우가 모두 없으면, 이 보고에서는 CTRL+BREAK가 실패를 일으켰다는 근거를 찾을 수 없습니다.
+
+다음 신호와 종료는 보고에 담기지 않습니다.
+
+- DEBUG보다 낮은 로그 수준으로 실행한 watcher는 CTRL+BREAK와 종료를 기록하지 않습니다.
+  - `s.Launch`에 `--log-level`을 주지 않아 기본 수준인 ERROR로 실행한 시나리오가 여기에 해당합니다.
+  - 이때 보고에는 시각 없이 `logged exit status 3221225794 without exit records` 줄만 남습니다.
+- `--` 뒤에 더한 다른 패키지의 테스트 바이너리가 보낸 CTRL+BREAK는 담기지 않습니다. 그 바이너리가 같은 콘솔을 쓰는지는 확인하지 않았습니다.
+- 시나리오를 시작하기 전과 시나리오를 정리한 뒤에 보낸 CTRL+BREAK는 담기지 않습니다.
+- 2026-11-05에 확인한 이 VM에서는 0xc0000142로 끝난 프로세스가 Windows 이벤트 로그에 남지 않았으므로, 이벤트 로그로는 이 실패를 찾을 수 없습니다.

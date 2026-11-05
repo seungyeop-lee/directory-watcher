@@ -68,6 +68,7 @@ func (w *WatcherContext) RunCommand(cmd *exec.Cmd) error {
 		return err
 	}
 	err = cmd.Wait()
+	logProcessExit(cmd)
 	if !w.cleanupTree {
 		releaseProcessTree(tree)
 		return err

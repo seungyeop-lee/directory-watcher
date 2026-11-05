@@ -94,6 +94,7 @@ type Scenario struct {
 	done                 chan struct{}
 	exit                 error
 	procs                *processObserver
+	started              time.Time
 }
 
 func NewScenario(t *testing.T) *Scenario {
@@ -108,7 +109,7 @@ func NewScenario(t *testing.T) *Scenario {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &Scenario{t: t, Work: work, Watch: filepath.Join(work, "watch"), Records: filepath.Join(work, "records.log"), procs: newProcessObserver()}
+	s := &Scenario{t: t, Work: work, Watch: filepath.Join(work, "watch"), Records: filepath.Join(work, "records.log"), procs: newProcessObserver(), started: time.Now()}
 	t.Cleanup(s.cleanup)
 	if err := os.Mkdir(s.Watch, 0755); err != nil {
 		t.Fatal(err)
@@ -239,6 +240,10 @@ func (s *Scenario) cleanup() {
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = os.WriteFile(filepath.Join(s.Work, "watcher.pid"), []byte(fmt.Sprint(s.cmd.Process.Pid)), 0644)
+	}
+	if report := s.dllInitFailureReport(); report != "" {
+		_ = os.WriteFile(filepath.Join(s.Work, "dll-init-failed.log"), []byte(report), 0644)
+		s.t.Log(strings.TrimSuffix(report, "\n"))
 	}
 	if !s.rescueRecordedProcesses() {
 		s.t.Error("process cleanup failed; inspect cleanup.log")

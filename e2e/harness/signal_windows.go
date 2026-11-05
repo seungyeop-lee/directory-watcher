@@ -38,11 +38,31 @@ func setupProcGroup(cmd *exec.Cmd) {
 func gracefulStop(cmd *exec.Cmd) error {
 	var err error
 	if cmd.Process.WithHandle(func(uintptr) {
+		sent := time.Now()
 		err = windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, uint32(cmd.Process.Pid))
+		recordHarnessSignal(sent, cmd.Process.Pid, err)
 	}) != nil {
 		return nil
 	}
 	return err
+}
+
+// processExit는 끝난 cmd의 종료를 돌려준다. Wait가 프로세스 handle을 닫기 전에 읽은 시작·종료 시각을 쓴다.
+func processExit(cmd *exec.Cmd) (consoleEvent, bool) {
+	if cmd.ProcessState == nil {
+		return consoleEvent{}, false
+	}
+	usage, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage)
+	if !ok {
+		return consoleEvent{}, false
+	}
+	return consoleEvent{
+		at:      time.Unix(0, usage.ExitTime.Nanoseconds()),
+		pid:     cmd.Process.Pid,
+		code:    uint32(cmd.ProcessState.ExitCode()),
+		started: time.Unix(0, usage.CreationTime.Nanoseconds()),
+		from:    "harness",
+	}, true
 }
 
 // forceStop은 TASKKILL로 watcher와 그 자손을 강제로 끝낸다. TASKKILL이 PID로 watcher를 찾는 동안 그 PID가 다른 프로세스에

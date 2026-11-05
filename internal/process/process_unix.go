@@ -32,6 +32,9 @@ func startProcessTree(cmd *exec.Cmd, _ bool) (processTree, error) {
 
 func releaseProcessTree(processTree) {}
 
+// logProcessExit는 Unix에서 아무것도 남기지 않는다. 종료 기록은 Windows의 CTRL+BREAK 진단에만 쓴다.
+func logProcessExit(*exec.Cmd) {}
+
 func cleanupProcessTree(cmd *exec.Cmd, _ processTree, deadline time.Time) error {
 	// SetupForOs가 명령의 pid를 id로 쓰는 프로세스 그룹을 만들어 주며, 이 그룹은 그룹 리더가 끝난 뒤에도 남는다.
 	pgid := cmd.Process.Pid

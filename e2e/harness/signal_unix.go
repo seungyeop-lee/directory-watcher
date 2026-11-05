@@ -17,6 +17,9 @@ func gracefulStop(cmd *exec.Cmd) error {
 
 func prepareConsole() error { return nil }
 
+// processExit는 Unix에서 종료를 돌려주지 않는다. 0xc0000142 보고는 Windows에서만 생긴다.
+func processExit(*exec.Cmd) (consoleEvent, bool) { return consoleEvent{}, false }
+
 func forceStop(cmd *exec.Cmd) error {
 	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }

@@ -213,3 +213,37 @@ The commands below therefore write their results to a file in the guest and read
 
 - `up` refuses a VM that still has a display device.
 - If the VM starts without a window but makes a sound, a sound device remains; follow step 3 of [Creating a dedicated E2E VM](#creating-a-dedicated-e2e-vm).
+
+### A hook exits with 0xc0000142
+
+- When the harness cleans up a scenario in which a process exited with exit code 0xc0000142 (STATUS_DLL_INIT_FAILED), it leaves a report.
+  - The report starts with a `STATUS_DLL_INIT_FAILED (0xc0000142):` line in that test's output in `stdout.log`.
+  - The same content is also left in `dll-init-failed.log` in the scenario's run directory under `diagnostics/`. The runner passes `DW_E2E_KEEP=1` to the guest, so this file is kept even when the test passes.
+- The watcher runs hooks with `cmd.exe`, so the hook PID and times in the report belong to `cmd.exe`.
+  - `cmd.exe` returns the exit code of `hookrec.exe` unchanged, and `hookrec.exe` belongs to the process group of `cmd.exe`.
+- When `./e2e/harness` runs as well, `TestDLLInitFailureReportFromWatcher` makes a report with a hook that exits with 0xc0000142 on purpose. The report of that test is not a real failure.
+
+The lines after the first line of the report are written in UTC time order, and each has one of the following two forms.
+
+| Line | Meaning |
+|---|---|
+| `<time> exit pid=<PID> code=<exit code> started=<start time> from=<recorder>` | A process exited at `<time>`. Only processes that exited with 0xc0000142 and processes whose PID received CTRL+BREAK are listed. |
+| `<time> CTRL+BREAK pid=<target PID> from=<sender>` | After the scenario started, CTRL+BREAK was sent in this test binary's console to the process group of `<target PID>`. `error=<error>` is appended when sending failed, and `target=failed-process` is appended when the target is the PID of a process that exited with 0xc0000142. |
+
+- `from=harness` is a signal the harness sent to stop a scenario process, or the exit of a scenario process the harness waited for.
+- `from=watcher:<PID>` is a record that watcher left in its DEBUG log. In `watcher.log` in the same run directory, these are the lines containing `sent CTRL+BREAK to process group` and `exited with code`.
+
+Read the report in the following order.
+
+1. If a CTRL+BREAK line with `target=failed-process` falls between `started` and the exit time of an `exit` line with 0xc0000142, that signal went to the process group while it was starting.
+2. If an `exit` line for the same PID comes before a CTRL+BREAK line, that signal went to the PID of a process that had already exited. If another process group in this console received that PID in between, the signal goes to that group.
+3. If neither case appears, this report gives no evidence that CTRL+BREAK caused the failure.
+
+The following signals and exits are not in the report.
+
+- A watcher run at a log level below DEBUG does not record CTRL+BREAK or exits.
+  - This applies to scenarios run at the default ERROR level because `s.Launch` was given no `--log-level`.
+  - In that case the report has only a `logged exit status 3221225794 without exit records` line, without times.
+- CTRL+BREAK sent by the test binaries of other packages added after `--` is not included. Whether those binaries use the same console has not been checked.
+- CTRL+BREAK sent before the scenario started or after the scenario was cleaned up is not included.
+- On this VM, checked on 2026-11-05, processes that exited with 0xc0000142 left nothing in the Windows event log, so the event log cannot find this failure.
