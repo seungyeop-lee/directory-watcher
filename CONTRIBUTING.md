@@ -34,16 +34,27 @@ make run
 
 ## Verification
 
-Run these at the repository root after changing code:
+Run these at the repository root:
 
 | Command | When to run | What it runs |
 |---|---|---|
-| `go build ./...` | Always | Builds every package |
-| `go vet ./...` | Always | Runs `go vet` on every package |
-| `go test -count=1 -race ./...` | Always | Unit tests, the root tests that check documents against code, and the E2E scenarios in `e2e/scenarios` on the current OS, with the race detector |
+| `make test-fast` | While you change code | `go test -short ./...`: unit tests and the root tests that check documents against code. It skips the E2E tests that launch the watcher, and packages whose files did not change report `(cached)` |
+| `go build ./...` | Before each commit | Builds every package |
+| `go vet ./...` | Before each commit | Runs `go vet` on every package |
+| `go test -count=1 -race ./...` | Before each commit | Unit tests, the root tests that check documents against code, and the E2E scenarios in `e2e/scenarios` on the current OS, with the race detector. `make test` runs the same command |
 | `make smoke-example` | You changed `config.example.yml`, or how the watcher starts, runs hooks, or stops | Runs the watcher with `config.example.yml` and checks that watching starts, that creating a file runs the `onChange` hooks, and that SIGTERM runs the `onFinishWatch` hooks and exits with code 0 |
+| `make e2e-linux` and `make e2e-windows-all` | You changed code that behaves differently per OS, and before a release | Runs the E2E scenarios in a Linux container and on a UTM Windows VM |
 
-CI runs the first three commands on Linux, Windows, and macOS, and `make smoke-example` on Linux.
+- Do not drop `-count=1` from the commit check. The E2E tests build the watcher in a separate `go build`, so the Go test cache does not see changes to the watcher source and can report an old result.
+- Code that behaves differently per OS includes these paths:
+  - `internal/process/`: process groups, signals, and Windows Job Objects.
+  - `internal/app/domain/command/shell_*.go`: the default shell and how hook commands are passed to it.
+  - `cmd/console_*.go`: console output encoding on Windows.
+  - `internal/app/service/runner_watch_target.go`, `internal/app/service/runner_watch_target_tree.go`, and `internal/app/service/file_id_*.go`: handling of the fsnotify backend of each OS and file identity.
+  - `e2e/harness/signal_*.go`: how the E2E harness stops the watcher and observes processes.
+  - Any other code that branches on `runtime.GOOS` or has an OS-specific file name suffix or build constraint.
+
+CI runs `go build ./...`, `go vet ./...`, and `go test -count=1 -race ./...` on Linux, Windows, and macOS, and `make smoke-example` on Linux.
 
 To run the E2E scenarios in a Linux container or on a Windows VM, or to add a scenario, see the [E2E guide](e2e/README.md).
 

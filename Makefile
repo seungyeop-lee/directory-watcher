@@ -83,6 +83,14 @@ e2e-windows-down:
 e2e-windows-all:
 	go run ./e2e/windows all $(value ARGS)
 
+# test-fast는 수정 중에 반복해서 돌리는 검증이다. -short이면 실제 watcher를 띄우는 E2E를 건너뛰고,
+# -count=1이 없으므로 바뀌지 않은 패키지는 캐시된 결과로 끝난다.
+.PHONY: test-fast
+test-fast:
+	go test -short ./...
+
+# test는 커밋 전 전체 검증이다. E2E가 go build로 따로 빌드하는 watcher 소스를 Go 테스트 캐시가
+# 알지 못하므로 -count=1로 캐시 없이 실행한다.
 .PHONY: test
 test:
-	go test -race ./...
+	go test -count=1 -race ./...

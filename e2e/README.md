@@ -5,6 +5,7 @@
 - These runs build the watcher and the Go helper programs from the actual current source and check file events, hook records, and process termination.
 - macOS local, Linux Docker, and Windows runs execute the same Go E2E scenarios in `e2e/scenarios`.
 - The Windows-only harness checks `TestCleanupReportsLockedResources`, `TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram`, `TestDelayedHooksGoneFailsWhileHookRuns`, and `TestDLLInitFailureReportFromWatcher` are in the `e2e/harness` package, so they run with `go test ./...`, not with `make e2e-local`.
+- With `go test -short`, every test that creates its run with `NewScenario` is skipped, and `harness.Run` does not build the binaries.
 - What each scenario checks and where its code is are in [Scenarios and their supporting code](docs/harness.md#scenarios-and-their-supporting-code).
 
 ## Setup and run

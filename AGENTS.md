@@ -26,6 +26,10 @@
 
 # 검증
 
+- 검증은 아래 세 단계로 나눠 실행한다. 명령은 [CONTRIBUTING.md의 Verification](CONTRIBUTING.md#verification) 절과 같고, OS마다 다르게 동작하는 코드의 경로 목록은 그 절에 있다.
+  - 코드를 고치는 동안에는 `make test-fast`(`go test -short ./...`)를 실행한다. 실제 watcher를 띄우는 E2E 테스트는 SKIP하고, 파일이 바뀌지 않은 패키지는 `(cached)`로 끝난다.
+  - 커밋하기 전에는 `go build ./...`, `go vet ./...`, `go test -count=1 -race ./...`(`make test`)를 실행한다. E2E는 watcher를 별도의 `go build`로 빌드해서 Go 테스트 캐시가 watcher 소스의 변경을 알지 못하므로, `-count=1`을 빼지 않는다.
+  - OS마다 다르게 동작하는 코드를 바꿨을 때와 릴리스하기 전에는 `make e2e-linux`와 `make e2e-windows-all`도 실행한다.
 - Windows 동작을 확인해야 하면, Windows 환경이 없다고 판단하기 전에 `/Applications/UTM.app/Contents/MacOS/utmctl list`로 UTM VM을 찾는다. VM이 있으면 [UTM Windows VM에서 E2E 실행](e2e/docs/windows-utm.ko.md)을 읽고 `make e2e-windows-all ARGS="-vm=<VM 이름>"`으로 게스트에서 테스트를 실행한다. `./e2e/scenarios` 밖의 패키지를 함께 실행하는 방법과 이 VM으로 대신할 수 없는 Windows 검증도 그 문서에 있다.
 - 심볼릭 링크를 만드는 테스트는 링크를 만들 수 없으면 SKIP한다. Windows 실행 출력에서 해당 테스트가 `--- SKIP` 없이 `--- PASS`인지 확인한다.
 

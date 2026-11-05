@@ -22,6 +22,7 @@ func TestDelayedHooksGoneIgnoresPIDReusedByOtherProgram(t *testing.T) {
 }
 
 func TestDelayedHooksGoneFailsWhileHookRuns(t *testing.T) {
+	skipShort(t)
 	if os.Getenv("DW_E2E_LEFTOVER_HOOK") == "1" {
 		s := NewScenario(t)
 		hook := exec.Command(hookrecBin, "--file="+s.Records, "--delay=1m", "--line=LEFTOVER")

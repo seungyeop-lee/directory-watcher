@@ -17,6 +17,7 @@ import (
 func TestMain(m *testing.M) { os.Exit(Run(m)) }
 
 func TestCleanupReportsLockedResources(t *testing.T) {
+	skipShort(t)
 	if mode := os.Getenv("DW_E2E_CLEANUP_LOCK"); mode != "" {
 		path := filepath.Dir(watcherBin)
 		lockPath := watcherBin

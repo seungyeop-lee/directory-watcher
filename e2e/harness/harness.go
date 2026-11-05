@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,11 +36,17 @@ func HookrecBin() string { return hookrecBin }
 
 // Run은 TestMain의 본문이다: 콘솔을 준비하고, 테스트 바이너리 실행 전체에서 쓸
 // watcher, 주입 tag를 붙인 watcher, hookrec 바이너리를 빌드한 뒤, m을 실행하고 바이너리를 지운다. 바이너리를
-// 지우지 못하면 돌려주는 코드가 1이 된다.
+// 지우지 못하면 돌려주는 코드가 1이 된다. -short이면 바이너리를 쓰는 테스트를 skipShort가
+// 건너뛰므로 빌드 없이 m을 실행한다.
 func Run(m *testing.M) (code int) {
 	if err := prepareConsole(); err != nil {
 		fmt.Fprintln(os.Stderr, "console:", err)
 		return 1
+	}
+	// testing.Short는 flag를 파싱한 뒤에만 읽을 수 있는데, m.Run이 파싱하기 전이다.
+	flag.Parse()
+	if testing.Short() {
+		return m.Run()
 	}
 	dir, err := os.MkdirTemp("", "dw-e2e-bin-*")
 	if err != nil {
@@ -97,8 +104,18 @@ type Scenario struct {
 	started              time.Time
 }
 
+// skipShort는 -short이면 테스트를 건너뛴다. 실제 바이너리를 띄우는 테스트는 NewScenario에서 이 확인을 거치고,
+// 바이너리를 빌드하는 하위 테스트 프로세스를 띄우는 테스트는 직접 부른다.
+func skipShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("E2E: skipped with -short")
+	}
+}
+
 func NewScenario(t *testing.T) *Scenario {
 	t.Helper()
+	skipShort(t)
 	base := os.Getenv("DW_E2E_DIAGNOSTICS")
 	if base != "" {
 		if err := os.MkdirAll(base, 0755); err != nil {
