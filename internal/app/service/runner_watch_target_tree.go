@@ -192,6 +192,12 @@ func (t *watchTree) addDirTree(root string) error {
 			_ = t.watcher.Remove(p)
 		}
 		if err := addWatch(t.watcher.Add, p); err != nil {
+			// 훑은 뒤 Add하기 전에 지워진 폴더는 그 아래까지 건너뛰고 기록에서도 지운다. 감시 대상 폴더가 지워졌으면
+			// 감시를 시작하지 못한 것이므로 오류를 돌려준다.
+			if errors.Is(err, fs.ErrNotExist) && p != t.root {
+				t.forgetEntry(p)
+				return filepath.SkipDir
+			}
 			return err
 		}
 		t.markWatched(p)

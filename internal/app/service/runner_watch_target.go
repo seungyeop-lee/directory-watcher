@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"iter"
 	"os"
 	"runtime"
@@ -152,6 +153,11 @@ func (r *watchTargetRunner) Run() error {
 				return &FatalError{Path: r.path, Cause: errors.New("watcher error channel closed unexpectedly")}
 			}
 			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			// fsnotify의 kqueue 구현은 지운 파일의 경로에 새로 생긴 파일을 감시하려다 그 파일이 이미 사라졌으면 그
+			// 오류를 오류 채널로 보낸다. 사라진 파일 말고는 감시를 그대로 이어 가므로 넘긴다.
+			if kqueueOS && errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
 			if err != nil {

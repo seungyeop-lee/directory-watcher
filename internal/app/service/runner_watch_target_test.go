@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1649,6 +1650,38 @@ func TestWatcherLossStopsDispatchWhileHookRuns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	r.Stop(&wg)
+}
+
+// kqueue에서 fsnotify가 오류 채널로 ErrNotExist를 보내도 감시를 계속하고, 다른 운영체제에서는 그 오류로 감시를
+// 멈추는지 확인한다.
+func TestWatcherNotExistErrorKeepsWatchingOnlyOnKqueue(t *testing.T) {
+	root := t.TempDir()
+	r := NewWatchTargetRunner(domain.GlobalCommandSet{}, domain.WatchTargetsCommandSet{Path: domain.Path(root), Option: watchTargetOption(domain.WatchOption{FileEvent: domain.WatchEvent{Create: true}})}, newMockLogger(), process.CommandMode{})
+	assertWatchDirectoriesRemovable(t, r)
+	events, watchErrors := controlledSource(r)
+	runs, result := startRunner(t, r, nil)
+	// fsnotify의 kqueue 구현은 지운 파일의 경로에 다시 생긴 파일을 감시하려다 그 파일마저 사라지면 ENOENT를 그대로 보낸다.
+	watchErrors <- syscall.ENOENT
+	if !kqueueOS {
+		select {
+		case err := <-result:
+			var fatal *FatalError
+			if !errors.As(err, &fatal) || !errors.Is(err, syscall.ENOENT) {
+				t.Fatalf("run stopped with %v, want a FatalError wrapping ENOENT", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("ENOENT from the watcher did not stop the run")
+		}
+		return
+	}
+	after := filepath.Join(root, "after.txt")
+	writeFile(t, after)
+	select {
+	case events <- fsnotify.Event{Name: after, Op: fsnotify.Create}:
+	case err := <-result:
+		t.Fatalf("run stopped: %v", err)
+	}
+	awaitHookPath(t, runs, result, after)
 }
 
 func TestBoundedDispatchReportsLoss(t *testing.T) {

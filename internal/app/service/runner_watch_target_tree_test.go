@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -308,5 +309,69 @@ func TestAddWatchRetriesBadFileDescriptorOnlyOnKqueue(t *testing.T) {
 				t.Errorf("add called %d times, want %d", calls, wantCalls)
 			}
 		})
+	}
+}
+
+// removeOnAddLogger는 addDirTree가 폴더 dir을 감시 목록에 넣는다는 DEBUG 로그를 남길 때 그 폴더를 지운다. 이 로그는
+// addDirTree가 dir을 훑은 뒤 Add하기 직전에 남기므로, 그 사이에 폴더가 지워지는 경합을 만든다.
+type removeOnAddLogger struct {
+	t   *testing.T
+	dir string
+}
+
+func (l *removeOnAddLogger) Info(string)  {}
+func (l *removeOnAddLogger) Error(string) {}
+func (l *removeOnAddLogger) Debug(msg string) {
+	if msg == "add path:"+l.dir {
+		if err := os.RemoveAll(l.dir); err != nil {
+			l.t.Error(err)
+		}
+	}
+}
+
+// 감시 대상 안의 폴더를 훑은 뒤 감시 목록에 넣기 전에 그 폴더가 지워지면, 그 폴더만 건너뛰고 나머지 폴더는 감시
+// 목록에 넣으며 기록이 디스크와 같은지 확인한다.
+func TestWatchTreeSkipsFolderRemovedBeforeAdd(t *testing.T) {
+	cases := []struct {
+		name    string
+		atStart bool
+		removed string
+		want    []string
+	}{
+		{name: "subfolder existing at start", atStart: true, removed: "new/a", want: []string{".", "new", "new/b"}},
+		{name: "added folder itself", removed: "new", want: []string{"."}},
+		{name: "subfolder of added folder", removed: "new/a", want: []string{".", "new", "new/b"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newTreeFixture(t, domain.WatchOption{SubDir: true})
+			build := func() {
+				f.mkdirAll("new/a/deep", "new/b")
+				writeFile(t, f.path("new/a/f.txt"))
+			}
+			if tc.atStart {
+				build()
+			} else {
+				f.add()
+				build()
+			}
+			f.tree.logger = &removeOnAddLogger{t: t, dir: f.path(tc.removed)}
+			if tc.atStart {
+				f.add()
+			} else if err := f.tree.added(f.path("new"), true); err != nil {
+				t.Fatalf("added(new) = %v, want nil", err)
+			}
+			f.assertWatchList(tc.want...)
+			assertRecordMatchesDisk(t, f.tree, f.root, tc.removed)
+		})
+	}
+}
+
+// 감시를 시작할 때 감시 대상 폴더가 감시 목록에 들어가기 전에 지워지면 add가 오류를 돌려주는지 확인한다.
+func TestWatchTreeAddFailsWhenTargetRemovedBeforeAdd(t *testing.T) {
+	f := newTreeFixture(t, domain.WatchOption{SubDir: true})
+	f.tree.logger = &removeOnAddLogger{t: t, dir: f.root}
+	if err := f.tree.add(); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("add() = %v, want an error wrapping fs.ErrNotExist", err)
 	}
 }
