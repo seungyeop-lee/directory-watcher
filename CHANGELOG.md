@@ -4,6 +4,37 @@ All notable changes to directory-watcher are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-11-05
+
+### Added
+
+- The new `-s`, `--silent` option turns off the hook command lines that the watcher prints before running each command. The output of the hook commands still appears.
+- The new `-n`, `--dry-run` option prints the hook command lines without running the commands.
+  - The watcher still watches the targets and runs every hook, but skips the commands themselves after building them and checking their working directory, so a missing working directory is reported as in a real run.
+  - `-s` and `-n` cannot be used together, and the watcher exits with code 1 before watching starts if both are given.
+
+### Changed
+
+- Before it runs each hook command, the watcher prints a line `<hook name>: <command>` with the same prefix as the hook's output. This applies to the global hooks, the watch target hooks, `onError`, and `onQueueWarning`.
+  - In hooks that run on a change, the line shows the command with its template variables filled in, and a command with a `dir` ends with `(dir: <dir>)`.
+  - The line has no log prefix such as `[INFO]`, and `--log-level` does not change it. To keep the previous output, start the watcher with `-s`.
+- On Windows, the `DEBUG` log level also logs each CTRL+BREAK that the watcher sends to a hook and each exit of a hook process with its exit code and start and exit times.
+
+### Fixed
+
+- On Windows, non-ASCII text, such as Korean, that `cmd` and `powershell` hooks print is no longer garbled in PowerShell and Command Prompt, so you no longer need to run the watcher in Git Bash.
+  - While the watcher runs, it sets the console's output code page to UTF-8 (65001), so other programs that share its console, including your shell, also use it until the watcher exits.
+  - The watcher restores the original output code page when you stop it with CTRL+C or when it exits with an error.
+- On Windows, a CTRL+BREAK meant for a hook that has already exited no longer reaches another process group that reused the hook's process ID.
+- The watcher no longer stops with an error when folders change quickly while it watches.
+  - A folder that is deleted while the watcher adds it, or the target folder that is deleted again while the watcher adds it back after it was re-created, is treated as deleted.
+  - On macOS, re-creating a folder right after it was moved or deleted no longer stops the watcher with `bad file descriptor`, and creating and deleting files repeatedly no longer stops it with a "no such file or directory" error.
+  - On Linux, moving a folder and deleting it right after no longer stops the watcher or makes it hang.
+- On macOS, a folder created at the path of a folder that was just moved or deleted now reaches the hook as `C`. Before, the event could be missing until the parent folder changed again.
+- A folder that is deleted right after it was created is no longer remembered as existing, so a folder created again at the same path reaches the hook as `C`.
+- A target folder that is deleted just as watching starts now stops the watcher with exit code 1. Before, the watcher logged that watching had started and watched nothing.
+- The `DEBUG` log of the global hooks shows the commands as written in the config instead of internal values.
+
 ## [3.0.0] - 2026-11-05
 
 ### Added
