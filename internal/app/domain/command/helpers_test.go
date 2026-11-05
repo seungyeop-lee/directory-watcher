@@ -65,6 +65,13 @@ func capturedBase(t *testing.T, mode process.CommandMode) (*process.WatcherConte
 	}
 }
 
+// skipRaceExitSleep은 이 테스트 바이너리를 다시 실행하는 hook에 GORACE의 atexit_sleep_ms=0을 넘긴다.
+// -race로 빌드한 바이너리는 종료 코드 0으로 끝날 때 1초를 기다리므로, 넘기지 않으면 hook을 실행할 때마다 1초씩 늘어난다.
+func skipRaceExitSleep(t *testing.T) {
+	t.Helper()
+	t.Setenv("GORACE", strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
+}
+
 var ansiCode = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // hookLines는 capturedContext가 모은 출력에서 각 줄의 출력 주체와 색상 코드를 빼고 hook이 쓴 글자만 돌려준다.

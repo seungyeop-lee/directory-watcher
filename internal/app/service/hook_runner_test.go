@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -359,12 +358,6 @@ func TestRunsWaitForStartHookUnlessOldest(t *testing.T) {
 	}
 }
 
-// testBinaryCommand는 이 테스트 바이너리를 flags로 다시 실행하는 hook 명령이다. 인자를 큰따옴표로 감싸
-// 기본 셸(sh, cmd)이 경로의 공백이나 -test.run의 ^, $를 해석하지 않게 한다.
-func testBinaryCommand(flags string) string {
-	return fmt.Sprintf(`"%s" "%s"`, os.Args[0], flags)
-}
-
 // 0이 아닌 종료 코드로 끝나는 실제 프로세스가 필요한 테스트가 이 테스트 바이너리를 다시 실행한다.
 func TestHookExitProcess(t *testing.T) {
 	if os.Getenv("DW_HOOK_EXIT_HELPER") != "1" {
@@ -375,7 +368,7 @@ func TestHookExitProcess(t *testing.T) {
 
 func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 	t.Setenv("DW_HOOK_EXIT_HELPER", "1")
-	exitCommand := testBinaryCommand("-test.run=^TestHookExitProcess$")
+	exitCommand := testBinaryCommand(t, "-test.run=^TestHookExitProcess$")
 	missingDir := domain.Path(filepath.Join(t.TempDir(), "not_exist"))
 	cases := map[string]struct {
 		failing domain.Cmd
@@ -408,7 +401,7 @@ func TestTargetHookFailureIsLoggedAndSkipsRemainingCommands(t *testing.T) {
 
 func TestTargetFinishHookFailureIsLogged(t *testing.T) {
 	t.Setenv("DW_HOOK_EXIT_HELPER", "1")
-	exitCommand := testBinaryCommand("-test.run=^TestHookExitProcess$")
+	exitCommand := testBinaryCommand(t, "-test.run=^TestHookExitProcess$")
 	logger := &notificationLog{}
 	info := hookInfo{OnStartWatch: emptyCommand(), OnBeforeChange: emptyCommand(), OnChange: emptyCommand(), OnAfterChange: emptyCommand(), OnFinishWatch: command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: exitCommand})}
 	hooks := newHookFunc(domain.RunPolicy{Concurrency: 1}, "[target-alias]", ".", info, logger, process.CommandMode{})
@@ -449,7 +442,7 @@ func TestInterruptedRunIsNotLoggedAsFailure(t *testing.T) {
 
 func TestTargetHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 	missingDir := filepath.Join(t.TempDir(), "missing-dir")
-	noop := command.SingleCmd{Shell: command.DefaultShell(), Cmd: testBinaryCommand("-test.run=^$")}
+	noop := command.SingleCmd{Shell: command.DefaultShell(), Cmd: testBinaryCommand(t, "-test.run=^$")}
 	cases := map[string]struct {
 		finish     domain.Cmd
 		targetPath domain.Path

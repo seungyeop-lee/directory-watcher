@@ -19,6 +19,15 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/internal/process"
 )
 
+// testBinaryCommand는 이 테스트 바이너리를 flags로 다시 실행하는 hook 명령이다. 인자를 큰따옴표로 감싸
+// 기본 셸(sh, cmd)이 경로의 공백이나 -test.run의 ^, $를 해석하지 않게 한다.
+// -race로 빌드한 바이너리는 종료 코드 0으로 끝날 때 1초를 기다리므로, GORACE의 atexit_sleep_ms=0을 hook에 넘긴다.
+func testBinaryCommand(t *testing.T, flags string) string {
+	t.Helper()
+	t.Setenv("GORACE", strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
+	return fmt.Sprintf(`"%s" "%s"`, os.Args[0], flags)
+}
+
 // mockLogger는 테스트용 모의 Logger다.
 type mockLogger struct{}
 

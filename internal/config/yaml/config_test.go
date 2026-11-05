@@ -17,6 +17,8 @@ func TestDecodedOnErrorRunsStructuredCommand(t *testing.T) {
 	workdir := t.TempDir()
 	t.Setenv("DW_ERROR_CAUSE", "overflow 'quoted' {{.Path}} $HOME")
 	t.Setenv("DW_CONFIG_NOTIFICATION_PROCESS", "1")
+	// -race로 빌드한 이 바이너리는 종료 코드 0으로 끝날 때 1초를 기다리므로, hook으로 실행할 때는 끈다.
+	t.Setenv("GORACE", strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
 	data := fmt.Sprintf(`global:
   lifeCycle:
     onError:

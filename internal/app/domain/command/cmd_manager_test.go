@@ -83,8 +83,7 @@ func writeLines(marker string, count int) {
 
 func outputCommand(t *testing.T, mode string, count int) command.SingleCmd {
 	t.Setenv("DW_HOOK_OUTPUT_HELPER", "1")
-	// -race로 빌드한 바이너리는 끝날 때 1초를 기다리므로, 이 바이너리를 여러 번 실행하는 테스트가 느려지지 않게 끈다.
-	t.Setenv("GORACE", strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
+	skipRaceExitSleep(t)
 	return command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^TestHookOutputProcess$" -- %s %d`, os.Args[0], mode, count)}
 }
 

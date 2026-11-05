@@ -1,8 +1,6 @@
 package service
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,7 +14,7 @@ import (
 
 func TestGlobalHookFailureNamesMissingWorkingDirectory(t *testing.T) {
 	missingDir := filepath.Join(t.TempDir(), "missing-dir")
-	missingDirCmd := command.NewManager(command.StructuredCmd{Cmd: command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^$"`, os.Args[0])}, Dir: domain.Path(missingDir)})
+	missingDirCmd := command.NewManager(command.StructuredCmd{Cmd: command.SingleCmd{Shell: command.DefaultShell(), Cmd: testBinaryCommand(t, "-test.run=^$")}, Dir: domain.Path(missingDir)})
 	cases := map[string]func(*globalRunner){
 		"onStartWatch":  (*globalRunner).CallOnStartWatch,
 		"onFinishWatch": (*globalRunner).CallOnFinishWatch,

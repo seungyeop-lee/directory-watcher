@@ -130,7 +130,7 @@ func TestFatalLossNotificationReceivesOriginalContext(t *testing.T) {
 	t.Setenv("DW_NOTIFICATION_RECORD", record)
 	t.Setenv("DW_ERROR_KIND", "stale-parent-value")
 	set := testCommandSet(t.TempDir())
-	set.Global.LifeCycle.OnError = command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: fmt.Sprintf(`"%s" "-test.run=^TestNotificationRecorderProcess$"`, os.Args[0])})
+	set.Global.LifeCycle.OnError = command.NewManager(command.SingleCmd{Shell: command.DefaultShell(), Cmd: testBinaryCommand(t, "-test.run=^TestNotificationRecorderProcess$")})
 	r := NewRunner(set, &notificationLog{}, process.CommandMode{})
 	assertWatchDirectoriesRemovable(t, r.watchTargets...)
 	_, source := controlledSource(r.watchTargets[0])

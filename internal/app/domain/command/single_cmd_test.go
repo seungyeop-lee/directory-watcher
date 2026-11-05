@@ -40,6 +40,7 @@ const hostileFileName = `a b;mkdir pwned1;$(mkdir pwned2)'&mkdir pwned3&%OS%.txt
 
 func argsCommand(t *testing.T, shell command.Shell, placement string) command.SingleCmd {
 	t.Setenv("DW_SHELL_ARGS_HELPER", "1")
+	skipRaceExitSleep(t)
 	program := fmt.Sprintf(`"%s" "-test.run=^TestShellArgsProcess$"`, os.Args[0])
 	if shell.String() == "powershell" {
 		program = "& " + program
