@@ -65,7 +65,7 @@
 ### major를 올릴 때
 
 - Go는 major 2 이상인 version의 모듈을 `/v<major>` 접미사가 붙은 경로로 찾습니다.
-- major를 올리기 전에 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령을 새 major로 바꿔 먼저 커밋합니다.
+- major를 올리기 전에 `go.mod`의 모듈 경로와 그 경로를 쓰는 import, `.goreleaser.yaml`의 ldflags, README의 `go install` 명령, 설정 예시 첫 줄의 스키마 URL(`yaml-language-server: $schema=`)에 든 `v<major>` 브랜치를 새 major로 바꿔 먼저 커밋합니다.
 - versionup skill은 모듈 경로가 새 version의 major와 맞지 않으면 아무것도 바꾸지 않고 멈춥니다.
 - 새 major의 첫 릴리스에서는 2단계가 `v<major>` 브랜치를 새로 만듭니다.
 
