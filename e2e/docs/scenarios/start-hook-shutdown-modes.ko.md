@@ -3,7 +3,7 @@
 🇺🇸 [English](start-hook-shutdown-modes.md) | 🇰🇷 한국어
 
 - 시작 hook이 실제 부모·자식·손자 프로세스 트리를 실행하는 동안 변경 이벤트와 종료 신호가 들어옵니다.
-- 이때 `hookBatch.deliver`·`run.interrupt` 네 조합에서 시작 hook이 교체되거나 유지되고 종료 시 모든 프로세스가 정상 완료하는지 확인합니다.
+- 이때 `run.interrupt`의 두 값 `none`·`oldest`에서 시작 hook이 유지되거나 교체되고 종료 시 모든 프로세스가 정상 완료하는지 확인합니다.
 
 ## 확인 내용과 성공 조건
 
@@ -16,16 +16,14 @@
 ## 설정
 
 - 대상 `onStartWatch`와 `onChange`에 같은 `hookrec --depth=2` 명령을 설정합니다. 기록 형식과 신호 처리는 [`hookrec` 프로세스 트리와 지연 hook](../harness.ko.md#hookrec-프로세스-트리와-지연-hook)에 있습니다.
-- 대상 옵션은 하위 테스트별 `hookBatch.deliver`·`run.interrupt`, `deliver: last`에서 10이고 `deliver: each`에서 0인 `hookBatch.waitMillisecond`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다. 종료 hook은 설정하지 않습니다.
+- 대상 옵션은 하위 테스트별 `run.interrupt`, `hookBatch.waitMillisecond: 10`, `hookBatch.deliver: last`, `watch.fileEvent: C`, `watch.exclude: ['*.probe']`입니다. 종료 hook은 설정하지 않습니다.
 
 ## 하위 테스트
 
 | 하위 테스트 | 변경 이벤트 처리 | 추가 대기·확인 |
 |---|---|---|
-| `deliver=last/interrupt=none` | 10ms 기다린 뒤 마지막으로 바뀐 경로 실행, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
-| `deliver=last/interrupt=oldest` | 10ms 기다린 뒤 마지막으로 바뀐 경로 실행, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
-| `deliver=each/interrupt=none` | 대기 없이 순차 실행, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
-| `deliver=each/interrupt=oldest` | 대기 없이 실행, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
+| `interrupt=none` | 10ms 기다린 뒤 마지막으로 바뀐 경로 실행, 시작 hook 유지 | 첫 세대 외 부모 `start` 없음 |
+| `interrupt=oldest` | 10ms 기다린 뒤 마지막으로 바뀐 경로 실행, 시작 hook 취소 후 교체 | 세대 2개 준비 대기 |
 
 ## 진행 순서
 
@@ -72,7 +70,7 @@ go run ./e2e/linux -- -run '^TestStartHookShutdownModes$'
 make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 ```
 
-- 하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^deliver=each$/^interrupt=none$'`처럼 하위 테스트 이름의 각 부분을 `/`로 나눠 지정합니다.
+- 하위 테스트 하나만 실행하려면 `-run '^TestStartHookShutdownModes$/^interrupt=none$'`처럼 지정합니다.
 - UTM 명령은 [UTM Windows VM에서 E2E 실행](../windows-utm.ko.md)의 사전 준비를 마치고 `make e2e-windows-up`으로 VM을 켠 뒤 실행합니다.
 - Windows 호스트에서 직접 실행하는 방법은 [Windows 실행 명령](../windows.ko.md#실행-명령)에 있습니다.
 

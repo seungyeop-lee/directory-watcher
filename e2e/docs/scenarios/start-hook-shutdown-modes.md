@@ -3,7 +3,7 @@
 🇺🇸 English | 🇰🇷 [한국어](start-hook-shutdown-modes.ko.md)
 
 - While the start hook runs a real parent, child, and grandchild process tree, a change event and a shutdown signal arrive.
-- Checks, in the four `hookBatch.deliver`·`run.interrupt` combinations, that the start hook is replaced or kept, and that all processes complete gracefully on shutdown.
+- Checks, for the two `run.interrupt` values `none` and `oldest`, that the start hook is kept or replaced, and that all processes complete gracefully on shutdown.
 
 ## What it checks and success criteria
 
@@ -16,16 +16,14 @@
 ## Configuration
 
 - The target `onStartWatch` and `onChange` are set to the same `hookrec --depth=2` command. The record format and signal handling are described in [`hookrec` process trees and delayed hooks](../harness.md#hookrec-process-trees-and-delayed-hooks).
-- The target options are the per-subtest `hookBatch.deliver` and `run.interrupt`, plus `hookBatch.waitMillisecond`, which is 10 with `deliver: last` and 0 with `deliver: each`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`. No finish hook is configured.
+- The target options are the per-subtest `run.interrupt`, plus `hookBatch.waitMillisecond: 10`, `hookBatch.deliver: last`, `watch.fileEvent: C`, and `watch.exclude: ['*.probe']`. No finish hook is configured.
 
 ## Subtests
 
 | Subtest | Change event handling | Extra waits and checks |
 |---|---|---|
-| `deliver=last/interrupt=none` | Last changed path after a 10ms wait, start hook kept | No parent `start` other than the first generation |
-| `deliver=last/interrupt=oldest` | Last changed path after a 10ms wait, start hook cancelled and replaced | Wait for 2 generations ready |
-| `deliver=each/interrupt=none` | Sequential runs without waiting, start hook kept | No parent `start` other than the first generation |
-| `deliver=each/interrupt=oldest` | Runs without waiting, start hook cancelled and replaced | Wait for 2 generations ready |
+| `interrupt=none` | Last changed path after a 10ms wait, start hook kept | No parent `start` other than the first generation |
+| `interrupt=oldest` | Last changed path after a 10ms wait, start hook cancelled and replaced | Wait for 2 generations ready |
 
 ## Sequence
 
@@ -72,7 +70,7 @@ go run ./e2e/linux -- -run '^TestStartHookShutdownModes$'
 make e2e-windows ARGS="-- -run '^TestStartHookShutdownModes$'"
 ```
 
-- To run a single subtest, specify each part of the subtest name separated by `/`, as in `-run '^TestStartHookShutdownModes$/^deliver=each$/^interrupt=none$'`.
+- To run a single subtest, specify it as in `-run '^TestStartHookShutdownModes$/^interrupt=none$'`.
 - Run the UTM command after completing the prerequisites in [Running E2E on a UTM Windows VM](../windows-utm.md) and starting the VM with `make e2e-windows-up`.
 - To run directly on a Windows host, see [Windows run commands](../windows.md#run-commands).
 

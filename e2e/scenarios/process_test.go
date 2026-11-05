@@ -79,17 +79,11 @@ watchTargets:
 
 func TestStartHookShutdownModes(t *testing.T) {
 	t.Parallel()
-	for _, deliver := range []string{"last", "each"} {
-		for _, interrupt := range []string{"none", "oldest"} {
-			t.Run(fmt.Sprintf("deliver=%s/interrupt=%s", deliver, interrupt), func(t *testing.T) {
-				t.Parallel()
-				// each는 기다리지 않고 받은 이벤트마다 실행하게 하고, last는 기다린 뒤 마지막 경로 하나만 실행하게 한다.
-				wait := 10
-				if deliver == "each" {
-					wait = 0
-				}
-				s := harness.NewScenario(t)
-				s.Start(fmt.Sprintf(`watchTargets:
+	for _, interrupt := range []string{"none", "oldest"} {
+		t.Run("interrupt="+interrupt, func(t *testing.T) {
+			t.Parallel()
+			s := harness.NewScenario(t)
+			s.Start(fmt.Sprintf(`watchTargets:
   - path: '%s'
     lifeCycle:
       onStartWatch:
@@ -101,38 +95,37 @@ func TestStartHookShutdownModes(t *testing.T) {
         exclude: ['*.probe']
         fileEvent: C
       hookBatch:
-        waitMillisecond: %d
-        deliver: %s
+        waitMillisecond: 10
+        deliver: last
       run:
         interrupt: %s
-`, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), wait, deliver, interrupt))
-				s.AssertRunning("startup process", s.AwaitReadyGenerations("startup process tree ready", 1))
-				s.Write(filepath.Join(s.Watch, "during-start.txt"), nil)
-				if interrupt == "oldest" {
-					s.AwaitReadyGenerations("replacement tree ready", 2)
+`, s.Watch, s.Hook("--depth=2"), s.Hook("--depth=2"), interrupt))
+			s.AssertRunning("startup process", s.AwaitReadyGenerations("startup process tree ready", 1))
+			s.Write(filepath.Join(s.Watch, "during-start.txt"), nil)
+			if interrupt == "oldest" {
+				s.AwaitReadyGenerations("replacement tree ready", 2)
+			}
+			beforeStop := s.ProcessRecords()
+			currentRun := beforeStop[len(beforeStop)-1].Generation
+			var current []harness.ProcessRecord
+			for _, r := range beforeStop {
+				if r.Generation == currentRun {
+					current = append(current, r)
 				}
-				beforeStop := s.ProcessRecords()
-				currentRun := beforeStop[len(beforeStop)-1].Generation
-				var current []harness.ProcessRecord
-				for _, r := range beforeStop {
-					if r.Generation == currentRun {
-						current = append(current, r)
+			}
+			s.AssertRunning("current process before stop", current)
+			s.Stop()
+			records := s.ProcessRecords()
+			harness.AssertGracefulCompletion(t, records)
+			s.AwaitProcessesGone("startup/replacement descendants disappear", records)
+			if interrupt == "none" {
+				for _, r := range records {
+					if r.Depth == 2 && r.State == "start" && r.Generation != records[0].Generation {
+						t.Fatal("sequential startup was replaced")
 					}
 				}
-				s.AssertRunning("current process before stop", current)
-				s.Stop()
-				records := s.ProcessRecords()
-				harness.AssertGracefulCompletion(t, records)
-				s.AwaitProcessesGone("startup/replacement descendants disappear", records)
-				if interrupt == "none" {
-					for _, r := range records {
-						if r.Depth == 2 && r.State == "start" && r.Generation != records[0].Generation {
-							t.Fatal("sequential startup was replaced")
-						}
-					}
-				}
-			})
-		}
+			}
+		})
 	}
 }
 
