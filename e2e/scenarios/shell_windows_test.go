@@ -14,6 +14,10 @@ import (
 	"github.com/seungyeop-lee/directory-watcher/v3/e2e/harness"
 )
 
+// globalStartHookWait는 전역 onStartWatch가 끝나기를 기다리는 제한 시간이다. 다른 실행이 같은 VM을 함께 써서 부하가
+// 크면 Windows PowerShell이 hook의 한 줄을 출력하기까지 46초 걸린 적이 있다(같은 때 cmd hook은 1초 안에 끝났다).
+const globalStartHookWait = 2 * time.Minute
+
 // hook 셸은 콘솔 출력 code page로 출력을 인코딩한다. 그 code page가 UTF-8이 아니어도 hook이 출력한 비ASCII 글자가
 // watcher의 출력에 UTF-8로 그대로 나오고, watcher가 끝나면 콘솔 출력 code page가 원래 값으로 돌아와야 한다.
 // 모든 watcher는 실행되는 동안 함께 쓰는 콘솔의 출력 code page를 바꾸므로, 이 테스트는 병렬로 실행하지 않는다.
@@ -46,7 +50,7 @@ watchTargets:
   - path: '%s'
 `, shell, command, s.Watch), "--silent", "--log-level=INFO")
 			// 전역 onStartWatch가 끝나야 감시 대상이 시작하며 이 로그를 남긴다.
-			s.Await("global start hook finished", 10*time.Second, func() bool { return strings.Contains(s.Log(), "watch start:") })
+			s.Await("global start hook finished", globalStartHookWait, func() bool { return strings.Contains(s.Log(), "watch start:") })
 			s.Stop()
 
 			output := s.Log()

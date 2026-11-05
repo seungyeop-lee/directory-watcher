@@ -19,6 +19,7 @@
 - The watcher runs with `--silent` and `--log-level=INFO`.
   - `--silent` removes the command announcement lines, so `한글-줄 é ✓` in the output is the line printed by the hook.
   - Watch targets start only after the global `onStartWatch` finishes, so the `watch start:` log marks the end of the hook.
+    - The test waits up to 2 minutes for `watch start:`. When other runs share the VM and load is high, Windows PowerShell once took 46 seconds to print the hook line, while a `cmd` hook at the same time finished within 1 second.
 
 ## Subtests
 

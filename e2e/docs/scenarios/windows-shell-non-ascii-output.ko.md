@@ -19,6 +19,7 @@
 - watcher는 `--silent`와 `--log-level=INFO`로 실행합니다.
   - `--silent`로 명령 안내 줄을 빼므로, 출력에 있는 `한글-줄 é ✓`는 hook이 출력한 줄입니다.
   - 전역 `onStartWatch`가 끝나야 감시 대상이 시작하므로, `watch start:` 로그가 hook이 끝났다는 표시입니다.
+    - 테스트는 `watch start:`를 최대 2분 기다립니다. 다른 실행이 같은 VM을 함께 써서 부하가 크면 Windows PowerShell이 hook 줄을 출력하기까지 46초 걸린 적이 있고, 같은 때 `cmd` hook은 1초 안에 끝났습니다.
 
 ## 하위 테스트
 
