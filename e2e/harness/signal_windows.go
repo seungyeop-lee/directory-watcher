@@ -45,10 +45,18 @@ func gracefulStop(cmd *exec.Cmd) error {
 	return err
 }
 
+// forceStop은 TASKKILL로 watcher와 그 자손을 강제로 끝낸다. TASKKILL이 PID로 watcher를 찾는 동안 그 PID가 다른 프로세스에
+// 재사용되지 않도록 watcher의 handle을 쥔 채로 실행한다. cmd.Wait가 handle을 이미 닫았으면 watcher가 끝난 것이므로 실행하지 않는다.
 func forceStop(cmd *exec.Cmd) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "TASKKILL", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).CombinedOutput()
+	var out []byte
+	var err error
+	if cmd.Process.WithHandle(func(uintptr) {
+		out, err = exec.CommandContext(ctx, "TASKKILL", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).CombinedOutput()
+	}) != nil {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("TASKKILL: %w: %s", err, out)
 	}

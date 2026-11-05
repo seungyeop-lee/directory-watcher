@@ -184,8 +184,13 @@ func goTest(dir string, req guestrun.Request) (exitCode int, timedOut bool, err 
 	case <-time.After(req.Deadline):
 		// taskkill /T는 go에서부터 부모 PID를 따라가므로 이번 실행의 프로세스
 		// 트리만 멈춘다. 부모가 이미 끝난 고아 프로세스는 stopLeftovers가
-		// 처리한다.
-		killErr := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
+		// 처리한다. taskkill이 PID로 go를 찾는 동안 그 PID가 다른 프로세스에
+		// 재사용되지 않도록 go의 handle을 쥔 채로 실행하고, cmd.Wait가 handle을
+		// 이미 닫았으면 go가 끝난 것이므로 실행하지 않는다.
+		var killErr error
+		_ = cmd.Process.WithHandle(func(uintptr) {
+			killErr = exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
+		})
 		<-done
 		if killErr != nil {
 			return -1, true, fmt.Errorf("stop go after the deadline: %w", killErr)
